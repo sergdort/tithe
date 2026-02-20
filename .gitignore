@@ -1,0 +1,16 @@
+node_modules
+.pnpm-store
+.turbo
+dist
+coverage
+.env
+.env.*
+!.env.example
+data
+*.sqlite
+*.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
+playwright-report
+test-results
+.DS_Store

@@ -1,0 +1,33 @@
+{
+  "name": "tithe",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.16.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "dev:api": "pnpm --filter @tithe/api dev",
+    "dev:cli": "pnpm --filter @tithe/cli dev",
+    "dev:pwa": "pnpm --filter @tithe/pwa dev",
+    "start:api": "pnpm --filter @tithe/api start",
+    "start:cli": "pnpm --filter @tithe/cli start",
+    "start:pwa": "pnpm --filter @tithe/pwa start",
+    "db:migrate": "pnpm --filter @tithe/db migrate",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "format": "biome format --write .",
+    "check": "biome check ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/node": "^22.13.10",
+    "tsx": "^4.19.3",
+    "turbo": "^2.4.4",
+    "typescript": "^5.8.2"
+  }
+}
