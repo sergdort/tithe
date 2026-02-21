@@ -21,6 +21,8 @@ Local-first personal expense tracker built for a single user on a personal machi
 - DB: SQLite (WAL, foreign keys on)
 - ORM: Drizzle
 - API: Fastify + Zod + OpenAPI docs at `/docs`
+  - OpenAPI JSON spec: `/docs/json`
+  - Operation docs are generated from feature route `schema` definitions under `apps/api/src/features/*/routes.ts`
 - CLI: `commander` + JSON-first contract
 - PWA: React + Vite + MUI + TanStack Query + installable manifest
 - Tooling: Biome (lint + format)

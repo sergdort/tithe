@@ -6,6 +6,58 @@ import { buildServer } from '@tithe/api/server';
 import { runMigrations } from '@tithe/db';
 
 describe('API routes', () => {
+  it('exposes OpenAPI operations at /docs/json', async () => {
+    const app = buildServer();
+
+    try {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/docs/json',
+      });
+      const body = response.json();
+
+      expect(response.statusCode).toBe(200);
+      expect(body.openapi).toBeDefined();
+      expect(body.paths).toBeDefined();
+
+      const expectedPaths = [
+        '/health',
+        '/v1/categories',
+        '/v1/categories/{id}',
+        '/v1/expenses',
+        '/v1/expenses/{id}',
+        '/v1/commitments',
+        '/v1/commitments/{id}',
+        '/v1/commitments/run-due',
+        '/v1/commitment-instances',
+        '/v1/reports/trends',
+        '/v1/reports/category-breakdown',
+        '/v1/reports/commitment-forecast',
+        '/v1/query/run',
+        '/v1/integrations/monzo/connect/start',
+        '/v1/integrations/monzo/connect/callback',
+        '/v1/integrations/monzo/sync',
+        '/v1/integrations/monzo/status',
+      ];
+
+      const actualPaths = Object.keys(body.paths as Record<string, unknown>).sort();
+      expect(actualPaths).toEqual(expectedPaths.sort());
+
+      const tags = (body.tags as Array<{ name: string }>).map((tag) => tag.name);
+      expect(tags).toEqual([
+        'System',
+        'Categories',
+        'Expenses',
+        'Commitments',
+        'Reports',
+        'Query',
+        'Monzo',
+      ]);
+    } finally {
+      await app.close();
+    }
+  });
+
   it('creates category and expense through HTTP', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tithe-api-test-'));
     const dbPath = path.join(dir, 'api.sqlite');

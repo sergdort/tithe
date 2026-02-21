@@ -111,6 +111,9 @@ Failure:
 ### API dev runtime notes
 
 - `@tithe/api` dev script runs via `node --import tsx src/index.ts` (no file watch) to avoid tsx IPC socket failures in restricted environments.
+- Swagger/OpenAPI operations at `/docs` are generated from Fastify route `schema` definitions in `apps/api/src/features/*/routes.ts`; when adding or changing endpoints, update route schemas in the same change.
+- API route composition is centralized in `apps/api/src/http/register-feature-routes.ts`; keep feature registration order stable to preserve Swagger tag grouping order.
+- Use prefix-based feature route registration and define collection roots with an empty route path (`''`) to keep canonical OpenAPI paths without trailing slashes.
 
 ### Workspace run scripts
 

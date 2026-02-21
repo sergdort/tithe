@@ -7,3 +7,6 @@
 [1] In this pnpm workspace, global linking should target the package directory explicitly (`pnpm link --global ./apps/cli`); linking root can select `tithe` (no bins). zsh may need `exec zsh` or `hash -r`, and missing `PNPM_HOME` on `PATH` can still cause `command not found`.
 [1] `tithe web` should preserve configured `VITE_API_BASE` by default (for remote/Tailnet clients) and only rewrite port when `--api-port` is explicitly set; always forcing localhost breaks mobile/remote dev access.
 [0] Root `pnpm dev` may need a local-safe `VITE_API_BASE` override because `.env` often carries Tailnet/mobile values; defaulting `pnpm dev` to `127.0.0.1:8787` avoids loading hangs in local browser workflows.
+[1] `@fastify/swagger` only captures routes after the plugin is registered; declare routes in plugins registered after Swagger (or inside `app.after(...)`) or OpenAPI docs at `/docs`/`/docs/json` will show no operations.
+[0] With Fastify plugin prefixes, use an empty local route path (`''`) for collection roots; using `'/'` yields OpenAPI paths with trailing slashes (e.g. `/v1/categories/`).
+[0] In zsh shell commands, unescaped backticks in search patterns trigger command substitution; quote or escape them in `rg` patterns to avoid false `command not found` errors.
