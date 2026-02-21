@@ -1,19 +1,38 @@
 import crypto from 'node:crypto';
 
-import { and, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 import rrule from 'rrule';
 
 import { type QuerySpec, fail, ok, querySpecSchema } from '@tithe/contracts';
-import {
-  categories,
-  commitmentInstances,
-  createDb,
-  expenses,
-  operationApprovals,
-  recurringCommitments,
-} from '@tithe/db';
 
 import { AppError } from './errors.js';
+import {
+  type ApprovalsRepository,
+  SqliteApprovalsRepository,
+} from './repositories/approvals.repository.js';
+import { type AuditRepository, SqliteAuditRepository } from './repositories/audit.repository.js';
+import {
+  type CategoriesRepository,
+  SqliteCategoriesRepository,
+} from './repositories/categories.repository.js';
+import {
+  type CommitmentsRepository,
+  SqliteCommitmentsRepository,
+} from './repositories/commitments.repository.js';
+import {
+  type ExpensesRepository,
+  SqliteExpensesRepository,
+} from './repositories/expenses.repository.js';
+import { type QueryRepository, SqliteQueryRepository } from './repositories/query.repository.js';
+import {
+  type ReportsRepository,
+  SqliteReportsRepository,
+} from './repositories/reports.repository.js';
+import {
+  type RepositoryDb,
+  type SessionContext,
+  withSession,
+  withTransaction,
+} from './repositories/shared.js';
 import type {
   ActorContext,
   CreateCategoryInput,
@@ -64,50 +83,56 @@ const operationHash = (action: string, payloadJson: string): string =>
   crypto.createHash('sha256').update(`${action}:${payloadJson}`).digest('hex');
 
 export class ExpenseTrackerService {
-  private readonly db = createDb;
-
   constructor(private readonly options: ExpenseTrackerServiceOptions = {}) {}
 
-  private connect() {
-    return this.db(this.options);
+  private withDb<T>(run: (ctx: SessionContext) => Promise<T> | T): Promise<T> {
+    return withSession(this.options, run);
+  }
+
+  private categoriesRepository(db: RepositoryDb): CategoriesRepository {
+    return new SqliteCategoriesRepository(db);
+  }
+
+  private expensesRepository(db: RepositoryDb): ExpensesRepository {
+    return new SqliteExpensesRepository(db);
+  }
+
+  private commitmentsRepository(db: RepositoryDb): CommitmentsRepository {
+    return new SqliteCommitmentsRepository(db);
+  }
+
+  private reportsRepository(db: RepositoryDb): ReportsRepository {
+    return new SqliteReportsRepository(db);
+  }
+
+  private queryRepository(sqlite: SessionContext['sqlite']): QueryRepository {
+    return new SqliteQueryRepository(sqlite);
+  }
+
+  private approvalsRepository(db: RepositoryDb): ApprovalsRepository {
+    return new SqliteApprovalsRepository(db);
+  }
+
+  private auditRepository(db: RepositoryDb): AuditRepository {
+    return new SqliteAuditRepository(db);
   }
 
   private async writeAudit(action: string, payload: unknown, context: ActorContext): Promise<void> {
-    const { db, sqlite } = this.connect();
-    try {
-      const payloadJson = JSON.stringify(payload);
-      await db.run(
-        sql`INSERT INTO audit_log (id, actor, channel, action, payload_hash) VALUES (
-            ${crypto.randomUUID()},
-            ${context.actor},
-            ${context.channel},
-            ${action},
-            ${operationHash(action, payloadJson)}
-          )`,
-      );
-    } finally {
-      sqlite.close();
-    }
+    const payloadJson = JSON.stringify(payload);
+
+    await this.withDb(({ db }) => {
+      this.auditRepository(db).append({
+        id: crypto.randomUUID(),
+        actor: context.actor,
+        channel: context.channel,
+        action,
+        payloadHash: operationHash(action, payloadJson),
+      });
+    });
   }
 
   async listCategories() {
-    const { db, sqlite } = this.connect();
-    try {
-      const rows = await db.select().from(categories).orderBy(categories.name);
-      return rows.map((row) => ({
-        id: row.id,
-        name: row.name,
-        kind: row.kind,
-        icon: row.icon,
-        color: row.color,
-        isSystem: row.isSystem,
-        archivedAt: row.archivedAt,
-        createdAt: row.createdAt,
-        updatedAt: row.updatedAt,
-      }));
-    } finally {
-      sqlite.close();
-    }
+    return this.withDb(({ db }) => this.categoriesRepository(db).list({}).categories);
   }
 
   async createCategory(input: CreateCategoryInput, context: ActorContext = DEFAULT_ACTOR) {
@@ -124,20 +149,18 @@ export class ExpenseTrackerService {
       updatedAt: now,
     };
 
-    const { db, sqlite } = this.connect();
-
-    try {
-      await db.insert(categories).values(payload);
-    } catch (error) {
-      throw new AppError('CATEGORY_CREATE_FAILED', 'Could not create category', 409, {
-        reason: error instanceof Error ? error.message : String(error),
-      });
-    } finally {
-      sqlite.close();
-    }
+    const category = await this.withDb(({ db }) => {
+      try {
+        return this.categoriesRepository(db).create(payload).category;
+      } catch (error) {
+        throw new AppError('CATEGORY_CREATE_FAILED', 'Could not create category', 409, {
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      }
+    });
 
     await this.writeAudit('category.create', payload, context);
-    return payload;
+    return category;
   }
 
   async updateCategory(
@@ -145,17 +168,15 @@ export class ExpenseTrackerService {
     input: UpdateCategoryInput,
     context: ActorContext = DEFAULT_ACTOR,
   ) {
-    const { db, sqlite } = this.connect();
-
-    try {
-      const existing = await db.select().from(categories).where(eq(categories.id, id)).get();
+    const { category, patch } = await this.withDb(({ db }) => {
+      const existing = this.categoriesRepository(db).findById({ id }).category;
       if (!existing) {
         throw new AppError('CATEGORY_NOT_FOUND', `Category ${id} does not exist`, 404);
       }
 
-      const patch = {
+      const nextPatch = {
         name: input.name?.trim() ?? existing.name,
-        kind: input.kind ?? (existing.kind as 'expense' | 'income' | 'transfer'),
+        kind: input.kind ?? existing.kind,
         icon: input.icon ?? existing.icon,
         color: input.color ?? existing.color,
         archivedAt:
@@ -167,29 +188,21 @@ export class ExpenseTrackerService {
         updatedAt: toIso(new Date()),
       };
 
-      await db.update(categories).set(patch).where(eq(categories.id, id));
+      const updated = this.categoriesRepository(db).update({ id, ...nextPatch }).category;
 
-      const updated = await db.select().from(categories).where(eq(categories.id, id)).get();
       if (!updated) {
         throw new AppError('CATEGORY_NOT_FOUND', `Category ${id} does not exist`, 404);
       }
 
-      await this.writeAudit('category.update', { id, patch }, context);
-
       return {
-        id: updated.id,
-        name: updated.name,
-        kind: updated.kind,
-        icon: updated.icon,
-        color: updated.color,
-        isSystem: updated.isSystem,
-        archivedAt: updated.archivedAt,
-        createdAt: updated.createdAt,
-        updatedAt: updated.updatedAt,
+        category: updated,
+        patch: nextPatch,
       };
-    } finally {
-      sqlite.close();
-    }
+    });
+
+    await this.writeAudit('category.update', { id, patch }, context);
+
+    return category;
   }
 
   async createDeleteCategoryApproval(
@@ -207,20 +220,17 @@ export class ExpenseTrackerService {
   ): Promise<void> {
     await this.consumeApproval('category.delete', approveOperationId, { id, reassignCategoryId });
 
-    const { db, sqlite } = this.connect();
-
-    try {
-      const target = await db.select().from(categories).where(eq(categories.id, id)).get();
+    await this.withDb(({ db }) => {
+      const target = this.categoriesRepository(db).findById({ id }).category;
       if (!target) {
         throw new AppError('CATEGORY_NOT_FOUND', `Category ${id} does not exist`, 404);
       }
 
       if (reassignCategoryId) {
-        const replacement = await db
-          .select({ id: categories.id })
-          .from(categories)
-          .where(eq(categories.id, reassignCategoryId))
-          .get();
+        const replacement = this.categoriesRepository(db).findById({
+          id: reassignCategoryId,
+        }).category;
+
         if (!replacement) {
           throw new AppError(
             'CATEGORY_REASSIGN_TARGET_NOT_FOUND',
@@ -232,114 +242,59 @@ export class ExpenseTrackerService {
           );
         }
 
-        await db
-          .update(expenses)
-          .set({ categoryId: reassignCategoryId, updatedAt: toIso(new Date()) })
-          .where(eq(expenses.categoryId, id));
+        withTransaction(db, (tx) => {
+          this.categoriesRepository(tx).reassignReferences({
+            fromCategoryId: id,
+            toCategoryId: reassignCategoryId,
+            updatedAt: toIso(new Date()),
+          });
 
-        await db
-          .update(recurringCommitments)
-          .set({ categoryId: reassignCategoryId, updatedAt: toIso(new Date()) })
-          .where(eq(recurringCommitments.categoryId, id));
+          this.categoriesRepository(tx).deleteById({ id });
+        });
       } else {
-        const expenseRef = await db
-          .select({ count: sql<number>`COUNT(*)` })
-          .from(expenses)
-          .where(eq(expenses.categoryId, id))
-          .get();
+        const refs = this.categoriesRepository(db).countReferences({ categoryId: id });
 
-        const commitmentRef = await db
-          .select({ count: sql<number>`COUNT(*)` })
-          .from(recurringCommitments)
-          .where(eq(recurringCommitments.categoryId, id))
-          .get();
-
-        if ((expenseRef?.count ?? 0) > 0 || (commitmentRef?.count ?? 0) > 0) {
+        if (refs.expenseCount > 0 || refs.commitmentCount > 0) {
           throw new AppError(
             'CATEGORY_IN_USE',
             'Category has linked expenses or commitments. Pass reassign category.',
             409,
             {
-              expenseCount: expenseRef?.count ?? 0,
-              commitmentCount: commitmentRef?.count ?? 0,
+              expenseCount: refs.expenseCount,
+              commitmentCount: refs.commitmentCount,
             },
           );
         }
-      }
 
-      await db.delete(categories).where(eq(categories.id, id));
-      await this.writeAudit('category.delete', { id, reassignCategoryId }, context);
-    } finally {
-      sqlite.close();
-    }
+        this.categoriesRepository(db).deleteById({ id });
+      }
+    });
+
+    await this.writeAudit('category.delete', { id, reassignCategoryId }, context);
   }
 
   async listExpenses(input: ListExpensesInput = {}) {
-    const { db, sqlite } = this.connect();
+    return this.withDb(({ db }) => {
+      const from = input.from ? assertDate(input.from, 'from') : undefined;
+      const to = input.to ? assertDate(input.to, 'to') : undefined;
 
-    try {
-      const filters = [];
-      if (input.from) {
-        filters.push(gte(expenses.occurredAt, assertDate(input.from, 'from')));
-      }
-      if (input.to) {
-        filters.push(lte(expenses.occurredAt, assertDate(input.to, 'to')));
-      }
-      if (input.categoryId) {
-        filters.push(eq(expenses.categoryId, input.categoryId));
-      }
-
-      const whereExpr = filters.length > 0 ? and(...filters) : undefined;
-
-      const query = db
-        .select()
-        .from(expenses)
-        .orderBy(desc(expenses.occurredAt))
-        .limit(input.limit ?? 200);
-
-      const rows = whereExpr ? await query.where(whereExpr) : await query;
-
-      return rows.map((row) => this.mapExpense(row));
-    } finally {
-      sqlite.close();
-    }
+      return this.expensesRepository(db).list({
+        from,
+        to,
+        categoryId: input.categoryId,
+        limit: input.limit ?? 200,
+      }).expenses;
+    });
   }
 
   async getExpense(id: string) {
-    const { db, sqlite } = this.connect();
-    try {
-      const row = await db.select().from(expenses).where(eq(expenses.id, id)).get();
-      if (!row) {
+    return this.withDb(({ db }) => {
+      const expense = this.expensesRepository(db).findById({ id }).expense;
+      if (!expense) {
         throw new AppError('EXPENSE_NOT_FOUND', `Expense ${id} does not exist`, 404);
       }
-      return this.mapExpense(row);
-    } finally {
-      sqlite.close();
-    }
-  }
-
-  private mapExpense(row: typeof expenses.$inferSelect) {
-    return {
-      id: row.id,
-      occurredAt: row.occurredAt,
-      postedAt: row.postedAt,
-      money: {
-        amountMinor: row.amountMinor,
-        currency: row.currency,
-        ...(row.amountBaseMinor !== null && row.amountBaseMinor !== undefined
-          ? { amountBaseMinor: row.amountBaseMinor }
-          : {}),
-        ...(row.fxRate !== null && row.fxRate !== undefined ? { fxRate: row.fxRate } : {}),
-      },
-      categoryId: row.categoryId,
-      source: row.source as 'manual' | 'monzo_import' | 'commitment',
-      merchantName: row.merchantName,
-      note: row.note,
-      externalRef: row.externalRef,
-      commitmentInstanceId: row.commitmentInstanceId,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-    };
+      return expense;
+    });
   }
 
   async createExpense(input: CreateExpenseInput, context: ActorContext = DEFAULT_ACTOR) {
@@ -362,14 +317,9 @@ export class ExpenseTrackerService {
       updatedAt: now,
     };
 
-    const { db, sqlite } = this.connect();
+    const createdExpense = await this.withDb(({ db }) => {
+      const category = this.categoriesRepository(db).findById({ id: payload.categoryId }).category;
 
-    try {
-      const category = await db
-        .select({ id: categories.id })
-        .from(categories)
-        .where(eq(categories.id, payload.categoryId))
-        .get();
       if (!category) {
         throw new AppError(
           'CATEGORY_NOT_FOUND',
@@ -381,31 +331,33 @@ export class ExpenseTrackerService {
         );
       }
 
-      await db.insert(expenses).values(payload);
+      try {
+        return withTransaction(db, (tx) => {
+          const created = this.expensesRepository(tx).create(payload).expense;
 
-      if (payload.commitmentInstanceId) {
-        await db
-          .update(commitmentInstances)
-          .set({
-            status: 'paid',
-            expenseId: payload.id,
-            resolvedAt: now,
-          })
-          .where(eq(commitmentInstances.id, payload.commitmentInstanceId));
+          if (payload.commitmentInstanceId) {
+            this.commitmentsRepository(tx).markInstancePaid({
+              instanceId: payload.commitmentInstanceId,
+              expenseId: payload.id,
+              resolvedAt: now,
+            });
+          }
+
+          return created;
+        });
+      } catch (error) {
+        if (error instanceof AppError) {
+          throw error;
+        }
+
+        throw new AppError('EXPENSE_CREATE_FAILED', 'Could not create expense', 409, {
+          reason: error instanceof Error ? error.message : String(error),
+        });
       }
-    } catch (error) {
-      if (error instanceof AppError) {
-        throw error;
-      }
-      throw new AppError('EXPENSE_CREATE_FAILED', 'Could not create expense', 409, {
-        reason: error instanceof Error ? error.message : String(error),
-      });
-    } finally {
-      sqlite.close();
-    }
+    });
 
     await this.writeAudit('expense.create', payload, context);
-    return this.getExpense(payload.id);
+    return createdExpense;
   }
 
   async updateExpense(
@@ -413,15 +365,13 @@ export class ExpenseTrackerService {
     input: UpdateExpenseInput,
     context: ActorContext = DEFAULT_ACTOR,
   ) {
-    const { db, sqlite } = this.connect();
-
-    try {
-      const existing = await db.select().from(expenses).where(eq(expenses.id, id)).get();
+    const { expense, patch } = await this.withDb(({ db }) => {
+      const existing = this.expensesRepository(db).findById({ id }).expense;
       if (!existing) {
         throw new AppError('EXPENSE_NOT_FOUND', `Expense ${id} does not exist`, 404);
       }
 
-      const patch = {
+      const nextPatch = {
         occurredAt: input.occurredAt
           ? assertDate(input.occurredAt, 'occurredAt')
           : existing.occurredAt,
@@ -431,23 +381,31 @@ export class ExpenseTrackerService {
             : input.postedAt === null
               ? null
               : assertDate(input.postedAt, 'postedAt'),
-        amountMinor: input.amountMinor ?? existing.amountMinor,
-        currency: input.currency ? normalizeCurrency(input.currency) : existing.currency,
-        amountBaseMinor: input.amountBaseMinor ?? existing.amountBaseMinor,
-        fxRate: input.fxRate ?? existing.fxRate,
+        amountMinor: input.amountMinor ?? existing.money.amountMinor,
+        currency: input.currency ? normalizeCurrency(input.currency) : existing.money.currency,
+        amountBaseMinor: input.amountBaseMinor ?? existing.money.amountBaseMinor,
+        fxRate: input.fxRate ?? existing.money.fxRate,
         categoryId: input.categoryId ?? existing.categoryId,
         merchantName: input.merchantName ?? existing.merchantName,
         note: input.note ?? existing.note,
         updatedAt: toIso(new Date()),
       };
 
-      await db.update(expenses).set(patch).where(eq(expenses.id, id));
-      await this.writeAudit('expense.update', { id, patch }, context);
+      const updated = this.expensesRepository(db).update({ id, ...nextPatch }).expense;
 
-      return this.getExpense(id);
-    } finally {
-      sqlite.close();
-    }
+      if (!updated) {
+        throw new AppError('EXPENSE_NOT_FOUND', `Expense ${id} does not exist`, 404);
+      }
+
+      return {
+        expense: updated,
+        patch: nextPatch,
+      };
+    });
+
+    await this.writeAudit('expense.update', { id, patch }, context);
+
+    return expense;
   }
 
   async createDeleteExpenseApproval(id: string): Promise<ApprovalToken> {
@@ -461,59 +419,28 @@ export class ExpenseTrackerService {
   ) {
     await this.consumeApproval('expense.delete', approveOperationId, { id });
 
-    const { db, sqlite } = this.connect();
-
-    try {
-      const existing = await db.select().from(expenses).where(eq(expenses.id, id)).get();
+    await this.withDb(({ db }) => {
+      const existing = this.expensesRepository(db).findById({ id }).expense;
       if (!existing) {
         throw new AppError('EXPENSE_NOT_FOUND', `Expense ${id} does not exist`, 404);
       }
 
-      if (existing.commitmentInstanceId) {
-        await db
-          .update(commitmentInstances)
-          .set({ status: 'pending', expenseId: null, resolvedAt: null })
-          .where(eq(commitmentInstances.id, existing.commitmentInstanceId));
-      }
+      withTransaction(db, (tx) => {
+        if (existing.commitmentInstanceId) {
+          this.commitmentsRepository(tx).resetInstanceToPending({
+            instanceId: existing.commitmentInstanceId,
+          });
+        }
 
-      await db.delete(expenses).where(eq(expenses.id, id));
-      await this.writeAudit('expense.delete', { id }, context);
-    } finally {
-      sqlite.close();
-    }
+        this.expensesRepository(tx).deleteById({ id });
+      });
+    });
+
+    await this.writeAudit('expense.delete', { id }, context);
   }
 
   async listCommitments() {
-    const { db, sqlite } = this.connect();
-    try {
-      const rows = await db.select().from(recurringCommitments).orderBy(recurringCommitments.name);
-      return rows.map((row) => this.mapCommitment(row));
-    } finally {
-      sqlite.close();
-    }
-  }
-
-  private mapCommitment(row: typeof recurringCommitments.$inferSelect) {
-    return {
-      id: row.id,
-      name: row.name,
-      rrule: row.rrule,
-      startDate: row.startDate,
-      defaultMoney: {
-        amountMinor: row.defaultAmountMinor,
-        currency: row.currency,
-        ...(row.amountBaseMinor !== null && row.amountBaseMinor !== undefined
-          ? { amountBaseMinor: row.amountBaseMinor }
-          : {}),
-        ...(row.fxRate !== null && row.fxRate !== undefined ? { fxRate: row.fxRate } : {}),
-      },
-      categoryId: row.categoryId,
-      graceDays: row.graceDays,
-      active: row.active,
-      nextDueAt: row.nextDueAt,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-    };
+    return this.withDb(({ db }) => this.commitmentsRepository(db).listCommitments({}).commitments);
   }
 
   async createCommitment(input: CreateCommitmentInput, context: ActorContext = DEFAULT_ACTOR) {
@@ -539,37 +466,33 @@ export class ExpenseTrackerService {
       updatedAt: now,
     };
 
-    const { db, sqlite } = this.connect();
-
-    try {
-      await db.insert(recurringCommitments).values(payload);
-    } catch (error) {
-      throw new AppError('COMMITMENT_CREATE_FAILED', 'Could not create recurring commitment', 409, {
-        reason: error instanceof Error ? error.message : String(error),
-      });
-    } finally {
-      sqlite.close();
-    }
+    const commitment = await this.withDb(({ db }) => {
+      try {
+        return this.commitmentsRepository(db).createCommitment(payload).commitment;
+      } catch (error) {
+        throw new AppError(
+          'COMMITMENT_CREATE_FAILED',
+          'Could not create recurring commitment',
+          409,
+          {
+            reason: error instanceof Error ? error.message : String(error),
+          },
+        );
+      }
+    });
 
     await this.writeAudit('commitment.create', payload, context);
-    return this.getCommitment(payload.id);
+    return commitment;
   }
 
   async getCommitment(id: string) {
-    const { db, sqlite } = this.connect();
-    try {
-      const row = await db
-        .select()
-        .from(recurringCommitments)
-        .where(eq(recurringCommitments.id, id))
-        .get();
-      if (!row) {
+    return this.withDb(({ db }) => {
+      const commitment = this.commitmentsRepository(db).findCommitmentById({ id }).commitment;
+      if (!commitment) {
         throw new AppError('COMMITMENT_NOT_FOUND', `Commitment ${id} does not exist`, 404);
       }
-      return this.mapCommitment(row);
-    } finally {
-      sqlite.close();
-    }
+      return commitment;
+    });
   }
 
   async updateCommitment(
@@ -577,14 +500,8 @@ export class ExpenseTrackerService {
     input: UpdateCommitmentInput,
     context: ActorContext = DEFAULT_ACTOR,
   ) {
-    const { db, sqlite } = this.connect();
-
-    try {
-      const existing = await db
-        .select()
-        .from(recurringCommitments)
-        .where(eq(recurringCommitments.id, id))
-        .get();
+    const { commitment, patch } = await this.withDb(({ db }) => {
+      const existing = this.commitmentsRepository(db).findCommitmentById({ id }).commitment;
       if (!existing) {
         throw new AppError('COMMITMENT_NOT_FOUND', `Commitment ${id} does not exist`, 404);
       }
@@ -595,26 +512,40 @@ export class ExpenseTrackerService {
       const nextRule = input.rrule ?? existing.rrule;
       this.assertRrule(nextRule, nextStartDate);
 
-      const patch = {
+      const nextPatch = {
         name: input.name?.trim() ?? existing.name,
         rrule: nextRule,
         startDate: nextStartDate,
-        defaultAmountMinor: input.defaultAmountMinor ?? existing.defaultAmountMinor,
-        currency: input.currency ? normalizeCurrency(input.currency) : existing.currency,
-        amountBaseMinor: input.amountBaseMinor ?? existing.amountBaseMinor,
-        fxRate: input.fxRate ?? existing.fxRate,
+        defaultAmountMinor: input.defaultAmountMinor ?? existing.defaultMoney.amountMinor,
+        currency: input.currency
+          ? normalizeCurrency(input.currency)
+          : existing.defaultMoney.currency,
+        amountBaseMinor: input.amountBaseMinor ?? existing.defaultMoney.amountBaseMinor,
+        fxRate: input.fxRate ?? existing.defaultMoney.fxRate,
         categoryId: input.categoryId ?? existing.categoryId,
         graceDays: input.graceDays ?? existing.graceDays,
         active: input.active ?? existing.active,
         updatedAt: toIso(new Date()),
       };
 
-      await db.update(recurringCommitments).set(patch).where(eq(recurringCommitments.id, id));
-      await this.writeAudit('commitment.update', { id, patch }, context);
-      return this.getCommitment(id);
-    } finally {
-      sqlite.close();
-    }
+      const updated = this.commitmentsRepository(db).updateCommitment({
+        id,
+        ...nextPatch,
+      }).commitment;
+
+      if (!updated) {
+        throw new AppError('COMMITMENT_NOT_FOUND', `Commitment ${id} does not exist`, 404);
+      }
+
+      return {
+        commitment: updated,
+        patch: nextPatch,
+      };
+    });
+
+    await this.writeAudit('commitment.update', { id, patch }, context);
+
+    return commitment;
   }
 
   async createDeleteCommitmentApproval(id: string): Promise<ApprovalToken> {
@@ -628,22 +559,16 @@ export class ExpenseTrackerService {
   ) {
     await this.consumeApproval('commitment.delete', approveOperationId, { id });
 
-    const { db, sqlite } = this.connect();
-    try {
-      const existing = await db
-        .select({ id: recurringCommitments.id })
-        .from(recurringCommitments)
-        .where(eq(recurringCommitments.id, id))
-        .get();
+    await this.withDb(({ db }) => {
+      const existing = this.commitmentsRepository(db).findCommitmentById({ id }).commitment;
       if (!existing) {
         throw new AppError('COMMITMENT_NOT_FOUND', `Commitment ${id} does not exist`, 404);
       }
 
-      await db.delete(recurringCommitments).where(eq(recurringCommitments.id, id));
-      await this.writeAudit('commitment.delete', { id }, context);
-    } finally {
-      sqlite.close();
-    }
+      this.commitmentsRepository(db).deleteCommitment({ id });
+    });
+
+    await this.writeAudit('commitment.delete', { id }, context);
   }
 
   private assertRrule(rruleExpr: string, startDate: string): void {
@@ -661,244 +586,126 @@ export class ExpenseTrackerService {
   async runCommitmentDueGeneration(upTo?: string, context: ActorContext = DEFAULT_ACTOR) {
     const targetDate = upTo ? new Date(assertDate(upTo, 'upTo')) : new Date();
 
-    const { db, sqlite } = this.connect();
-
     let created = 0;
 
-    try {
-      const commitments = await db
-        .select()
-        .from(recurringCommitments)
-        .where(eq(recurringCommitments.active, true));
+    await this.withDb(({ db }) => {
+      const activeCommitments = this.commitmentsRepository(db).listActiveCommitments(
+        {},
+      ).commitments;
 
-      for (const commitment of commitments) {
+      for (const commitment of activeCommitments) {
         const rule = this.buildRule(commitment.rrule, commitment.startDate);
 
-        const lastInstance = await db
-          .select()
-          .from(commitmentInstances)
-          .where(eq(commitmentInstances.commitmentId, commitment.id))
-          .orderBy(desc(commitmentInstances.dueAt))
-          .get();
+        withTransaction(db, (tx) => {
+          const lastInstance = this.commitmentsRepository(tx).findLastInstance({
+            commitmentId: commitment.id,
+          }).instance;
 
-        const fromDate = lastInstance
-          ? new Date(new Date(lastInstance.dueAt).getTime() + 1000)
-          : new Date(commitment.startDate);
+          const fromDate = lastInstance
+            ? new Date(new Date(lastInstance.dueAt).getTime() + 1000)
+            : new Date(commitment.startDate);
 
-        const dueDates = rule
-          .between(fromDate, targetDate, true)
-          .map((date) => toIso(date))
-          .filter((date) => date >= commitment.startDate);
+          const dueDates = rule
+            .between(fromDate, targetDate, true)
+            .map((date) => toIso(date))
+            .filter((date) => date >= commitment.startDate);
 
-        for (const dueAt of dueDates) {
-          try {
-            await db.insert(commitmentInstances).values({
-              id: crypto.randomUUID(),
-              commitmentId: commitment.id,
-              dueAt,
-              expectedAmountMinor: commitment.defaultAmountMinor,
-              currency: commitment.currency,
-              amountBaseMinor: commitment.amountBaseMinor,
-              fxRate: commitment.fxRate,
-              status: 'pending',
-              expenseId: null,
-              resolvedAt: null,
-              createdAt: toIso(new Date()),
-            });
-            created += 1;
-          } catch {
-            // Ignore duplicates due to unique(commitment_id, due_at).
+          for (const dueAt of dueDates) {
+            try {
+              this.commitmentsRepository(tx).createInstance({
+                id: crypto.randomUUID(),
+                commitmentId: commitment.id,
+                dueAt,
+                expectedAmountMinor: commitment.defaultAmountMinor,
+                currency: commitment.currency,
+                amountBaseMinor: commitment.amountBaseMinor,
+                fxRate: commitment.fxRate,
+                status: 'pending',
+                expenseId: null,
+                resolvedAt: null,
+                createdAt: toIso(new Date()),
+              });
+
+              created += 1;
+            } catch {
+              // Ignore duplicates due to unique(commitment_id, due_at).
+            }
           }
-        }
 
-        const nextDue = rule.after(targetDate, false);
-        await db
-          .update(recurringCommitments)
-          .set({ nextDueAt: nextDue ? toIso(nextDue) : null, updatedAt: toIso(new Date()) })
-          .where(eq(recurringCommitments.id, commitment.id));
+          const nextDue = rule.after(targetDate, false);
+          this.commitmentsRepository(tx).updateNextDue({
+            commitmentId: commitment.id,
+            nextDueAt: nextDue ? toIso(nextDue) : null,
+            updatedAt: toIso(new Date()),
+          });
+        });
       }
 
-      await this.markOverdue(targetDate);
-      await this.writeAudit(
-        'commitment.generate_due',
-        { upTo: targetDate.toISOString(), created },
-        context,
-      );
-      return {
-        upTo: targetDate.toISOString(),
-        created,
-      };
-    } finally {
-      sqlite.close();
-    }
+      this.markOverdueWithinDb(db, targetDate);
+    });
+
+    await this.writeAudit(
+      'commitment.generate_due',
+      { upTo: targetDate.toISOString(), created },
+      context,
+    );
+
+    return {
+      upTo: targetDate.toISOString(),
+      created,
+    };
   }
 
-  private async markOverdue(now: Date): Promise<void> {
-    const { db, sqlite } = this.connect();
-    try {
-      const pendingRows = await db
-        .select({
-          id: commitmentInstances.id,
-          dueAt: commitmentInstances.dueAt,
-          graceDays: recurringCommitments.graceDays,
-        })
-        .from(commitmentInstances)
-        .innerJoin(
-          recurringCommitments,
-          eq(commitmentInstances.commitmentId, recurringCommitments.id),
-        )
-        .where(eq(commitmentInstances.status, 'pending'));
+  private markOverdueWithinDb(db: RepositoryDb, now: Date): void {
+    const pendingRows = this.commitmentsRepository(db).listPendingWithGrace({}).rows;
 
-      const overdueIds: string[] = [];
-      for (const row of pendingRows) {
-        const due = new Date(row.dueAt);
-        const threshold = due.getTime() + row.graceDays * 24 * 60 * 60 * 1000;
-        if (threshold < now.getTime()) {
-          overdueIds.push(row.id);
-        }
+    const overdueIds: string[] = [];
+    for (const row of pendingRows) {
+      const due = new Date(row.dueAt);
+      const threshold = due.getTime() + row.graceDays * 24 * 60 * 60 * 1000;
+      if (threshold < now.getTime()) {
+        overdueIds.push(row.id);
       }
-
-      if (overdueIds.length > 0) {
-        await db
-          .update(commitmentInstances)
-          .set({ status: 'overdue' })
-          .where(inArray(commitmentInstances.id, overdueIds));
-      }
-    } finally {
-      sqlite.close();
     }
+
+    withTransaction(db, (tx) => {
+      this.commitmentsRepository(tx).markOverdue({ instanceIds: overdueIds });
+    });
   }
 
   async listCommitmentInstances(status?: 'pending' | 'paid' | 'overdue' | 'skipped') {
-    const { db, sqlite } = this.connect();
-    try {
-      const query = db
-        .select()
-        .from(commitmentInstances)
-        .orderBy(desc(commitmentInstances.dueAt))
-        .limit(200);
-
-      const rows = status ? await query.where(eq(commitmentInstances.status, status)) : await query;
-
-      return rows.map((row) => ({
-        id: row.id,
-        commitmentId: row.commitmentId,
-        dueAt: row.dueAt,
-        expectedMoney: {
-          amountMinor: row.expectedAmountMinor,
-          currency: row.currency,
-          ...(row.amountBaseMinor !== null && row.amountBaseMinor !== undefined
-            ? { amountBaseMinor: row.amountBaseMinor }
-            : {}),
-          ...(row.fxRate !== null && row.fxRate !== undefined ? { fxRate: row.fxRate } : {}),
-        },
-        status: row.status as 'pending' | 'paid' | 'overdue' | 'skipped',
-        expenseId: row.expenseId,
-        resolvedAt: row.resolvedAt,
-        createdAt: row.createdAt,
-      }));
-    } finally {
-      sqlite.close();
-    }
+    return this.withDb(
+      ({ db }) => this.commitmentsRepository(db).listInstances({ status }).instances,
+    );
   }
 
   async reportMonthlyTrends(months = 6) {
-    const { db, sqlite } = this.connect();
-    try {
-      const rows = await db
-        .select({
-          month: sql<string>`substr(${expenses.occurredAt}, 1, 7)`,
-          spendMinor: sql<number>`SUM(${expenses.amountMinor})`,
-          spendBaseMinor: sql<number>`SUM(COALESCE(${expenses.amountBaseMinor}, ${expenses.amountMinor}))`,
-          txCount: sql<number>`COUNT(*)`,
-        })
-        .from(expenses)
-        .groupBy(sql`substr(${expenses.occurredAt}, 1, 7)`)
-        .orderBy(sql`substr(${expenses.occurredAt}, 1, 7) DESC`)
-        .limit(months);
-
-      return rows.map((row) => ({
-        month: row.month,
-        spendMinor: Number(row.spendMinor ?? 0),
-        spendBaseMinor: Number(row.spendBaseMinor ?? 0),
-        txCount: Number(row.txCount ?? 0),
-      }));
-    } finally {
-      sqlite.close();
-    }
+    return this.withDb(({ db }) => this.reportsRepository(db).monthlyTrends({ months }).rows);
   }
 
   async reportCategoryBreakdown(from?: string, to?: string) {
-    const { db, sqlite } = this.connect();
+    return this.withDb(({ db }) => {
+      const normalizedFrom = from ? assertDate(from, 'from') : undefined;
+      const normalizedTo = to ? assertDate(to, 'to') : undefined;
 
-    const filters = [];
-    if (from) {
-      filters.push(gte(expenses.occurredAt, assertDate(from, 'from')));
-    }
-    if (to) {
-      filters.push(lte(expenses.occurredAt, assertDate(to, 'to')));
-    }
-
-    try {
-      const query = db
-        .select({
-          categoryId: expenses.categoryId,
-          categoryName: categories.name,
-          totalMinor: sql<number>`SUM(${expenses.amountMinor})`,
-          txCount: sql<number>`COUNT(*)`,
-        })
-        .from(expenses)
-        .innerJoin(categories, eq(expenses.categoryId, categories.id))
-        .groupBy(expenses.categoryId, categories.name)
-        .orderBy(sql`SUM(${expenses.amountMinor}) DESC`);
-
-      const rows = filters.length > 0 ? await query.where(and(...filters)) : await query;
-      return rows.map((row) => ({
-        categoryId: row.categoryId,
-        categoryName: row.categoryName,
-        totalMinor: Number(row.totalMinor ?? 0),
-        txCount: Number(row.txCount ?? 0),
-      }));
-    } finally {
-      sqlite.close();
-    }
+      return this.reportsRepository(db).categoryBreakdown({
+        from: normalizedFrom,
+        to: normalizedTo,
+      }).rows;
+    });
   }
 
   async reportCommitmentForecast(days = 30) {
     const now = new Date();
     const to = new Date(now.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
 
-    const { db, sqlite } = this.connect();
-
-    try {
-      const rows = await db
-        .select({
-          id: commitmentInstances.id,
-          commitmentId: commitmentInstances.commitmentId,
-          commitmentName: recurringCommitments.name,
-          dueAt: commitmentInstances.dueAt,
-          expectedAmountMinor: commitmentInstances.expectedAmountMinor,
-          currency: commitmentInstances.currency,
-          status: commitmentInstances.status,
-        })
-        .from(commitmentInstances)
-        .innerJoin(
-          recurringCommitments,
-          eq(commitmentInstances.commitmentId, recurringCommitments.id),
-        )
-        .where(
-          and(
-            gte(commitmentInstances.dueAt, now.toISOString()),
-            lte(commitmentInstances.dueAt, to),
-            inArray(commitmentInstances.status, ['pending', 'overdue']),
-          ),
-        )
-        .orderBy(commitmentInstances.dueAt);
-
-      return rows;
-    } finally {
-      sqlite.close();
-    }
+    return this.withDb(
+      ({ db }) =>
+        this.reportsRepository(db).commitmentForecast({
+          from: now.toISOString(),
+          to,
+        }).rows,
+    );
   }
 
   async runQuery(specInput: QuerySpec) {
@@ -911,136 +718,31 @@ export class ExpenseTrackerService {
 
     const spec = parsed.data;
 
-    const entityConfig: Record<
-      QuerySpec['entity'],
-      { table: string; allowedFields: Set<string>; defaultSort: string }
-    > = {
-      expenses: {
-        table: 'expenses',
-        allowedFields: new Set([
-          'id',
-          'occurred_at',
-          'posted_at',
-          'amount_minor',
-          'currency',
-          'category_id',
-          'source',
-          'merchant_name',
-          'note',
-          'created_at',
-          'updated_at',
-        ]),
-        defaultSort: 'created_at',
-      },
-      categories: {
-        table: 'categories',
-        allowedFields: new Set([
-          'id',
-          'name',
-          'kind',
-          'icon',
-          'color',
-          'is_system',
-          'archived_at',
-          'created_at',
-          'updated_at',
-        ]),
-        defaultSort: 'name',
-      },
-      commitment_instances: {
-        table: 'commitment_instances',
-        allowedFields: new Set([
-          'id',
-          'commitment_id',
-          'due_at',
-          'expected_amount_minor',
-          'currency',
-          'status',
-          'expense_id',
-          'resolved_at',
-          'created_at',
-        ]),
-        defaultSort: 'due_at',
-      },
-      recurring_commitments: {
-        table: 'recurring_commitments',
-        allowedFields: new Set([
-          'id',
-          'name',
-          'rrule',
-          'start_date',
-          'default_amount_minor',
-          'currency',
-          'category_id',
-          'grace_days',
-          'active',
-          'next_due_at',
-          'created_at',
-          'updated_at',
-        ]),
-        defaultSort: 'name',
-      },
-    };
+    return this.withDb(({ sqlite }) => {
+      const queryRepository = this.queryRepository(sqlite);
 
-    const config = entityConfig[spec.entity];
-
-    const params: Array<string | number | boolean> = [];
-    const whereParts: string[] = [];
-
-    for (const filter of spec.filters) {
-      if (!config.allowedFields.has(filter.field)) {
-        return fail('INVALID_FILTER_FIELD', 'Filter contains unsupported field', {
-          field: filter.field,
-          entity: spec.entity,
-        });
-      }
-
-      switch (filter.op) {
-        case 'eq':
-        case 'neq':
-        case 'gt':
-        case 'gte':
-        case 'lt':
-        case 'lte': {
-          const sqlOp = {
-            eq: '=',
-            neq: '!=',
-            gt: '>',
-            gte: '>=',
-            lt: '<',
-            lte: '<=',
-          }[filter.op];
-          whereParts.push(`${filter.field} ${sqlOp} ?`);
-          params.push(filter.value as string | number | boolean);
-          break;
-        }
-        case 'like':
-          whereParts.push(`${filter.field} LIKE ?`);
-          params.push(filter.value as string);
-          break;
-        case 'in': {
-          const values = filter.value as Array<string | number>;
-          const placeholders = values.map(() => '?').join(',');
-          whereParts.push(`${filter.field} IN (${placeholders})`);
-          params.push(...values);
-          break;
+      for (const filter of spec.filters) {
+        if (!queryRepository.isAllowedField(spec.entity, filter.field)) {
+          return fail('INVALID_FILTER_FIELD', 'Filter contains unsupported field', {
+            field: filter.field,
+            entity: spec.entity,
+          });
         }
       }
-    }
 
-    const sortBy = config.allowedFields.has(spec.sortBy) ? spec.sortBy : config.defaultSort;
-    const sortDir = spec.sortDir.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
-    const whereClause = whereParts.length > 0 ? `WHERE ${whereParts.join(' AND ')}` : '';
-    const query = `SELECT * FROM ${config.table} ${whereClause} ORDER BY ${sortBy} ${sortDir} LIMIT ?`;
-    params.push(spec.limit);
+      const sortBy = queryRepository.isAllowedField(spec.entity, spec.sortBy)
+        ? spec.sortBy
+        : queryRepository.getDefaultSort(spec.entity);
 
-    const { sqlite } = this.connect();
-    try {
-      const rows = sqlite.prepare(query).all(...params);
-      return ok(rows, { entity: spec.entity, count: rows.length });
-    } finally {
-      sqlite.close();
-    }
+      const result = queryRepository.runEntityQuery({
+        spec: {
+          ...spec,
+          sortBy,
+        },
+      });
+
+      return ok(result.rows, { entity: result.entity, count: result.count });
+    });
   }
 
   async monzoConnectStart() {
@@ -1074,9 +776,8 @@ export class ExpenseTrackerService {
       expiresAt: toIso(new Date(Date.now() + 15 * 60 * 1000)),
     };
 
-    const { db, sqlite } = this.connect();
-    try {
-      await db.insert(operationApprovals).values({
+    await this.withDb(({ db }) => {
+      this.approvalsRepository(db).createApproval({
         id: approval.operationId,
         action,
         payloadJson,
@@ -1085,10 +786,9 @@ export class ExpenseTrackerService {
         approvedAt: null,
         createdAt: toIso(new Date()),
       });
-      return approval;
-    } finally {
-      sqlite.close();
-    }
+    });
+
+    return approval;
   }
 
   private async consumeApproval(
@@ -1099,13 +799,8 @@ export class ExpenseTrackerService {
     const payloadJson = JSON.stringify(payload);
     const hash = operationHash(action, payloadJson);
 
-    const { db, sqlite } = this.connect();
-    try {
-      const existing = await db
-        .select()
-        .from(operationApprovals)
-        .where(eq(operationApprovals.id, operationId))
-        .get();
+    await this.withDb(({ db }) => {
+      const existing = this.approvalsRepository(db).findApproval({ operationId }).approval;
 
       if (!existing) {
         throw new AppError('APPROVAL_NOT_FOUND', 'Approval token is invalid', 403, { operationId });
@@ -1128,12 +823,10 @@ export class ExpenseTrackerService {
         });
       }
 
-      await db
-        .update(operationApprovals)
-        .set({ approvedAt: toIso(new Date()) })
-        .where(eq(operationApprovals.id, operationId));
-    } finally {
-      sqlite.close();
-    }
+      this.approvalsRepository(db).markApprovalUsed({
+        operationId,
+        approvedAt: toIso(new Date()),
+      });
+    });
   }
 }

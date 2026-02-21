@@ -11,3 +11,4 @@
 [0] With Fastify plugin prefixes, use an empty local route path (`''`) for collection roots; using `'/'` yields OpenAPI paths with trailing slashes (e.g. `/v1/categories/`).
 [0] In zsh shell commands, unescaped backticks in search patterns trigger command substitution; quote or escape them in `rg` patterns to avoid false `command not found` errors.
 [0] Fastify schema validation errors reach `setErrorHandler`; if not mapped explicitly, they can be wrapped as generic 500s and break envelope contracts.
+[0] In Drizzle with better-sqlite3, transaction callbacks are synchronous; repository methods used inside transactions should execute queries explicitly with `.run()`/`.all()`/`.get()` instead of relying on awaited query builders.
