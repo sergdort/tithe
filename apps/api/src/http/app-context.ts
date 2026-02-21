@@ -1,4 +1,4 @@
-import { ExpenseTrackerService } from '@tithe/domain';
+import { type DomainServices, createDomainServices } from '@tithe/domain';
 
 import { type ApiDocs, apiDocs } from './api-docs.js';
 
@@ -13,14 +13,14 @@ export interface ActorRequest {
 }
 
 export interface AppContext {
-  service: ExpenseTrackerService;
+  services: DomainServices;
   actorFromRequest: (request: ActorRequest) => Actor;
   parseBoolean: (value: unknown) => boolean;
   docs: ApiDocs;
 }
 
 export interface CreateAppContextOptions {
-  service?: ExpenseTrackerService;
+  services?: DomainServices;
   docs?: ApiDocs;
 }
 
@@ -38,7 +38,7 @@ const parseBoolean = (value: unknown): boolean =>
   value === true || value === 'true' || value === '1';
 
 export const createAppContext = (options: CreateAppContextOptions = {}): AppContext => ({
-  service: options.service ?? new ExpenseTrackerService(),
+  services: options.services ?? createDomainServices(),
   actorFromRequest,
   parseBoolean,
   docs: options.docs ?? apiDocs,

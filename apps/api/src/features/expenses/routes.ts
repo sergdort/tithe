@@ -50,7 +50,8 @@ interface DeleteExpenseQuery {
 }
 
 export const registerExpenseRoutes = (app: FastifyInstance, ctx: AppContext): void => {
-  const { service, actorFromRequest, parseBoolean } = ctx;
+  const { services, actorFromRequest, parseBoolean } = ctx;
+  const expensesService = services.expenses;
   const {
     defaultErrorResponses,
     genericObjectSchema,
@@ -89,7 +90,7 @@ export const registerExpenseRoutes = (app: FastifyInstance, ctx: AppContext): vo
         },
       },
     },
-    async (request) => ok(await service.listExpenses(request.query)),
+    async (request) => ok(await expensesService.list(request.query)),
   );
 
   app.get<{ Params: ExpenseParams }>(
@@ -105,7 +106,7 @@ export const registerExpenseRoutes = (app: FastifyInstance, ctx: AppContext): vo
         },
       },
     },
-    async (request) => ok(await service.getExpense(request.params.id)),
+    async (request) => ok(await expensesService.get(request.params.id)),
   );
 
   app.post<{ Body: CreateExpenseBody }>(
@@ -149,7 +150,7 @@ export const registerExpenseRoutes = (app: FastifyInstance, ctx: AppContext): vo
         },
       },
     },
-    async (request) => ok(await service.createExpense(request.body, actorFromRequest(request))),
+    async (request) => ok(await expensesService.create(request.body, actorFromRequest(request))),
   );
 
   app.patch<{ Params: ExpenseParams; Body: UpdateExpenseBody }>(
@@ -187,7 +188,7 @@ export const registerExpenseRoutes = (app: FastifyInstance, ctx: AppContext): vo
       },
     },
     async (request) =>
-      ok(await service.updateExpense(request.params.id, request.body, actorFromRequest(request))),
+      ok(await expensesService.update(request.params.id, request.body, actorFromRequest(request))),
   );
 
   app.delete<{ Params: ExpenseParams; Querystring: DeleteExpenseQuery }>(
@@ -230,7 +231,7 @@ export const registerExpenseRoutes = (app: FastifyInstance, ctx: AppContext): vo
     },
     async (request) => {
       if (parseBoolean(request.query.dryRun)) {
-        const token = await service.createDeleteExpenseApproval(request.params.id);
+        const token = await expensesService.createDeleteApproval(request.params.id);
         return ok(token, { mode: 'dry-run' });
       }
 
@@ -238,7 +239,7 @@ export const registerExpenseRoutes = (app: FastifyInstance, ctx: AppContext): vo
         throw new AppError('APPROVAL_REQUIRED', 'approveOperationId is required for delete', 400);
       }
 
-      await service.deleteExpense(
+      await expensesService.delete(
         request.params.id,
         request.query.approveOperationId,
         actorFromRequest(request),

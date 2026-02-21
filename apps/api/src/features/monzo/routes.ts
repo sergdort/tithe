@@ -4,7 +4,8 @@ import type { FastifyInstance } from 'fastify';
 import type { AppContext } from '../../http/app-context.js';
 
 export const registerMonzoRoutes = (app: FastifyInstance, ctx: AppContext): void => {
-  const { service } = ctx;
+  const { services } = ctx;
+  const monzoService = services.monzo;
   const { defaultErrorResponses, genericObjectSchema, successEnvelopeSchema } = ctx.docs;
 
   app.post(
@@ -19,7 +20,7 @@ export const registerMonzoRoutes = (app: FastifyInstance, ctx: AppContext): void
         },
       },
     },
-    async () => ok(await service.monzoConnectStart()),
+    async () => ok(await monzoService.connectStart()),
   );
 
   app.get(
@@ -34,7 +35,7 @@ export const registerMonzoRoutes = (app: FastifyInstance, ctx: AppContext): void
         },
       },
     },
-    async () => ok(await service.monzoCallback()),
+    async () => ok(await monzoService.callback()),
   );
 
   app.post(
@@ -49,7 +50,7 @@ export const registerMonzoRoutes = (app: FastifyInstance, ctx: AppContext): void
         },
       },
     },
-    async () => ok(await service.monzoSyncNow()),
+    async () => ok(await monzoService.syncNow()),
   );
 
   app.get(

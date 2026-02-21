@@ -32,7 +32,8 @@ interface DeleteCategoryQuery {
 }
 
 export const registerCategoryRoutes = (app: FastifyInstance, ctx: AppContext): void => {
-  const { service, actorFromRequest, parseBoolean } = ctx;
+  const { services, actorFromRequest, parseBoolean } = ctx;
+  const categoriesService = services.categories;
   const {
     defaultErrorResponses,
     genericObjectSchema,
@@ -57,7 +58,7 @@ export const registerCategoryRoutes = (app: FastifyInstance, ctx: AppContext): v
         },
       },
     },
-    async () => ok(await service.listCategories()),
+    async () => ok(await categoriesService.list()),
   );
 
   app.post<{ Body: CreateCategoryBody }>(
@@ -84,7 +85,7 @@ export const registerCategoryRoutes = (app: FastifyInstance, ctx: AppContext): v
       },
     },
     async (request) => {
-      const category = await service.createCategory(request.body, actorFromRequest(request));
+      const category = await categoriesService.create(request.body, actorFromRequest(request));
       return ok(category);
     },
   );
@@ -116,7 +117,7 @@ export const registerCategoryRoutes = (app: FastifyInstance, ctx: AppContext): v
       },
     },
     async (request) => {
-      const category = await service.updateCategory(
+      const category = await categoriesService.update(
         request.params.id,
         request.body,
         actorFromRequest(request),
@@ -166,7 +167,7 @@ export const registerCategoryRoutes = (app: FastifyInstance, ctx: AppContext): v
     },
     async (request) => {
       if (parseBoolean(request.query.dryRun)) {
-        const token = await service.createDeleteCategoryApproval(
+        const token = await categoriesService.createDeleteApproval(
           request.params.id,
           request.query.reassignCategoryId,
         );
@@ -177,7 +178,7 @@ export const registerCategoryRoutes = (app: FastifyInstance, ctx: AppContext): v
         throw new AppError('APPROVAL_REQUIRED', 'approveOperationId is required for delete', 400);
       }
 
-      await service.deleteCategory(
+      await categoriesService.delete(
         request.params.id,
         request.query.approveOperationId,
         request.query.reassignCategoryId,

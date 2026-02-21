@@ -3,27 +3,27 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { runMigrations } from '@tithe/db';
-import { ExpenseTrackerService } from '@tithe/domain';
+import { createDomainServices } from '@tithe/domain';
 
 const setupService = () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tithe-domain-test-'));
   const dbPath = path.join(dir, 'test.sqlite');
   runMigrations(dbPath);
-  const service = new ExpenseTrackerService({ dbPath });
-  return { service, dir };
+  const services = createDomainServices({ dbPath });
+  return { services, dir };
 };
 
-describe('ExpenseTrackerService', () => {
+describe('Domain services', () => {
   it('creates categories and expenses then returns monthly trends', async () => {
-    const { service, dir } = setupService();
+    const { services, dir } = setupService();
 
     try {
-      const category = await service.createCategory(
+      const category = await services.categories.create(
         { name: 'Food', kind: 'expense' },
         { actor: 'test', channel: 'system' },
       );
 
-      await service.createExpense(
+      await services.expenses.create(
         {
           occurredAt: new Date('2026-02-01T10:00:00.000Z').toISOString(),
           amountMinor: 1234,
@@ -33,7 +33,7 @@ describe('ExpenseTrackerService', () => {
         { actor: 'test', channel: 'system' },
       );
 
-      const trends = await service.reportMonthlyTrends(6);
+      const trends = await services.reports.monthlyTrends(6);
       expect(trends.length).toBeGreaterThan(0);
       expect(trends[0]?.spendMinor).toBe(1234);
     } finally {
@@ -42,21 +42,21 @@ describe('ExpenseTrackerService', () => {
   });
 
   it('requires approval token for destructive deletes', async () => {
-    const { service, dir } = setupService();
+    const { services, dir } = setupService();
 
     try {
-      const category = await service.createCategory(
+      const category = await services.categories.create(
         { name: 'Rent', kind: 'expense' },
         { actor: 'test', channel: 'system' },
       );
 
-      const approval = await service.createDeleteCategoryApproval(category.id);
-      await service.deleteCategory(category.id, approval.operationId, undefined, {
+      const approval = await services.categories.createDeleteApproval(category.id);
+      await services.categories.delete(category.id, approval.operationId, undefined, {
         actor: 'test',
         channel: 'system',
       });
 
-      const categories = await service.listCategories();
+      const categories = await services.categories.list();
       expect(categories.find((item) => item.id === category.id)).toBeUndefined();
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
@@ -64,19 +64,19 @@ describe('ExpenseTrackerService', () => {
   });
 
   it('reassigns linked records before deleting a category', async () => {
-    const { service, dir } = setupService();
+    const { services, dir } = setupService();
 
     try {
-      const sourceCategory = await service.createCategory(
+      const sourceCategory = await services.categories.create(
         { name: 'Old Utilities', kind: 'expense' },
         { actor: 'test', channel: 'system' },
       );
-      const targetCategory = await service.createCategory(
+      const targetCategory = await services.categories.create(
         { name: 'New Utilities', kind: 'expense' },
         { actor: 'test', channel: 'system' },
       );
 
-      await service.createExpense(
+      await services.expenses.create(
         {
           occurredAt: new Date('2026-02-02T10:00:00.000Z').toISOString(),
           amountMinor: 999,
@@ -86,7 +86,7 @@ describe('ExpenseTrackerService', () => {
         { actor: 'test', channel: 'system' },
       );
 
-      const commitment = await service.createCommitment(
+      const commitment = await services.commitments.create(
         {
           name: 'Internet',
           rrule: 'FREQ=MONTHLY;INTERVAL=1',
@@ -98,21 +98,19 @@ describe('ExpenseTrackerService', () => {
         { actor: 'test', channel: 'system' },
       );
 
-      const approval = await service.createDeleteCategoryApproval(
+      const approval = await services.categories.createDeleteApproval(
         sourceCategory.id,
         targetCategory.id,
       );
 
-      await service.deleteCategory(
-        sourceCategory.id,
-        approval.operationId,
-        targetCategory.id,
-        { actor: 'test', channel: 'system' },
-      );
+      await services.categories.delete(sourceCategory.id, approval.operationId, targetCategory.id, {
+        actor: 'test',
+        channel: 'system',
+      });
 
-      const categories = await service.listCategories();
-      const expenses = await service.listExpenses();
-      const updatedCommitment = await service.getCommitment(commitment.id);
+      const categories = await services.categories.list();
+      const expenses = await services.expenses.list();
+      const updatedCommitment = await services.commitments.get(commitment.id);
 
       expect(categories.find((item) => item.id === sourceCategory.id)).toBeUndefined();
       expect(expenses[0]?.categoryId).toBe(targetCategory.id);
@@ -123,15 +121,15 @@ describe('ExpenseTrackerService', () => {
   });
 
   it('marks commitment instance paid on linked expense create and resets on delete', async () => {
-    const { service, dir } = setupService();
+    const { services, dir } = setupService();
 
     try {
-      const category = await service.createCategory(
+      const category = await services.categories.create(
         { name: 'Housing', kind: 'expense' },
         { actor: 'test', channel: 'system' },
       );
 
-      await service.createCommitment(
+      await services.commitments.create(
         {
           name: 'Rent',
           rrule: 'FREQ=MONTHLY;INTERVAL=1',
@@ -143,16 +141,16 @@ describe('ExpenseTrackerService', () => {
         { actor: 'test', channel: 'system' },
       );
 
-      await service.runCommitmentDueGeneration(
+      await services.commitments.runDueGeneration(
         new Date('2026-02-10T00:00:00.000Z').toISOString(),
         { actor: 'test', channel: 'system' },
       );
 
-      const instancesBefore = await service.listCommitmentInstances();
+      const instancesBefore = await services.commitments.listInstances();
       const instanceId = instancesBefore[0]?.id;
       expect(instanceId).toBeDefined();
 
-      const expense = await service.createExpense(
+      const expense = await services.expenses.create(
         {
           occurredAt: new Date('2026-02-09T10:00:00.000Z').toISOString(),
           amountMinor: 100000,
@@ -164,13 +162,16 @@ describe('ExpenseTrackerService', () => {
         { actor: 'test', channel: 'system' },
       );
 
-      const paidAfterCreate = await service.listCommitmentInstances('paid');
+      const paidAfterCreate = await services.commitments.listInstances('paid');
       expect(paidAfterCreate.find((item) => item.id === instanceId)?.expenseId).toBe(expense.id);
 
-      const approval = await service.createDeleteExpenseApproval(expense.id);
-      await service.deleteExpense(expense.id, approval.operationId, { actor: 'test', channel: 'system' });
+      const approval = await services.expenses.createDeleteApproval(expense.id);
+      await services.expenses.delete(expense.id, approval.operationId, {
+        actor: 'test',
+        channel: 'system',
+      });
 
-      const pendingAfterDelete = await service.listCommitmentInstances('pending');
+      const pendingAfterDelete = await services.commitments.listInstances('pending');
       const resetInstance = pendingAfterDelete.find((item) => item.id === instanceId);
       expect(resetInstance?.expenseId).toBeNull();
       expect(resetInstance?.status).toBe('pending');
@@ -180,15 +181,15 @@ describe('ExpenseTrackerService', () => {
   });
 
   it('creates due instances once and updates commitment nextDueAt', async () => {
-    const { service, dir } = setupService();
+    const { services, dir } = setupService();
 
     try {
-      const category = await service.createCategory(
+      const category = await services.categories.create(
         { name: 'Subscriptions', kind: 'expense' },
         { actor: 'test', channel: 'system' },
       );
 
-      const commitment = await service.createCommitment(
+      const commitment = await services.commitments.create(
         {
           name: 'Music Service',
           rrule: 'FREQ=MONTHLY;INTERVAL=1',
@@ -200,15 +201,15 @@ describe('ExpenseTrackerService', () => {
         { actor: 'test', channel: 'system' },
       );
 
-      const firstRun = await service.runCommitmentDueGeneration(
+      const firstRun = await services.commitments.runDueGeneration(
         new Date('2026-03-01T00:00:00.000Z').toISOString(),
         { actor: 'test', channel: 'system' },
       );
-      const secondRun = await service.runCommitmentDueGeneration(
+      const secondRun = await services.commitments.runDueGeneration(
         new Date('2026-03-01T00:00:00.000Z').toISOString(),
         { actor: 'test', channel: 'system' },
       );
-      const refreshedCommitment = await service.getCommitment(commitment.id);
+      const refreshedCommitment = await services.commitments.get(commitment.id);
 
       expect(firstRun.created).toBeGreaterThan(0);
       expect(secondRun.created).toBe(0);
@@ -219,21 +220,21 @@ describe('ExpenseTrackerService', () => {
   });
 
   it('enforces approval token payload integrity and single-use semantics', async () => {
-    const { service, dir } = setupService();
+    const { services, dir } = setupService();
 
     try {
-      const first = await service.createCategory(
+      const first = await services.categories.create(
         { name: 'One', kind: 'expense' },
         { actor: 'test', channel: 'system' },
       );
-      const second = await service.createCategory(
+      const second = await services.categories.create(
         { name: 'Two', kind: 'expense' },
         { actor: 'test', channel: 'system' },
       );
 
-      const mismatchApproval = await service.createDeleteCategoryApproval(first.id);
+      const mismatchApproval = await services.categories.createDeleteApproval(first.id);
       await expect(
-        service.deleteCategory(first.id, mismatchApproval.operationId, second.id, {
+        services.categories.delete(first.id, mismatchApproval.operationId, second.id, {
           actor: 'test',
           channel: 'system',
         }),
@@ -241,14 +242,14 @@ describe('ExpenseTrackerService', () => {
         code: 'APPROVAL_PAYLOAD_MISMATCH',
       });
 
-      const validApproval = await service.createDeleteCategoryApproval(first.id);
-      await service.deleteCategory(first.id, validApproval.operationId, undefined, {
+      const validApproval = await services.categories.createDeleteApproval(first.id);
+      await services.categories.delete(first.id, validApproval.operationId, undefined, {
         actor: 'test',
         channel: 'system',
       });
 
       await expect(
-        service.deleteCategory(first.id, validApproval.operationId, undefined, {
+        services.categories.delete(first.id, validApproval.operationId, undefined, {
           actor: 'test',
           channel: 'system',
         }),

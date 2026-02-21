@@ -2,7 +2,7 @@ import cors from '@fastify/cors';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import { fail } from '@tithe/contracts';
-import { AppError, type ExpenseTrackerService } from '@tithe/domain';
+import { AppError, type DomainServices } from '@tithe/domain';
 import Fastify, { type FastifyInstance } from 'fastify';
 
 import { type ApiRuntimeConfig, loadApiRuntimeConfig, resolveCorsOrigin } from './config.js';
@@ -14,7 +14,7 @@ import {
 } from './http/register-feature-routes.js';
 
 export interface BuildServerOptions {
-  service?: ExpenseTrackerService;
+  services?: DomainServices;
   config?: ApiRuntimeConfig;
 }
 
@@ -67,7 +67,7 @@ export const buildServer = (options: BuildServerOptions = {}): FastifyInstance =
     reply.status(404).send(fail('NOT_FOUND', `Route ${request.method} ${request.url} not found`)),
   );
 
-  const ctx = createAppContext({ service: options.service });
+  const ctx = createAppContext({ services: options.services });
   registerFeatureRoutes(app, ctx);
 
   return app;

@@ -48,7 +48,8 @@ interface CommitmentInstanceQuery {
 }
 
 export const registerCommitmentRoutes = (app: FastifyInstance, ctx: AppContext): void => {
-  const { service, actorFromRequest, parseBoolean } = ctx;
+  const { services, actorFromRequest, parseBoolean } = ctx;
+  const commitmentsService = services.commitments;
   const {
     defaultErrorResponses,
     genericObjectSchema,
@@ -73,7 +74,7 @@ export const registerCommitmentRoutes = (app: FastifyInstance, ctx: AppContext):
         },
       },
     },
-    async () => ok(await service.listCommitments()),
+    async () => ok(await commitmentsService.list()),
   );
 
   app.post<{ Body: CommitmentBody }>(
@@ -105,7 +106,7 @@ export const registerCommitmentRoutes = (app: FastifyInstance, ctx: AppContext):
         },
       },
     },
-    async (request) => ok(await service.createCommitment(request.body, actorFromRequest(request))),
+    async (request) => ok(await commitmentsService.create(request.body, actorFromRequest(request))),
   );
 
   app.patch<{ Params: CommitmentParams; Body: CommitmentUpdateBody }>(
@@ -139,7 +140,7 @@ export const registerCommitmentRoutes = (app: FastifyInstance, ctx: AppContext):
     },
     async (request) =>
       ok(
-        await service.updateCommitment(request.params.id, request.body, actorFromRequest(request)),
+        await commitmentsService.update(request.params.id, request.body, actorFromRequest(request)),
       ),
   );
 
@@ -183,7 +184,7 @@ export const registerCommitmentRoutes = (app: FastifyInstance, ctx: AppContext):
     },
     async (request) => {
       if (parseBoolean(request.query.dryRun)) {
-        const token = await service.createDeleteCommitmentApproval(request.params.id);
+        const token = await commitmentsService.createDeleteApproval(request.params.id);
         return ok(token, { mode: 'dry-run' });
       }
 
@@ -191,7 +192,7 @@ export const registerCommitmentRoutes = (app: FastifyInstance, ctx: AppContext):
         throw new AppError('APPROVAL_REQUIRED', 'approveOperationId is required for delete', 400);
       }
 
-      await service.deleteCommitment(
+      await commitmentsService.delete(
         request.params.id,
         request.query.approveOperationId,
         actorFromRequest(request),
@@ -224,7 +225,7 @@ export const registerCommitmentRoutes = (app: FastifyInstance, ctx: AppContext):
     },
     async (request) => {
       return ok(
-        await service.runCommitmentDueGeneration(request.body?.upTo, actorFromRequest(request)),
+        await commitmentsService.runDueGeneration(request.body?.upTo, actorFromRequest(request)),
       );
     },
   );
@@ -254,6 +255,6 @@ export const registerCommitmentRoutes = (app: FastifyInstance, ctx: AppContext):
         },
       },
     },
-    async (request) => ok(await service.listCommitmentInstances(request.query.status)),
+    async (request) => ok(await commitmentsService.listInstances(request.query.status)),
   );
 };

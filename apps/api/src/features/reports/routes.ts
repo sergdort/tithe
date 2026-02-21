@@ -17,7 +17,8 @@ interface CommitmentForecastQuery {
 }
 
 export const registerReportRoutes = (app: FastifyInstance, ctx: AppContext): void => {
-  const { service } = ctx;
+  const { services } = ctx;
+  const reportsService = services.reports;
   const { defaultErrorResponses, genericObjectSchema, isoDateTimeSchema, successEnvelopeSchema } =
     ctx.docs;
 
@@ -47,7 +48,7 @@ export const registerReportRoutes = (app: FastifyInstance, ctx: AppContext): voi
         },
       },
     },
-    async (request) => ok(await service.reportMonthlyTrends(request.query.months ?? 6)),
+    async (request) => ok(await reportsService.monthlyTrends(request.query.months ?? 6)),
   );
 
   app.get<{ Querystring: CategoryBreakdownQuery }>(
@@ -74,7 +75,7 @@ export const registerReportRoutes = (app: FastifyInstance, ctx: AppContext): voi
       },
     },
     async (request) =>
-      ok(await service.reportCategoryBreakdown(request.query.from, request.query.to)),
+      ok(await reportsService.categoryBreakdown(request.query.from, request.query.to)),
   );
 
   app.get<{ Querystring: CommitmentForecastQuery }>(
@@ -103,6 +104,6 @@ export const registerReportRoutes = (app: FastifyInstance, ctx: AppContext): voi
         },
       },
     },
-    async (request) => ok(await service.reportCommitmentForecast(request.query.days ?? 30)),
+    async (request) => ok(await reportsService.commitmentForecast(request.query.days ?? 30)),
   );
 };

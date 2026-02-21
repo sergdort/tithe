@@ -9,7 +9,7 @@ import {
   loadApiRuntimeConfig,
   resolveCorsOrigin,
 } from '@tithe/api/server';
-import { AppError, type ExpenseTrackerService } from '@tithe/domain';
+import { AppError, type DomainServices } from '@tithe/domain';
 
 const workspaceRoot = fileURLToPath(new URL('../../', import.meta.url));
 
@@ -87,13 +87,15 @@ describe('API Fastify enforcement', () => {
   });
 
   it('preserves AppError code/status in error envelope', async () => {
-    const service = {
-      listCategories: async () => {
-        throw new AppError('CATEGORY_NOT_FOUND', 'Category missing', 404);
+    const services = {
+      categories: {
+        list: async () => {
+          throw new AppError('CATEGORY_NOT_FOUND', 'Category missing', 404);
+        },
       },
-    } as unknown as ExpenseTrackerService;
+    } as unknown as DomainServices;
 
-    const app = buildServer({ service, config: baseConfig });
+    const app = buildServer({ services, config: baseConfig });
 
     try {
       const response = await app.inject({
@@ -116,13 +118,15 @@ describe('API Fastify enforcement', () => {
   });
 
   it('maps unexpected errors to INTERNAL_ERROR envelope', async () => {
-    const service = {
-      listCategories: async () => {
-        throw new Error('boom');
+    const services = {
+      categories: {
+        list: async () => {
+          throw new Error('boom');
+        },
       },
-    } as unknown as ExpenseTrackerService;
+    } as unknown as DomainServices;
 
-    const app = buildServer({ service, config: baseConfig });
+    const app = buildServer({ services, config: baseConfig });
 
     try {
       const response = await app.inject({

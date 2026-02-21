@@ -21,7 +21,8 @@ interface QueryBody {
 }
 
 export const registerQueryRoutes = (app: FastifyInstance, ctx: AppContext): void => {
-  const { service } = ctx;
+  const { services } = ctx;
+  const queryService = services.query;
   const { defaultErrorResponses, errorEnvelopeSchema, genericObjectSchema, successEnvelopeSchema } =
     ctx.docs;
 
@@ -88,7 +89,7 @@ export const registerQueryRoutes = (app: FastifyInstance, ctx: AppContext): void
       },
     },
     async (request) => {
-      const result = await service.runQuery({
+      const result = await queryService.run({
         entity: request.body.entity,
         filters: request.body.filters ?? [],
         sortBy: request.body.sortBy ?? 'created_at',

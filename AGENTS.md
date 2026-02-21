@@ -118,6 +118,43 @@ Failure:
 - In API feature routes, Fastify JSON Schema is the request validation source of truth; avoid per-handler `zod.parse(request.body|query|params)` duplication.
 - API must return envelope-form errors for Fastify validation failures (`VALIDATION_ERROR`), unknown routes (`NOT_FOUND`), domain errors, and unexpected internal errors.
 
+### Domain architecture notes
+
+- Domain business logic is feature-split and created via `createDomainServices()` in `packages/domain/src/services/create-domain-services.ts`.
+- Service registry shape is `DomainServices`:
+  - `categories`, `expenses`, `commitments`, `reports`, `query`, `monzo`.
+- Shared infrastructure lives under `packages/domain/src/services/shared`:
+  - `deps.ts`: DB session + repository factories.
+  - `approval-service.ts`: approval token creation/consumption.
+  - `audit-service.ts`: audit log writes.
+  - `common.ts`: date/currency/hash helpers + default actor.
+- Keep feature boundaries pragmatic: cross-feature flows are allowed inside feature services when transactional consistency is required.
+  - Example: expense create/delete may update commitment instance status.
+  - Example: category delete may reassign both expense and commitment references.
+- `ExpenseTrackerService` is removed; do not reintroduce a monolithic domain service facade.
+- Public domain exports are registry-based (`createDomainServices`, `DomainServices`, feature service types).
+
+### API route-handler architecture notes
+
+- App context is registry-based:
+  - `createAppContext()` injects `services: DomainServices` (not a single `service`).
+  - `BuildServerOptions` accepts `services?: DomainServices`.
+- Each feature route module owns only its feature service reference:
+  - `categories/routes.ts` -> `services.categories`
+  - `expenses/routes.ts` -> `services.expenses`
+  - `commitments/routes.ts` -> `services.commitments`
+  - `reports/routes.ts` -> `services.reports`
+  - `query/routes.ts` -> `services.query`
+  - `monzo/routes.ts` -> `services.monzo`
+- Handler style:
+  - Parse/validate with Fastify schemas.
+  - Delegate to one feature service call.
+  - Wrap success with `ok(...)`.
+  - Let `AppError` and validation failures flow to central Fastify error handler.
+- For destructive endpoints, keep approval flow in route handlers:
+  - `dryRun` returns approval token metadata.
+  - non-`dryRun` requires approval token and executes delete.
+
 ### Workspace run scripts
 
 - Root dev scripts: `pnpm dev:api`, `pnpm dev:pwa`, `pnpm dev:cli`.
