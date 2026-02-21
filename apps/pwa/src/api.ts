@@ -8,23 +8,38 @@ import type {
 } from './types.js';
 
 const baseUrl = import.meta.env.VITE_API_BASE ?? 'http://localhost:8787/v1';
+const requestTimeoutMs = 10_000;
 
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
-  const response = await fetch(`${baseUrl}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-    ...init,
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
 
-  const payload = (await response.json()) as ApiEnvelope<T>;
+  try {
+    const response = await fetch(`${baseUrl}${path}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(init?.headers ?? {}),
+      },
+      ...init,
+      signal: controller.signal,
+    });
 
-  if (!payload.ok) {
-    throw new Error(payload.error.message);
+    const payload = (await response.json()) as ApiEnvelope<T>;
+
+    if (!payload.ok) {
+      throw new Error(payload.error.message);
+    }
+
+    return payload.data;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error(`API request timed out after ${requestTimeoutMs}ms.`);
+    }
+
+    throw error instanceof Error ? error : new Error(String(error));
+  } finally {
+    clearTimeout(timeout);
   }
-
-  return payload.data;
 };
 
 export const api = {

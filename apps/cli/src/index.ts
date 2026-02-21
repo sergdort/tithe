@@ -4,6 +4,7 @@ import { Command } from 'commander';
 import { fail, ok } from '@tithe/contracts';
 import { runMigrations } from '@tithe/db';
 import { AppError, ExpenseTrackerService } from '@tithe/domain';
+import { runWebCommand } from './web.js';
 
 const program = new Command();
 const service = new ExpenseTrackerService();
@@ -466,6 +467,36 @@ monzo.command('status').action(async () => {
   const opts = program.opts<{ json: boolean }>();
   await run(opts.json, async () => ({ status: 'not_implemented' }));
 });
+
+program
+  .command('web')
+  .description('Run API + PWA web stack')
+  .option('--mode <mode>', 'dev|preview', 'dev')
+  .option('--api-port <port>', 'override API port (1-65535)')
+  .option('--pwa-port <port>', 'override PWA port (1-65535)')
+  .action(async (options) => {
+    const opts = program.opts<{ json: boolean }>();
+
+    try {
+      await runWebCommand(
+        {
+          mode: options.mode,
+          apiPort: options.apiPort,
+          pwaPort: options.pwaPort,
+        },
+        opts.json,
+      );
+    } catch (error) {
+      if (error instanceof AppError) {
+        emit(fail(error.code, error.message, error.details), true);
+        process.exitCode = 1;
+        return;
+      }
+
+      emit(fail('INTERNAL_ERROR', error instanceof Error ? error.message : String(error)), true);
+      process.exitCode = 1;
+    }
+  });
 
 if (process.argv.length <= 2) {
   program.outputHelp();

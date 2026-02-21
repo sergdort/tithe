@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev --parallel",
+    "dev": "VITE_API_BASE=${VITE_API_BASE:-http://127.0.0.1:8787/v1} turbo run dev --parallel",
     "dev:api": "pnpm --filter @tithe/api dev",
     "dev:cli": "pnpm --filter @tithe/cli dev",
     "dev:pwa": "pnpm --filter @tithe/pwa dev",

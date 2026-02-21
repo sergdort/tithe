@@ -49,7 +49,7 @@ Important variables:
 
 - `DB_PATH`: SQLite file path (default `./tithe/tithe.sqlite`)
 - `PORT`, `HOST`: API bind values
-- `VITE_API_BASE`: mobile app API target (`http://<tailnet-ip>:8787/v1`)
+- `VITE_API_BASE`: PWA API target (default local: `http://127.0.0.1:8787/v1`; set Tailnet URL for mobile access)
 - `PWA_PORT`: PWA dev server port (default `5173`)
 - `PWA_PREVIEW_PORT`: PWA preview server port (default `4173`)
 - `MONZO_*`: Monzo OAuth settings (needed in Milestone 3+)
@@ -74,12 +74,55 @@ Or run all workspace dev servers:
 pnpm dev
 ```
 
+`pnpm dev` defaults `VITE_API_BASE` to `http://127.0.0.1:8787/v1` for local development.
+To test mobile/Tailnet against `pnpm dev`, override it explicitly, for example:
+
+```bash
+VITE_API_BASE=http://<your-tailnet-ip>:8787/v1 pnpm dev
+```
+
 Start built apps separately (after `pnpm build`):
 
 ```bash
 pnpm start:api
 pnpm start:pwa
 pnpm start:cli
+```
+
+### 6. Build and link CLI globally
+
+Build the CLI package and link it globally so `tithe` is available in your shell:
+
+```bash
+pnpm --filter @tithe/cli build
+pnpm link --global ./apps/cli
+exec zsh
+tithe --help
+```
+
+If you do not want to restart the shell, run `hash -r` before `tithe --help`.
+If `tithe` is still not found, run `pnpm setup`, restart zsh, and ensure `PNPM_HOME` is on your `PATH`.
+
+To remove the global link later:
+
+```bash
+pnpm remove --global tithe
+```
+
+When you change CLI code and want the globally linked command to pick up the new build:
+
+```bash
+pnpm --filter @tithe/cli build
+hash -r
+tithe --help
+```
+
+If you want to force-refresh the global link:
+
+```bash
+pnpm remove --global tithe
+pnpm link --global ./apps/cli
+hash -r
 ```
 
 Development note:
@@ -140,12 +183,35 @@ Use `--json` for deterministic AI parsing.
 tithe --json category list
 tithe --json expense list --limit 50
 tithe --json commitment run-due
+tithe web
 ```
 
 CLI behavior note:
 
 - Running `tithe` without a subcommand prints help and exits successfully.
 - Database migrations run lazily when a command executes, so help-only invocations do not touch SQLite.
+
+### Run web stack from CLI
+
+Use `tithe web` to launch API + PWA together in the foreground:
+
+```bash
+tithe web
+tithe web --mode preview
+tithe web --api-port 9797 --pwa-port 5174
+tithe --json web --mode dev
+```
+
+Runtime notes:
+
+- `--mode dev` is the default.
+- `--mode preview` automatically runs `@tithe/api` and `@tithe/pwa` builds before starting preview services.
+- `tithe web` preserves configured `VITE_API_BASE` by default.
+- If `--api-port` is set, `tithe web` rewrites the port in `VITE_API_BASE` when possible and falls back to `http://<api-host>:<api-port>/v1`.
+- `--api-port` overrides API `PORT` for this command.
+- `--pwa-port` maps to `PWA_PORT` in dev mode and `PWA_PREVIEW_PORT` in preview mode.
+- `--json` emits one startup envelope before live prefixed logs are streamed.
+- PWA API requests time out after 10 seconds and surface an error state instead of loading indefinitely.
 
 ### Safety gate for destructive operations
 

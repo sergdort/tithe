@@ -86,6 +86,11 @@ Failure:
 - `tithe --json report commitment-forecast [--days <n>]`
 - `tithe --json query --entity expenses --filter '{"field":"amount_minor","op":"gt","value":1000}'`
 
+### Web runtime
+
+- `tithe web [--mode dev|preview] [--api-port <port>] [--pwa-port <port>]`
+- `tithe --json web [--mode dev|preview] [--api-port <port>] [--pwa-port <port>]`
+
 ### Monzo (scaffold)
 
 - `tithe --json monzo connect`
@@ -96,6 +101,12 @@ Failure:
 
 - Invoking `tithe` without a subcommand should print help and exit successfully.
 - DB migrations are expected to run lazily on command execution, not on help-only invocations.
+- `tithe web` launches API + PWA in foreground mode (`--mode dev` by default).
+- `tithe web --mode preview` builds `@tithe/api` and `@tithe/pwa` before launch.
+- `--api-port` overrides API `PORT`; for `tithe web`, PWA `VITE_API_BASE` is preserved by default and has its port rewritten when `--api-port` is provided (fallback: `http://<api-host>:<api-port>/v1`).
+- `--pwa-port` sets `PWA_PORT` in `dev` mode or `PWA_PREVIEW_PORT` in `preview` mode.
+- `tithe --json web` emits one startup envelope first, then streams prefixed service logs.
+- PWA API requests use a 10-second timeout and transition to error state if backend is unreachable.
 
 ### API dev runtime notes
 
@@ -105,7 +116,14 @@ Failure:
 
 - Root dev scripts: `pnpm dev:api`, `pnpm dev:pwa`, `pnpm dev:cli`.
 - Root start scripts (for built artifacts): `pnpm start:api`, `pnpm start:pwa`, `pnpm start:cli`.
+- Root `pnpm dev` defaults `VITE_API_BASE` to `http://127.0.0.1:8787/v1`; override it explicitly for Tailnet/mobile runs.
 - PWA ports are configurable through root env vars: `PWA_PORT` (dev) and `PWA_PREVIEW_PORT` (preview/start).
+- Global CLI link workflow: `pnpm --filter @tithe/cli build`, then `pnpm link --global ./apps/cli`.
+- After linking globally in zsh, refresh the shell command cache (`exec zsh` or `hash -r`) before invoking `tithe`.
+- After CLI code changes, rebuild with `pnpm --filter @tithe/cli build` (relink is not required for an existing global link).
+- Force-refresh global link if needed: `pnpm remove --global tithe`, `pnpm link --global ./apps/cli`, then `hash -r`/`exec zsh`.
+- If `tithe` is not found after linking, run `pnpm setup`, restart zsh, and verify `PNPM_HOME` is on `PATH`.
+- Remove global CLI link with `pnpm remove --global tithe`.
 
 ## Approval Token Workflow
 
