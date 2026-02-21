@@ -1,4 +1,8 @@
-import type { MonzoService } from './types.js';
+export interface MonzoService {
+  connectStart: () => Promise<{ status: string; message: string }>;
+  callback: () => Promise<{ status: string; message: string }>;
+  syncNow: () => Promise<{ status: string; message: string }>;
+}
 
 export const createMonzoService = (): MonzoService => ({
   async connectStart() {

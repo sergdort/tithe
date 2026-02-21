@@ -1,6 +1,16 @@
+import type {
+  CategoryBreakdownDto,
+  CommitmentForecastDto,
+  MonthlyTrendDto,
+} from '../repositories/reports.repository.js';
 import { assertDate } from './shared/common.js';
 import type { DomainRuntimeDeps } from './shared/deps.js';
-import type { ReportsService } from './types.js';
+
+export interface ReportsService {
+  monthlyTrends: (months?: number) => Promise<MonthlyTrendDto[]>;
+  categoryBreakdown: (from?: string, to?: string) => Promise<CategoryBreakdownDto[]>;
+  commitmentForecast: (days?: number) => Promise<CommitmentForecastDto[]>;
+}
 
 interface ReportsServiceDeps {
   runtime: DomainRuntimeDeps;

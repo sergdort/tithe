@@ -9,7 +9,7 @@
 [0] Root `pnpm dev` may need a local-safe `VITE_API_BASE` override because `.env` often carries Tailnet/mobile values; defaulting `pnpm dev` to `127.0.0.1:8787` avoids loading hangs in local browser workflows.
 [1] `@fastify/swagger` only captures routes after the plugin is registered; declare routes in plugins registered after Swagger (or inside `app.after(...)`) or OpenAPI docs at `/docs`/`/docs/json` will show no operations.
 [0] With Fastify plugin prefixes, use an empty local route path (`''`) for collection roots; using `'/'` yields OpenAPI paths with trailing slashes (e.g. `/v1/categories/`).
-[0] In zsh shell commands, unescaped backticks in search patterns trigger command substitution; quote or escape them in `rg` patterns to avoid false `command not found` errors.
+[1] In zsh shell commands, unescaped backticks or unbalanced quote characters in search patterns break parsing; quote or escape `rg` patterns carefully.
 [0] Fastify schema validation errors reach `setErrorHandler`; if not mapped explicitly, they can be wrapped as generic 500s and break envelope contracts.
 [0] In Drizzle with better-sqlite3, transaction callbacks are synchronous; repository methods used inside transactions should execute queries explicitly with `.run()`/`.all()`/`.get()` instead of relying on awaited query builders.
 [0] In this workspace, downstream package typechecks may read dependency declarations from built `dist` outputs; after API-surface changes, build producer packages (`@tithe/domain`, `@tithe/api`) before consumer typechecks, and avoid parallelizing those steps.

@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 
 import { AppError } from '../errors.js';
+import type { ExpenseDto } from '../repositories/expenses.repository.js';
 import { withTransaction } from '../repositories/shared.js';
 import type {
   ActorContext,
@@ -8,11 +9,20 @@ import type {
   ListExpensesInput,
   UpdateExpenseInput,
 } from '../types.js';
+import type { ApprovalToken } from './shared/approval-service.js';
 import type { ApprovalService } from './shared/approval-service.js';
 import type { AuditService } from './shared/audit-service.js';
 import { DEFAULT_ACTOR, assertDate, normalizeCurrency, toIso } from './shared/common.js';
 import type { DomainRuntimeDeps } from './shared/deps.js';
-import type { ExpensesService } from './types.js';
+
+export interface ExpensesService {
+  list: (input?: ListExpensesInput) => Promise<ExpenseDto[]>;
+  get: (id: string) => Promise<ExpenseDto>;
+  create: (input: CreateExpenseInput, context?: ActorContext) => Promise<ExpenseDto>;
+  update: (id: string, input: UpdateExpenseInput, context?: ActorContext) => Promise<ExpenseDto>;
+  createDeleteApproval: (id: string) => Promise<ApprovalToken>;
+  delete: (id: string, approveOperationId: string, context?: ActorContext) => Promise<void>;
+}
 
 interface ExpenseServiceDeps {
   runtime: DomainRuntimeDeps;

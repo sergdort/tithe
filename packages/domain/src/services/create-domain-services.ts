@@ -1,13 +1,28 @@
 import { createCategoriesService } from './categories.service.js';
+import type { CategoriesService } from './categories.service.js';
 import { createCommitmentsService } from './commitments.service.js';
+import type { CommitmentsService } from './commitments.service.js';
 import { createExpensesService } from './expenses.service.js';
+import type { ExpensesService } from './expenses.service.js';
 import { createMonzoService } from './monzo.service.js';
+import type { MonzoService } from './monzo.service.js';
 import { createQueryService } from './query.service.js';
+import type { QueryService } from './query.service.js';
 import { createReportsService } from './reports.service.js';
+import type { ReportsService } from './reports.service.js';
 import { createApprovalService } from './shared/approval-service.js';
 import { createAuditService } from './shared/audit-service.js';
 import { createDomainRuntimeDeps } from './shared/deps.js';
-import type { DomainServiceOptions, DomainServices } from './types.js';
+import type { DomainServiceOptions } from './shared/deps.js';
+
+export interface DomainServices {
+  categories: CategoriesService;
+  expenses: ExpensesService;
+  commitments: CommitmentsService;
+  reports: ReportsService;
+  query: QueryService;
+  monzo: MonzoService;
+}
 
 export const createDomainServices = (options: DomainServiceOptions = {}): DomainServices => {
   const runtime = createDomainRuntimeDeps(options);

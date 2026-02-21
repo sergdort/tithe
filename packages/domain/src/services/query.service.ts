@@ -1,7 +1,10 @@
-import { type QuerySpec, fail, ok, querySpecSchema } from '@tithe/contracts';
+import { type Envelope, type QuerySpec, fail, ok, querySpecSchema } from '@tithe/contracts';
 
 import type { DomainRuntimeDeps } from './shared/deps.js';
-import type { QueryService } from './types.js';
+
+export interface QueryService {
+  run: (specInput: QuerySpec) => Promise<Envelope<unknown[]>>;
+}
 
 interface QueryServiceDeps {
   runtime: DomainRuntimeDeps;

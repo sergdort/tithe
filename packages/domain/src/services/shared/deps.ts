@@ -27,7 +27,10 @@ import {
   SqliteReportsRepository,
 } from '../../repositories/reports.repository.js';
 import { type RepositoryDb, type SessionContext, withSession } from '../../repositories/shared.js';
-import type { DomainServiceOptions } from '../types.js';
+
+export interface DomainServiceOptions {
+  dbPath?: string;
+}
 
 export interface RepositoryFactories {
   categories: (db: RepositoryDb) => CategoriesRepository;

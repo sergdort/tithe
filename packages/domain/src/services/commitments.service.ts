@@ -3,8 +3,13 @@ import crypto from 'node:crypto';
 import rrule from 'rrule';
 
 import { AppError } from '../errors.js';
+import type {
+  CommitmentDto,
+  CommitmentInstanceDto,
+} from '../repositories/commitments.repository.js';
 import { type RepositoryDb, withTransaction } from '../repositories/shared.js';
 import type { ActorContext, CreateCommitmentInput, UpdateCommitmentInput } from '../types.js';
+import type { ApprovalToken } from './shared/approval-service.js';
 import type { ApprovalService } from './shared/approval-service.js';
 import type { AuditService } from './shared/audit-service.js';
 import {
@@ -15,7 +20,26 @@ import {
   toRruleDate,
 } from './shared/common.js';
 import type { DomainRuntimeDeps } from './shared/deps.js';
-import type { CommitmentsService } from './types.js';
+
+export interface CommitmentsService {
+  list: () => Promise<CommitmentDto[]>;
+  create: (input: CreateCommitmentInput, context?: ActorContext) => Promise<CommitmentDto>;
+  get: (id: string) => Promise<CommitmentDto>;
+  update: (
+    id: string,
+    input: UpdateCommitmentInput,
+    context?: ActorContext,
+  ) => Promise<CommitmentDto>;
+  createDeleteApproval: (id: string) => Promise<ApprovalToken>;
+  delete: (id: string, approveOperationId: string, context?: ActorContext) => Promise<void>;
+  runDueGeneration: (
+    upTo?: string,
+    context?: ActorContext,
+  ) => Promise<{ upTo: string; created: number }>;
+  listInstances: (
+    status?: 'pending' | 'paid' | 'overdue' | 'skipped',
+  ) => Promise<CommitmentInstanceDto[]>;
+}
 
 type RRule = InstanceType<(typeof rrule)['RRule']>;
 

@@ -1,13 +1,27 @@
 import crypto from 'node:crypto';
 
 import { AppError } from '../errors.js';
+import type { CategoryDto } from '../repositories/categories.repository.js';
 import { withTransaction } from '../repositories/shared.js';
 import type { ActorContext, CreateCategoryInput, UpdateCategoryInput } from '../types.js';
+import type { ApprovalToken } from './shared/approval-service.js';
 import type { ApprovalService } from './shared/approval-service.js';
 import type { AuditService } from './shared/audit-service.js';
 import { DEFAULT_ACTOR, assertDate, toIso } from './shared/common.js';
 import type { DomainRuntimeDeps } from './shared/deps.js';
-import type { CategoriesService } from './types.js';
+
+export interface CategoriesService {
+  list: () => Promise<CategoryDto[]>;
+  create: (input: CreateCategoryInput, context?: ActorContext) => Promise<CategoryDto>;
+  update: (id: string, input: UpdateCategoryInput, context?: ActorContext) => Promise<CategoryDto>;
+  createDeleteApproval: (id: string, reassignCategoryId?: string) => Promise<ApprovalToken>;
+  delete: (
+    id: string,
+    approveOperationId: string,
+    reassignCategoryId?: string,
+    context?: ActorContext,
+  ) => Promise<void>;
+}
 
 interface CategoryServiceDeps {
   runtime: DomainRuntimeDeps;

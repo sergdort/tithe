@@ -1,9 +1,15 @@
 import crypto from 'node:crypto';
 
 import { AppError } from '../../errors.js';
-import type { ApprovalToken } from '../types.js';
 import { operationHash, toIso } from './common.js';
 import type { DomainRuntimeDeps } from './deps.js';
+
+export interface ApprovalToken {
+  operationId: string;
+  action: string;
+  hash: string;
+  expiresAt: string;
+}
 
 export interface ApprovalService {
   createApproval: (action: string, payload: unknown) => Promise<ApprovalToken>;
