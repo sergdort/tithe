@@ -11,19 +11,30 @@ import type { AppContext } from './app-context.js';
 
 type FeatureRegistrar = (app: FastifyInstance, ctx: AppContext) => void;
 
+interface FeatureRouteRegistration {
+  name: string;
+  prefix?: string;
+  registrar: FeatureRegistrar;
+}
+
+export const featureRouteRegistrations: readonly FeatureRouteRegistration[] = [
+  { name: 'system', registrar: registerSystemRoutes },
+  { name: 'categories', prefix: '/v1/categories', registrar: registerCategoryRoutes },
+  { name: 'expenses', prefix: '/v1/expenses', registrar: registerExpenseRoutes },
+  { name: 'commitments', prefix: '/v1', registrar: registerCommitmentRoutes },
+  { name: 'reports', prefix: '/v1/reports', registrar: registerReportRoutes },
+  { name: 'query', prefix: '/v1/query', registrar: registerQueryRoutes },
+  { name: 'monzo', prefix: '/v1/integrations/monzo', registrar: registerMonzoRoutes },
+];
+
 const registerFeature = (
   app: FastifyInstance,
   ctx: AppContext,
-  registrar: FeatureRegistrar,
+  registration: FeatureRouteRegistration,
   prefix?: string,
 ): void => {
-  const plugin = (
-    featureApp: FastifyInstance,
-    _opts: object,
-    done: (err?: Error) => void,
-  ): void => {
-    registrar(featureApp, ctx);
-    done();
+  const plugin = async (featureApp: FastifyInstance): Promise<void> => {
+    registration.registrar(featureApp, ctx);
   };
 
   if (prefix) {
@@ -35,11 +46,7 @@ const registerFeature = (
 };
 
 export const registerFeatureRoutes = (app: FastifyInstance, ctx: AppContext): void => {
-  registerFeature(app, ctx, registerSystemRoutes);
-  registerFeature(app, ctx, registerCategoryRoutes, '/v1/categories');
-  registerFeature(app, ctx, registerExpenseRoutes, '/v1/expenses');
-  registerFeature(app, ctx, registerCommitmentRoutes, '/v1');
-  registerFeature(app, ctx, registerReportRoutes, '/v1/reports');
-  registerFeature(app, ctx, registerQueryRoutes, '/v1/query');
-  registerFeature(app, ctx, registerMonzoRoutes, '/v1/integrations/monzo');
+  for (const registration of featureRouteRegistrations) {
+    registerFeature(app, ctx, registration, registration.prefix);
+  }
 };

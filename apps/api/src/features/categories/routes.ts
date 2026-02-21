@@ -1,9 +1,35 @@
 import { ok } from '@tithe/contracts';
 import { AppError } from '@tithe/domain';
 import type { FastifyInstance } from 'fastify';
-import { z } from 'zod';
 
 import type { AppContext } from '../../http/app-context.js';
+
+type CategoryKind = 'expense' | 'income' | 'transfer';
+
+interface CategoryParams {
+  id: string;
+}
+
+interface CreateCategoryBody {
+  name: string;
+  kind: CategoryKind;
+  icon?: string;
+  color?: string;
+}
+
+interface UpdateCategoryBody {
+  name?: string;
+  kind?: CategoryKind;
+  icon?: string;
+  color?: string;
+  archivedAt?: string | null;
+}
+
+interface DeleteCategoryQuery {
+  dryRun?: boolean | 'true' | 'false' | '1' | '0';
+  reassignCategoryId?: string;
+  approveOperationId?: string;
+}
 
 export const registerCategoryRoutes = (app: FastifyInstance, ctx: AppContext): void => {
   const { service, actorFromRequest, parseBoolean } = ctx;
@@ -34,7 +60,7 @@ export const registerCategoryRoutes = (app: FastifyInstance, ctx: AppContext): v
     async () => ok(await service.listCategories()),
   );
 
-  app.post(
+  app.post<{ Body: CreateCategoryBody }>(
     '',
     {
       schema: {
@@ -58,21 +84,12 @@ export const registerCategoryRoutes = (app: FastifyInstance, ctx: AppContext): v
       },
     },
     async (request) => {
-      const payload = z
-        .object({
-          name: z.string().min(1),
-          kind: z.enum(['expense', 'income', 'transfer']),
-          icon: z.string().optional(),
-          color: z.string().optional(),
-        })
-        .parse(request.body);
-
-      const category = await service.createCategory(payload, actorFromRequest(request));
+      const category = await service.createCategory(request.body, actorFromRequest(request));
       return ok(category);
     },
   );
 
-  app.patch(
+  app.patch<{ Params: CategoryParams; Body: UpdateCategoryBody }>(
     '/:id',
     {
       schema: {
@@ -99,23 +116,16 @@ export const registerCategoryRoutes = (app: FastifyInstance, ctx: AppContext): v
       },
     },
     async (request) => {
-      const params = z.object({ id: z.string().uuid() }).parse(request.params);
-      const payload = z
-        .object({
-          name: z.string().min(1).optional(),
-          kind: z.enum(['expense', 'income', 'transfer']).optional(),
-          icon: z.string().optional(),
-          color: z.string().optional(),
-          archivedAt: z.string().datetime({ offset: true }).nullable().optional(),
-        })
-        .parse(request.body);
-
-      const category = await service.updateCategory(params.id, payload, actorFromRequest(request));
+      const category = await service.updateCategory(
+        request.params.id,
+        request.body,
+        actorFromRequest(request),
+      );
       return ok(category);
     },
   );
 
-  app.delete(
+  app.delete<{ Params: CategoryParams; Querystring: DeleteCategoryQuery }>(
     '/:id',
     {
       schema: {
@@ -155,35 +165,26 @@ export const registerCategoryRoutes = (app: FastifyInstance, ctx: AppContext): v
       },
     },
     async (request) => {
-      const params = z.object({ id: z.string().uuid() }).parse(request.params);
-      const query = z
-        .object({
-          dryRun: z.union([z.string(), z.boolean()]).optional(),
-          reassignCategoryId: z.string().uuid().optional(),
-          approveOperationId: z.string().uuid().optional(),
-        })
-        .parse(request.query);
-
-      if (parseBoolean(query.dryRun)) {
+      if (parseBoolean(request.query.dryRun)) {
         const token = await service.createDeleteCategoryApproval(
-          params.id,
-          query.reassignCategoryId,
+          request.params.id,
+          request.query.reassignCategoryId,
         );
         return ok(token, { mode: 'dry-run' });
       }
 
-      if (!query.approveOperationId) {
+      if (!request.query.approveOperationId) {
         throw new AppError('APPROVAL_REQUIRED', 'approveOperationId is required for delete', 400);
       }
 
       await service.deleteCategory(
-        params.id,
-        query.approveOperationId,
-        query.reassignCategoryId,
+        request.params.id,
+        request.query.approveOperationId,
+        request.query.reassignCategoryId,
         actorFromRequest(request),
       );
 
-      return ok({ deleted: true, id: params.id });
+      return ok({ deleted: true, id: request.params.id });
     },
   );
 };

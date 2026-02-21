@@ -20,7 +20,7 @@ Local-first personal expense tracker built for a single user on a personal machi
 - Language: TypeScript end-to-end
 - DB: SQLite (WAL, foreign keys on)
 - ORM: Drizzle
-- API: Fastify + Zod + OpenAPI docs at `/docs`
+- API: Fastify + JSON Schema + OpenAPI docs at `/docs`
   - OpenAPI JSON spec: `/docs/json`
   - Operation docs are generated from feature route `schema` definitions under `apps/api/src/features/*/routes.ts`
 - CLI: `commander` + JSON-first contract
@@ -51,6 +51,8 @@ Important variables:
 
 - `DB_PATH`: SQLite file path (default `./tithe/tithe.sqlite`)
 - `PORT`, `HOST`: API bind values
+- `LOG_LEVEL`: API logger level (`fatal|error|warn|info|debug|trace`, default `info`)
+- `CORS_ALLOWED_ORIGINS`: comma-separated allow-list for CORS (default `*`)
 - `VITE_API_BASE`: PWA API target (default local: `http://127.0.0.1:8787/v1`; set Tailnet URL for mobile access)
 - `PWA_PORT`: PWA dev server port (default `5173`)
 - `PWA_PREVIEW_PORT`: PWA preview server port (default `4173`)
@@ -176,6 +178,12 @@ Error:
   }
 }
 ```
+
+API error behavior:
+
+- Fastify request validation failures return `400` with envelope code `VALIDATION_ERROR`.
+- Unknown routes return `404` with envelope code `NOT_FOUND`.
+- Domain `AppError` failures preserve their status code and error code in the envelope.
 
 ## CLI Overview
 

@@ -1,15 +1,27 @@
 import { ok } from '@tithe/contracts';
 import type { FastifyInstance } from 'fastify';
-import { z } from 'zod';
 
 import type { AppContext } from '../../http/app-context.js';
+
+interface TrendsQuery {
+  months?: number;
+}
+
+interface CategoryBreakdownQuery {
+  from?: string;
+  to?: string;
+}
+
+interface CommitmentForecastQuery {
+  days?: number;
+}
 
 export const registerReportRoutes = (app: FastifyInstance, ctx: AppContext): void => {
   const { service } = ctx;
   const { defaultErrorResponses, genericObjectSchema, isoDateTimeSchema, successEnvelopeSchema } =
     ctx.docs;
 
-  app.get(
+  app.get<{ Querystring: TrendsQuery }>(
     '/trends',
     {
       schema: {
@@ -35,18 +47,10 @@ export const registerReportRoutes = (app: FastifyInstance, ctx: AppContext): voi
         },
       },
     },
-    async (request) => {
-      const query = z
-        .object({
-          months: z.coerce.number().int().positive().max(24).optional(),
-        })
-        .parse(request.query);
-
-      return ok(await service.reportMonthlyTrends(query.months ?? 6));
-    },
+    async (request) => ok(await service.reportMonthlyTrends(request.query.months ?? 6)),
   );
 
-  app.get(
+  app.get<{ Querystring: CategoryBreakdownQuery }>(
     '/category-breakdown',
     {
       schema: {
@@ -69,19 +73,11 @@ export const registerReportRoutes = (app: FastifyInstance, ctx: AppContext): voi
         },
       },
     },
-    async (request) => {
-      const query = z
-        .object({
-          from: z.string().datetime({ offset: true }).optional(),
-          to: z.string().datetime({ offset: true }).optional(),
-        })
-        .parse(request.query);
-
-      return ok(await service.reportCategoryBreakdown(query.from, query.to));
-    },
+    async (request) =>
+      ok(await service.reportCategoryBreakdown(request.query.from, request.query.to)),
   );
 
-  app.get(
+  app.get<{ Querystring: CommitmentForecastQuery }>(
     '/commitment-forecast',
     {
       schema: {
@@ -107,14 +103,6 @@ export const registerReportRoutes = (app: FastifyInstance, ctx: AppContext): voi
         },
       },
     },
-    async (request) => {
-      const query = z
-        .object({
-          days: z.coerce.number().int().positive().max(365).optional(),
-        })
-        .parse(request.query);
-
-      return ok(await service.reportCommitmentForecast(query.days ?? 30));
-    },
+    async (request) => ok(await service.reportCommitmentForecast(request.query.days ?? 30)),
   );
 };

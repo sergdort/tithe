@@ -1,9 +1,53 @@
 import { ok } from '@tithe/contracts';
 import { AppError } from '@tithe/domain';
 import type { FastifyInstance } from 'fastify';
-import { z } from 'zod';
 
 import type { AppContext } from '../../http/app-context.js';
+
+type ExpenseSource = 'manual' | 'monzo_import' | 'commitment';
+
+interface ExpenseParams {
+  id: string;
+}
+
+interface ExpenseListQuery {
+  from?: string;
+  to?: string;
+  categoryId?: string;
+  limit?: number;
+}
+
+interface CreateExpenseBody {
+  occurredAt: string;
+  postedAt?: string | null;
+  amountMinor: number;
+  currency: string;
+  amountBaseMinor?: number;
+  fxRate?: number;
+  categoryId: string;
+  source?: ExpenseSource;
+  merchantName?: string | null;
+  note?: string | null;
+  externalRef?: string | null;
+  commitmentInstanceId?: string | null;
+}
+
+interface UpdateExpenseBody {
+  occurredAt?: string;
+  postedAt?: string | null;
+  amountMinor?: number;
+  currency?: string;
+  amountBaseMinor?: number;
+  fxRate?: number;
+  categoryId?: string;
+  merchantName?: string | null;
+  note?: string | null;
+}
+
+interface DeleteExpenseQuery {
+  dryRun?: boolean | 'true' | 'false' | '1' | '0';
+  approveOperationId?: string;
+}
 
 export const registerExpenseRoutes = (app: FastifyInstance, ctx: AppContext): void => {
   const { service, actorFromRequest, parseBoolean } = ctx;
@@ -16,7 +60,7 @@ export const registerExpenseRoutes = (app: FastifyInstance, ctx: AppContext): vo
     uuidSchema,
   } = ctx.docs;
 
-  app.get(
+  app.get<{ Querystring: ExpenseListQuery }>(
     '',
     {
       schema: {
@@ -45,21 +89,10 @@ export const registerExpenseRoutes = (app: FastifyInstance, ctx: AppContext): vo
         },
       },
     },
-    async (request) => {
-      const query = z
-        .object({
-          from: z.string().datetime({ offset: true }).optional(),
-          to: z.string().datetime({ offset: true }).optional(),
-          categoryId: z.string().uuid().optional(),
-          limit: z.coerce.number().int().positive().max(1000).optional(),
-        })
-        .parse(request.query);
-
-      return ok(await service.listExpenses(query));
-    },
+    async (request) => ok(await service.listExpenses(request.query)),
   );
 
-  app.get(
+  app.get<{ Params: ExpenseParams }>(
     '/:id',
     {
       schema: {
@@ -72,13 +105,10 @@ export const registerExpenseRoutes = (app: FastifyInstance, ctx: AppContext): vo
         },
       },
     },
-    async (request) => {
-      const params = z.object({ id: z.string().uuid() }).parse(request.params);
-      return ok(await service.getExpense(params.id));
-    },
+    async (request) => ok(await service.getExpense(request.params.id)),
   );
 
-  app.post(
+  app.post<{ Body: CreateExpenseBody }>(
     '',
     {
       schema: {
@@ -119,29 +149,10 @@ export const registerExpenseRoutes = (app: FastifyInstance, ctx: AppContext): vo
         },
       },
     },
-    async (request) => {
-      const payload = z
-        .object({
-          occurredAt: z.string().datetime({ offset: true }),
-          postedAt: z.string().datetime({ offset: true }).nullable().optional(),
-          amountMinor: z.number().int(),
-          currency: z.string().length(3),
-          amountBaseMinor: z.number().int().optional(),
-          fxRate: z.number().positive().optional(),
-          categoryId: z.string().uuid(),
-          source: z.enum(['manual', 'monzo_import', 'commitment']).optional(),
-          merchantName: z.string().nullable().optional(),
-          note: z.string().nullable().optional(),
-          externalRef: z.string().nullable().optional(),
-          commitmentInstanceId: z.string().uuid().nullable().optional(),
-        })
-        .parse(request.body);
-
-      return ok(await service.createExpense(payload, actorFromRequest(request)));
-    },
+    async (request) => ok(await service.createExpense(request.body, actorFromRequest(request))),
   );
 
-  app.patch(
+  app.patch<{ Params: ExpenseParams; Body: UpdateExpenseBody }>(
     '/:id',
     {
       schema: {
@@ -175,27 +186,11 @@ export const registerExpenseRoutes = (app: FastifyInstance, ctx: AppContext): vo
         },
       },
     },
-    async (request) => {
-      const params = z.object({ id: z.string().uuid() }).parse(request.params);
-      const payload = z
-        .object({
-          occurredAt: z.string().datetime({ offset: true }).optional(),
-          postedAt: z.string().datetime({ offset: true }).nullable().optional(),
-          amountMinor: z.number().int().optional(),
-          currency: z.string().length(3).optional(),
-          amountBaseMinor: z.number().int().optional(),
-          fxRate: z.number().positive().optional(),
-          categoryId: z.string().uuid().optional(),
-          merchantName: z.string().nullable().optional(),
-          note: z.string().nullable().optional(),
-        })
-        .parse(request.body);
-
-      return ok(await service.updateExpense(params.id, payload, actorFromRequest(request)));
-    },
+    async (request) =>
+      ok(await service.updateExpense(request.params.id, request.body, actorFromRequest(request))),
   );
 
-  app.delete(
+  app.delete<{ Params: ExpenseParams; Querystring: DeleteExpenseQuery }>(
     '/:id',
     {
       schema: {
@@ -234,25 +229,21 @@ export const registerExpenseRoutes = (app: FastifyInstance, ctx: AppContext): vo
       },
     },
     async (request) => {
-      const params = z.object({ id: z.string().uuid() }).parse(request.params);
-      const query = z
-        .object({
-          dryRun: z.union([z.string(), z.boolean()]).optional(),
-          approveOperationId: z.string().uuid().optional(),
-        })
-        .parse(request.query);
-
-      if (parseBoolean(query.dryRun)) {
-        const token = await service.createDeleteExpenseApproval(params.id);
+      if (parseBoolean(request.query.dryRun)) {
+        const token = await service.createDeleteExpenseApproval(request.params.id);
         return ok(token, { mode: 'dry-run' });
       }
 
-      if (!query.approveOperationId) {
+      if (!request.query.approveOperationId) {
         throw new AppError('APPROVAL_REQUIRED', 'approveOperationId is required for delete', 400);
       }
 
-      await service.deleteExpense(params.id, query.approveOperationId, actorFromRequest(request));
-      return ok({ deleted: true, id: params.id });
+      await service.deleteExpense(
+        request.params.id,
+        request.query.approveOperationId,
+        actorFromRequest(request),
+      );
+      return ok({ deleted: true, id: request.params.id });
     },
   );
 };

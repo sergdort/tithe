@@ -53,6 +53,43 @@ describe('API routes', () => {
         'Query',
         'Monzo',
       ]);
+
+      const httpMethods = ['get', 'post', 'patch', 'delete', 'put'] as const;
+      const paths = body.paths as Record<string, Record<string, unknown>>;
+      for (const pathDefinition of Object.values(paths)) {
+        for (const method of httpMethods) {
+          const operation = pathDefinition[method] as
+            | undefined
+            | {
+                tags?: string[];
+                summary?: string;
+                responses?: Record<string, unknown>;
+              };
+
+          if (!operation) {
+            continue;
+          }
+
+          expect(Array.isArray(operation.tags)).toBe(true);
+          expect(operation.tags && operation.tags.length > 0).toBe(true);
+          expect(typeof operation.summary).toBe('string');
+          expect((operation.summary ?? '').length > 0).toBe(true);
+          expect(operation.responses).toBeDefined();
+
+          const responseCodes = Object.keys(operation.responses ?? {});
+          expect(responseCodes).toContain('200');
+          expect(
+            responseCodes.some(
+              (code) =>
+                code === '400' ||
+                code === '404' ||
+                code === '500' ||
+                code.startsWith('4') ||
+                code.startsWith('5'),
+            ),
+          ).toBe(true);
+        }
+      }
     } finally {
       await app.close();
     }

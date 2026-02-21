@@ -114,6 +114,9 @@ Failure:
 - Swagger/OpenAPI operations at `/docs` are generated from Fastify route `schema` definitions in `apps/api/src/features/*/routes.ts`; when adding or changing endpoints, update route schemas in the same change.
 - API route composition is centralized in `apps/api/src/http/register-feature-routes.ts`; keep feature registration order stable to preserve Swagger tag grouping order.
 - Use prefix-based feature route registration and define collection roots with an empty route path (`''`) to keep canonical OpenAPI paths without trailing slashes.
+- API runtime config is validated once at startup in `apps/api/src/config.ts` (`HOST`, `PORT`, `LOG_LEVEL`, `CORS_ALLOWED_ORIGINS`).
+- In API feature routes, Fastify JSON Schema is the request validation source of truth; avoid per-handler `zod.parse(request.body|query|params)` duplication.
+- API must return envelope-form errors for Fastify validation failures (`VALIDATION_ERROR`), unknown routes (`NOT_FOUND`), domain errors, and unexpected internal errors.
 
 ### Workspace run scripts
 
@@ -156,6 +159,7 @@ For destructive actions:
 ## Error Codes You Must Handle
 
 - `VALIDATION_ERROR`
+- `NOT_FOUND`
 - `CATEGORY_NOT_FOUND`
 - `CATEGORY_IN_USE`
 - `EXPENSE_NOT_FOUND`

@@ -1,14 +1,31 @@
 import type { FastifyInstance } from 'fastify';
-import { z } from 'zod';
 
 import type { AppContext } from '../../http/app-context.js';
+
+type QueryEntity = 'expenses' | 'categories' | 'commitment_instances' | 'recurring_commitments';
+type QueryOperation = 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'like';
+type QueryFilterValue = string | number | boolean | Array<string | number>;
+
+interface QueryFilter {
+  field: string;
+  op: QueryOperation;
+  value: QueryFilterValue;
+}
+
+interface QueryBody {
+  entity: QueryEntity;
+  filters?: QueryFilter[];
+  sortBy?: string;
+  sortDir?: 'asc' | 'desc';
+  limit?: number;
+}
 
 export const registerQueryRoutes = (app: FastifyInstance, ctx: AppContext): void => {
   const { service } = ctx;
   const { defaultErrorResponses, errorEnvelopeSchema, genericObjectSchema, successEnvelopeSchema } =
     ctx.docs;
 
-  app.post(
+  app.post<{ Body: QueryBody }>(
     '/run',
     {
       schema: {
@@ -71,40 +88,12 @@ export const registerQueryRoutes = (app: FastifyInstance, ctx: AppContext): void
       },
     },
     async (request) => {
-      const payload = z
-        .object({
-          entity: z.enum([
-            'expenses',
-            'categories',
-            'commitment_instances',
-            'recurring_commitments',
-          ]),
-          filters: z
-            .array(
-              z.object({
-                field: z.string(),
-                op: z.enum(['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'in', 'like']),
-                value: z.union([
-                  z.string(),
-                  z.number(),
-                  z.boolean(),
-                  z.array(z.union([z.string(), z.number()])),
-                ]),
-              }),
-            )
-            .optional(),
-          sortBy: z.string().optional(),
-          sortDir: z.enum(['asc', 'desc']).optional(),
-          limit: z.number().int().positive().max(1000).optional(),
-        })
-        .parse(request.body);
-
       const result = await service.runQuery({
-        entity: payload.entity,
-        filters: payload.filters ?? [],
-        sortBy: payload.sortBy ?? 'created_at',
-        sortDir: payload.sortDir ?? 'desc',
-        limit: payload.limit ?? 100,
+        entity: request.body.entity,
+        filters: request.body.filters ?? [],
+        sortBy: request.body.sortBy ?? 'created_at',
+        sortDir: request.body.sortDir ?? 'desc',
+        limit: request.body.limit ?? 100,
       });
 
       return result;

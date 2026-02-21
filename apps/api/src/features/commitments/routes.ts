@@ -1,9 +1,51 @@
 import { ok } from '@tithe/contracts';
 import { AppError } from '@tithe/domain';
 import type { FastifyInstance } from 'fastify';
-import { z } from 'zod';
 
 import type { AppContext } from '../../http/app-context.js';
+
+interface CommitmentParams {
+  id: string;
+}
+
+interface CommitmentBody {
+  name: string;
+  rrule: string;
+  startDate: string;
+  defaultAmountMinor: number;
+  currency: string;
+  amountBaseMinor?: number;
+  fxRate?: number;
+  categoryId: string;
+  graceDays?: number;
+  active?: boolean;
+}
+
+interface CommitmentUpdateBody {
+  name?: string;
+  rrule?: string;
+  startDate?: string;
+  defaultAmountMinor?: number;
+  currency?: string;
+  amountBaseMinor?: number;
+  fxRate?: number;
+  categoryId?: string;
+  graceDays?: number;
+  active?: boolean;
+}
+
+interface DeleteCommitmentQuery {
+  dryRun?: boolean | 'true' | 'false' | '1' | '0';
+  approveOperationId?: string;
+}
+
+interface RunDueBody {
+  upTo?: string;
+}
+
+interface CommitmentInstanceQuery {
+  status?: 'pending' | 'paid' | 'overdue' | 'skipped';
+}
 
 export const registerCommitmentRoutes = (app: FastifyInstance, ctx: AppContext): void => {
   const { service, actorFromRequest, parseBoolean } = ctx;
@@ -34,7 +76,7 @@ export const registerCommitmentRoutes = (app: FastifyInstance, ctx: AppContext):
     async () => ok(await service.listCommitments()),
   );
 
-  app.post(
+  app.post<{ Body: CommitmentBody }>(
     '/commitments',
     {
       schema: {
@@ -63,27 +105,10 @@ export const registerCommitmentRoutes = (app: FastifyInstance, ctx: AppContext):
         },
       },
     },
-    async (request) => {
-      const payload = z
-        .object({
-          name: z.string().min(1),
-          rrule: z.string().min(1),
-          startDate: z.string().datetime({ offset: true }),
-          defaultAmountMinor: z.number().int(),
-          currency: z.string().length(3),
-          amountBaseMinor: z.number().int().optional(),
-          fxRate: z.number().positive().optional(),
-          categoryId: z.string().uuid(),
-          graceDays: z.number().int().nonnegative().optional(),
-          active: z.boolean().optional(),
-        })
-        .parse(request.body);
-
-      return ok(await service.createCommitment(payload, actorFromRequest(request)));
-    },
+    async (request) => ok(await service.createCommitment(request.body, actorFromRequest(request))),
   );
 
-  app.patch(
+  app.patch<{ Params: CommitmentParams; Body: CommitmentUpdateBody }>(
     '/commitments/:id',
     {
       schema: {
@@ -112,28 +137,13 @@ export const registerCommitmentRoutes = (app: FastifyInstance, ctx: AppContext):
         },
       },
     },
-    async (request) => {
-      const params = z.object({ id: z.string().uuid() }).parse(request.params);
-      const payload = z
-        .object({
-          name: z.string().min(1).optional(),
-          rrule: z.string().min(1).optional(),
-          startDate: z.string().datetime({ offset: true }).optional(),
-          defaultAmountMinor: z.number().int().optional(),
-          currency: z.string().length(3).optional(),
-          amountBaseMinor: z.number().int().optional(),
-          fxRate: z.number().positive().optional(),
-          categoryId: z.string().uuid().optional(),
-          graceDays: z.number().int().nonnegative().optional(),
-          active: z.boolean().optional(),
-        })
-        .parse(request.body);
-
-      return ok(await service.updateCommitment(params.id, payload, actorFromRequest(request)));
-    },
+    async (request) =>
+      ok(
+        await service.updateCommitment(request.params.id, request.body, actorFromRequest(request)),
+      ),
   );
 
-  app.delete(
+  app.delete<{ Params: CommitmentParams; Querystring: DeleteCommitmentQuery }>(
     '/commitments/:id',
     {
       schema: {
@@ -172,33 +182,25 @@ export const registerCommitmentRoutes = (app: FastifyInstance, ctx: AppContext):
       },
     },
     async (request) => {
-      const params = z.object({ id: z.string().uuid() }).parse(request.params);
-      const query = z
-        .object({
-          dryRun: z.union([z.string(), z.boolean()]).optional(),
-          approveOperationId: z.string().uuid().optional(),
-        })
-        .parse(request.query);
-
-      if (parseBoolean(query.dryRun)) {
-        const token = await service.createDeleteCommitmentApproval(params.id);
+      if (parseBoolean(request.query.dryRun)) {
+        const token = await service.createDeleteCommitmentApproval(request.params.id);
         return ok(token, { mode: 'dry-run' });
       }
 
-      if (!query.approveOperationId) {
+      if (!request.query.approveOperationId) {
         throw new AppError('APPROVAL_REQUIRED', 'approveOperationId is required for delete', 400);
       }
 
       await service.deleteCommitment(
-        params.id,
-        query.approveOperationId,
+        request.params.id,
+        request.query.approveOperationId,
         actorFromRequest(request),
       );
-      return ok({ deleted: true, id: params.id });
+      return ok({ deleted: true, id: request.params.id });
     },
   );
 
-  app.post(
+  app.post<{ Body: RunDueBody }>(
     '/commitments/run-due',
     {
       schema: {
@@ -221,17 +223,13 @@ export const registerCommitmentRoutes = (app: FastifyInstance, ctx: AppContext):
       },
     },
     async (request) => {
-      const payload = z
-        .object({
-          upTo: z.string().datetime({ offset: true }).optional(),
-        })
-        .parse(request.body ?? {});
-
-      return ok(await service.runCommitmentDueGeneration(payload.upTo, actorFromRequest(request)));
+      return ok(
+        await service.runCommitmentDueGeneration(request.body?.upTo, actorFromRequest(request)),
+      );
     },
   );
 
-  app.get(
+  app.get<{ Querystring: CommitmentInstanceQuery }>(
     '/commitment-instances',
     {
       schema: {
@@ -256,14 +254,6 @@ export const registerCommitmentRoutes = (app: FastifyInstance, ctx: AppContext):
         },
       },
     },
-    async (request) => {
-      const query = z
-        .object({
-          status: z.enum(['pending', 'paid', 'overdue', 'skipped']).optional(),
-        })
-        .parse(request.query);
-
-      return ok(await service.listCommitmentInstances(query.status));
-    },
+    async (request) => ok(await service.listCommitmentInstances(request.query.status)),
   );
 };
