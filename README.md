@@ -81,7 +81,7 @@ cp .env.example .env
 
 Important variables:
 
-- `DB_PATH`: SQLite file path (default `./tithe/tithe.sqlite`)
+- `DB_PATH`: SQLite file path (default `~/.tithe/tithe.sqlite`; `~` is expanded to your home directory)
 - `PORT`, `HOST`: API bind values
 - `LOG_LEVEL`: API logger level (`fatal|error|warn|info|debug|trace`, default `info`)
 - `CORS_ALLOWED_ORIGINS`: comma-separated allow-list for CORS (default `*`)
