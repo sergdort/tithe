@@ -143,21 +143,22 @@ const toAppError = (error: unknown): AppError => {
   }
 
   if (error instanceof MonzoApiError) {
-    const payloadCode =
-      typeof error.details?.payload === 'object' &&
-      error.details.payload !== null &&
-      'code' in error.details.payload
-        ? String((error.details.payload as { code: unknown }).code)
+    const payload =
+      typeof error.details?.payload === 'object' && error.details.payload !== null
+        ? (error.details.payload as Record<string, unknown>)
         : null;
 
-    if (
-      payloadCode === 'forbidden.insufficient_permissions' ||
-      payloadCode === 'forbidden.verification_required'
-    ) {
+    const payloadCode =
+      payload && typeof payload.code === 'string' ? payload.code : null;
+
+    const payloadMessage =
+      payload && typeof payload.message === 'string' ? payload.message : null;
+
+    if (payloadCode || payloadMessage) {
       return new AppError(
-        'MONZO_REAUTH_REQUIRED',
-        'Monzo denied API permissions. Reconnect and ensure the Monzo developer client is allowed to read accounts and transactions.',
-        403,
+        payloadCode ?? error.code,
+        payloadMessage ?? error.message,
+        error.statusCode,
         {
           ...error.details,
           monzoCode: payloadCode,
@@ -366,11 +367,7 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
         );
       }
 
-      if (
-        !connection ||
-        connection.status === 'disconnected' ||
-        connection.accountId.length === 0
-      ) {
+      if (!connection || connection.status === 'disconnected') {
         throw new AppError('MONZO_CONNECTION_REQUIRED', 'Monzo is not connected yet', 409);
       }
       let currentConnection: MonzoConnectionDto = connection;
@@ -418,6 +415,29 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
               accessToken: refreshed.access_token,
               refreshToken: refreshed.refresh_token ?? currentConnection.refreshToken,
               tokenExpiresAt: tokenExpiresAtFromMonzoResponse(refreshed),
+              lastErrorText: null,
+              updatedAt: toIso(new Date()),
+            }),
+          );
+
+          return saved.connection;
+        });
+      }
+
+      if (!currentConnection.accountId || currentConnection.accountId.length === 0) {
+        const accounts = await client.listAccounts({ accessToken: currentConnection.accessToken ?? '' });
+        const account = accounts.find((item) => item.closed !== true);
+        if (!account) {
+          throw new AppError('MONZO_ACCOUNT_NOT_FOUND', 'No open Monzo account available', 400);
+        }
+
+        currentConnection = await runtime.withDb(({ db }) => {
+          const monzoRepo = runtime.repositories.monzo(db);
+          const saved = monzoRepo.upsertConnection(
+            mergeConnection(currentConnection, {
+              id: currentConnection.id,
+              accountId: account.id,
+              status: 'connected',
               lastErrorText: null,
               updatedAt: toIso(new Date()),
             }),
@@ -530,7 +550,10 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
                 fxRate: null,
                 categoryId: mapping.categoryId,
                 source: 'monzo_import',
-                merchantName: transaction.merchant?.name ?? transaction.description,
+                merchantName:
+                  (typeof transaction.merchant === 'string'
+                    ? transaction.merchant
+                    : transaction.merchant?.name) ?? transaction.description,
                 note: null,
                 externalRef: transaction.id,
                 commitmentInstanceId: null,
@@ -612,7 +635,10 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
             monzoRepo.upsertConnection(
               mergeConnection(latest, {
                 id: latest.id,
-                status: 'sync_error',
+                status:
+                  appError.code === 'forbidden.insufficient_permissions'
+                    ? 'connected'
+                    : 'sync_error',
                 lastErrorText: appError.message,
                 updatedAt: toIso(new Date()),
               }),
@@ -719,11 +745,6 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
         }
 
         const token = await client.exchangeCode({ code: input.code });
-        const accounts = await client.listAccounts({ accessToken: token.access_token });
-        const account = accounts.find((item) => item.closed !== true);
-        if (!account) {
-          throw new AppError('MONZO_ACCOUNT_NOT_FOUND', 'No open Monzo account available', 400);
-        }
 
         const updatedConnection = await runtime.withDb(({ db }) => {
           const monzoRepo = runtime.repositories.monzo(db);
@@ -731,7 +752,7 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
           const saved = monzoRepo.upsertConnection(
             mergeConnection(existing, {
               id: existing.id,
-              accountId: account.id,
+              accountId: existing.accountId,
               status: 'connected',
               accessToken: token.access_token,
               refreshToken: token.refresh_token ?? existing.refreshToken,
@@ -748,33 +769,67 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
         });
 
         const initialFrom = new Date(Date.now() - INITIAL_BACKFILL_DAYS * DAY_MS).toISOString();
-        const syncResult = await syncInternal({
-          context,
-          forceSince: initialFrom,
-          preloadedConnection: updatedConnection,
-        });
 
-        await audit.writeAudit(
-          'monzo.callback',
-          {
+        try {
+          const syncResult = await syncInternal({
+            context,
+            forceSince: initialFrom,
+            preloadedConnection: updatedConnection,
+          });
+
+          await audit.writeAudit(
+            'monzo.callback',
+            {
+              accountId: syncResult.accountId,
+              imported: syncResult.imported,
+              skipped: syncResult.skipped,
+              from: syncResult.from,
+              to: syncResult.to,
+            },
+            context,
+          );
+
+          return {
+            status: 'connected',
+            message: 'Monzo OAuth callback completed and initial sync finished',
             accountId: syncResult.accountId,
             imported: syncResult.imported,
             skipped: syncResult.skipped,
             from: syncResult.from,
             to: syncResult.to,
-          },
-          context,
-        );
+          };
+        } catch (syncError) {
+          const appError = toAppError(syncError);
+          if (appError.code === 'forbidden.insufficient_permissions') {
+            await runtime.withDb(({ db }) => {
+              const monzoRepo = runtime.repositories.monzo(db);
+              const latest = monzoRepo.findLatestConnection().connection;
+              if (latest) {
+                monzoRepo.upsertConnection(
+                  mergeConnection(latest, {
+                    id: latest.id,
+                    status: 'connected',
+                    lastErrorText: appError.message,
+                    updatedAt: toIso(new Date()),
+                  }),
+                );
+              }
+            });
 
-        return {
-          status: 'connected',
-          message: 'Monzo OAuth callback completed and initial sync finished',
-          accountId: syncResult.accountId,
-          imported: syncResult.imported,
-          skipped: syncResult.skipped,
-          from: syncResult.from,
-          to: syncResult.to,
-        };
+            return {
+              status: 'connected_pending_permissions',
+              message:
+                'Monzo token acquired. Waiting for in-app approval to activate account permissions. Use Sync now to retry.',
+              accountId: '',
+              imported: 0,
+              skipped: 0,
+              from: initialFrom,
+              to: new Date().toISOString(),
+            };
+          }
+
+          throw appError;
+        }
       } catch (error) {
         throw toAppError(error);
       }

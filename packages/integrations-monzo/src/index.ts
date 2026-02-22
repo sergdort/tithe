@@ -36,9 +36,12 @@ export const monzoTransactionSchema = z.object({
   created: z.string(),
   settled: z.string().nullable().optional(),
   merchant: z
-    .object({
-      name: z.string().optional(),
-    })
+    .union([
+      z.object({
+        name: z.string().optional(),
+      }),
+      z.string(),
+    ])
     .nullable()
     .optional(),
 });
@@ -288,6 +291,7 @@ export const createMonzoIntegrationClient = (config: MonzoClientConfig): MonzoIn
         since,
         limit: String(limit),
       });
+      searchParams.append('expand[]', 'merchant');
       if (before) {
         searchParams.set('before', before);
       }

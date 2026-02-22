@@ -33,9 +33,12 @@ const monzoTransactionsResponseSchema = z.object({
       created: z.string(),
       settled: z.string().nullable().optional(),
       merchant: z
-        .object({
-          name: z.string().optional(),
-        })
+        .union([
+          z.object({
+            name: z.string().optional(),
+          }),
+          z.string(),
+        ])
         .nullable()
         .optional(),
     }),
@@ -251,6 +254,7 @@ export const createMonzoClient = (config: MonzoClientConfig) => {
         since: input.since,
         limit: String(input.limit ?? 100),
       });
+      searchParams.append('expand[]', 'merchant');
       if (input.before) {
         searchParams.set('before', input.before);
       }
