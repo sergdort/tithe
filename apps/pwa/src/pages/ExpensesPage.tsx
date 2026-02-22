@@ -1,10 +1,12 @@
 import AddIcon from '@mui/icons-material/Add';
 import {
   Alert,
+  Avatar,
   Box,
   Button,
   Card,
   CardContent,
+  Chip,
   CircularProgress,
   Dialog,
   DialogActions,
@@ -13,7 +15,7 @@ import {
   Fab,
   List,
   ListItem,
-  ListItemText,
+  ListItemAvatar,
   MenuItem,
   Stack,
   TextField,
@@ -23,6 +25,38 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 
 import { api } from '../api.js';
+
+const pounds = (amountMinor: number, currency: string): string => {
+  const value = Math.abs(amountMinor) / 100;
+  return new Intl.NumberFormat('en-GB', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+};
+
+const merchantInitial = (merchantName?: string | null): string => {
+  const trimmed = merchantName?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed[0].toUpperCase() : '•';
+};
+
+const dayLabel = (isoDate: string): string => {
+  const date = new Date(isoDate);
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfInput = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffDays = Math.round((startOfToday.getTime() - startOfInput.getTime()) / (24 * 60 * 60 * 1000));
+
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+
+  return date.toLocaleDateString('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  });
+};
 
 export const ExpensesPage = () => {
   const queryClient = useQueryClient();
@@ -72,9 +106,13 @@ export const ExpensesPage = () => {
   });
 
   const categoryById = useMemo(() => {
-    const map = new Map<string, string>();
+    const map = new Map<string, { name: string; color: string; icon: string }>();
     for (const category of categoriesQuery.data ?? []) {
-      map.set(category.id, category.name);
+      map.set(category.id, {
+        name: category.name,
+        color: category.color,
+        icon: category.icon,
+      });
     }
     return map;
   }, [categoriesQuery.data]);
@@ -93,6 +131,18 @@ export const ExpensesPage = () => {
 
   const categories = categoriesQuery.data ?? [];
   const expenses = expensesQuery.data ?? [];
+  const groupedExpenses = useMemo(() => {
+    const groups = new Map<string, typeof expenses>();
+
+    for (const expense of expenses) {
+      const key = dayLabel(expense.occurredAt);
+      const list = groups.get(key) ?? [];
+      list.push(expense);
+      groups.set(key, list);
+    }
+
+    return Array.from(groups.entries());
+  }, [expenses]);
 
   return (
     <Box>
@@ -107,18 +157,70 @@ export const ExpensesPage = () => {
                 No expenses logged yet.
               </Typography>
             ) : (
-              <List disablePadding>
-                {expenses.map((expense) => (
-                  <ListItem key={expense.id} disableGutters sx={{ py: 1 }}>
-                    <ListItemText
-                      primary={`${expense.money.amountMinor / 100} ${expense.money.currency}`}
-                      secondary={`${categoryById.get(expense.categoryId) ?? expense.categoryId} • ${new Date(
-                        expense.occurredAt,
-                      ).toLocaleDateString()}`}
-                    />
-                  </ListItem>
+              <Stack spacing={1.5} sx={{ mt: 1 }}>
+                {groupedExpenses.map(([label, items]) => (
+                  <Box key={label}>
+                    <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', px: 0.5 }}>
+                      {label}
+                    </Typography>
+                    <List disablePadding>
+                      {items.map((expense) => {
+                        const merchant = expense.merchantName?.trim() || 'Card payment';
+                        const categoryMeta = categoryById.get(expense.categoryId);
+                        const categoryName = categoryMeta?.name ?? expense.categoryId;
+                        const categoryColor = categoryMeta?.color ?? '#607D8B';
+                        const statusLabel = expense.postedAt ? 'Settled' : 'Pending';
+                        const statusColor: 'success' | 'warning' = expense.postedAt ? 'success' : 'warning';
+
+                        return (
+                          <ListItem
+                            key={expense.id}
+                            disableGutters
+                            sx={{ py: 1.1, alignItems: 'center', gap: 1.25 }}
+                          >
+                            <ListItemAvatar sx={{ minWidth: 48 }}>
+                              <Avatar sx={{ width: 40, height: 40, bgcolor: '#DDEAF8', color: '#0E2A47' }}>
+                                {merchantInitial(expense.merchantName)}
+                              </Avatar>
+                            </ListItemAvatar>
+
+                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                              <Typography variant="body1" sx={{ fontWeight: 600 }} noWrap>
+                                {merchant}
+                              </Typography>
+                              <Stack direction="row" spacing={0.75} sx={{ mt: 0.4 }}>
+                                <Chip
+                                  size="small"
+                                  label={categoryName}
+                                  sx={{
+                                    height: 22,
+                                    bgcolor: `${categoryColor}22`,
+                                    color: categoryColor,
+                                    fontWeight: 600,
+                                  }}
+                                />
+                                <Chip
+                                  size="small"
+                                  label={statusLabel}
+                                  color={statusColor}
+                                  variant="outlined"
+                                  sx={{ height: 22, fontWeight: 600 }}
+                                />
+                              </Stack>
+                            </Box>
+
+                            <Box sx={{ textAlign: 'right', minWidth: 112 }}>
+                              <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.1 }}>
+                                {pounds(expense.money.amountMinor, expense.money.currency)}
+                              </Typography>
+                            </Box>
+                          </ListItem>
+                        );
+                      })}
+                    </List>
+                  </Box>
                 ))}
-              </List>
+              </Stack>
             )}
           </CardContent>
         </Card>

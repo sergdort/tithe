@@ -18,6 +18,9 @@ import { useState } from 'react';
 
 import { api } from '../api.js';
 
+const normalizeCategoryLabel = (name: string): string =>
+  name.startsWith('Monzo: ') ? name.slice('Monzo: '.length) : name;
+
 export const CategoriesPage = () => {
   const queryClient = useQueryClient();
 
@@ -97,7 +100,7 @@ export const CategoriesPage = () => {
           <List disablePadding>
             {categories.map((category) => (
               <ListItem key={category.id} disableGutters>
-                <ListItemText primary={category.name} secondary={category.kind} />
+                <ListItemText primary={normalizeCategoryLabel(category.name)} secondary={category.kind} />
               </ListItem>
             ))}
           </List>

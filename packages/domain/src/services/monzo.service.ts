@@ -485,10 +485,15 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
             let mapping = monzoRepo.findCategoryMapping({ monzoCategory }).mapping;
 
             if (!mapping) {
-              const categoryName = `Monzo: ${titleCaseCategory(monzoCategory)}`;
+              const categoryName = titleCaseCategory(monzoCategory);
+              const legacyCategoryName = `Monzo: ${categoryName}`;
               let category = categoriesRepo
                 .list({})
-                .categories.find((item) => item.kind === 'expense' && item.name === categoryName);
+                .categories.find(
+                  (item) =>
+                    item.kind === 'expense' &&
+                    (item.name === categoryName || item.name === legacyCategoryName),
+                );
 
               if (!category) {
                 try {
