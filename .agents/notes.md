@@ -21,3 +21,4 @@
 [0] Monzo can return `forbidden.insufficient_permissions` on `/accounts`; map it to `MONZO_REAUTH_REQUIRED` with clear remediation and avoid hard-coding stored OAuth scope.
 [0] `pnpm ignored-builds` can reveal `better-sqlite3` was auto-ignored during install; deleting `node_modules`/lockfile alone won't fix missing bindings unless pnpm build-script policy is updated (for example `pnpm.onlyBuiltDependencies`) and install/rebuild is rerun.
 [0] Avoid naming repo scripts `setup` in pnpm workspaces when onboarding docs also reference the built-in `pnpm setup`; use a distinct name like `setup:first-time` to prevent command ambiguity.
+[0] In React page components here, hooks (`useMemo`, etc.) must be declared before loading/error early returns; conditionally skipping a hook on the first render causes a blank route via hooks-order runtime crash (`Rendered more hooks than during the previous render`).

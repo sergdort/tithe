@@ -144,6 +144,18 @@ export const ExpensesPage = () => {
     return Array.from(groups.entries());
   }, [expenses]);
 
+  if (categoriesQuery.isLoading || expensesQuery.isLoading) {
+    return (
+      <Stack alignItems="center" sx={{ py: 6 }}>
+        <CircularProgress />
+      </Stack>
+    );
+  }
+
+  if (categoriesQuery.isError || expensesQuery.isError) {
+    return <Alert severity="error">Unable to load expenses.</Alert>;
+  }
+
   return (
     <Box>
       <Stack spacing={2}>
