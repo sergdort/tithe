@@ -97,6 +97,7 @@ Failure:
 - `tithe --json monzo sync`
 - `tithe --json monzo status`
 - PWA Home exposes Monzo controls (`Connect`, `Sync now`) and shows last sync/error state.
+- PWA `Connect` opens Monzo OAuth in a separate browser window/tab (popup opened synchronously on click to reduce popup blocking).
 
 ### CLI invocation notes
 

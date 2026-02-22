@@ -27,3 +27,4 @@
 [0] PWA Monzo `Sync now` uses the shared 10s request timeout and only invalidates Monzo status on success; a slow/failed sync can show a mutation error while backend status/`lastError` stays stale in the card until a later refetch.
 [0] In patch/merge helpers for nullable fields, avoid `??` when explicit `null` is a valid "clear this value" update (for example Monzo connection `lastErrorText`/OAuth state); use `value === undefined ? fallback : value`.
 [0] Do not auto-run Monzo sync from OAuth callback: Monzo app permission approval can lag token exchange, so callback-time sync often fails with temporary permission errors; connect should store tokens and require manual `Sync now`.
+[0] Monzo `/transactions` paging code must not assume descending order by `created`; if results come back ascending, `before=oldest-1` fetches only the oldest page in the window (symptom: first sync tops out around early-window dates like Dec 2 instead of today).

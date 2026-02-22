@@ -312,13 +312,17 @@ const collectTransactions = async ({
   to: string;
 }): Promise<MonzoTransaction[]> => {
   const txById = new Map<string, MonzoTransaction>();
+  const fromMs = new Date(from).getTime();
+  const toMs = new Date(to).getTime();
+  let since = from;
   let before = to;
+  let direction: 'asc' | 'desc' | null = null;
 
   for (let page = 0; page < 50; page += 1) {
     const batch = await listTransactions({
       accountId,
       accessToken,
-      since: from,
+      since,
       before,
       limit: 100,
     });
@@ -331,8 +335,40 @@ const collectTransactions = async ({
       txById.set(transaction.id, transaction);
     }
 
-    const oldestMs = Math.min(...batch.map((item) => new Date(item.created).getTime()));
-    if (!Number.isFinite(oldestMs) || oldestMs <= new Date(from).getTime() || batch.length < 100) {
+    const timestamps = batch
+      .map((item) => new Date(item.created).getTime())
+      .filter((value) => Number.isFinite(value));
+    if (timestamps.length === 0) {
+      break;
+    }
+
+    const firstMs = new Date(batch[0]?.created ?? '').getTime();
+    const lastMs = new Date(batch.at(-1)?.created ?? '').getTime();
+    if (!direction && Number.isFinite(firstMs) && Number.isFinite(lastMs) && firstMs !== lastMs) {
+      direction = firstMs < lastMs ? 'asc' : 'desc';
+    }
+
+    const oldestMs = Math.min(...timestamps);
+    const newestMs = Math.max(...timestamps);
+    if (batch.length < 100) {
+      break;
+    }
+
+    if (direction === 'asc') {
+      if (!Number.isFinite(newestMs) || newestMs >= toMs) {
+        break;
+      }
+
+      const nextSince = new Date(newestMs + 1).toISOString();
+      if (nextSince <= since) {
+        break;
+      }
+
+      since = nextSince;
+      continue;
+    }
+
+    if (!Number.isFinite(oldestMs) || oldestMs <= fromMs) {
       break;
     }
 

@@ -292,6 +292,7 @@ Current status in this implementation:
 - Manual sync is implemented (`tithe --json monzo sync`).
 - Status endpoint is implemented (`tithe --json monzo status` and `GET /v1/integrations/monzo/status`).
 - PWA Home screen includes a Monzo card with `Connect` and `Sync now` actions.
+- `Connect` opens the Monzo OAuth flow in a separate window/tab (opened immediately on click to avoid popup blocking after async API calls).
 - Initial import window is last 90 days; subsequent sync uses cursor overlap.
 - Import policy is expenses-only (`amount < 0`) and settled-only (pending skipped).
 - Imported expenses use `source=monzo_import` and `externalRef=<transaction_id>` for dedupe.
@@ -311,7 +312,7 @@ tithe --json monzo sync
 PWA flow:
 
 - Open Home page in the PWA.
-- Use `Connect` to start OAuth (opens Monzo auth URL).
+- Use `Connect` to start OAuth (opens Monzo auth URL in a new window/tab).
 - After OAuth callback completes (and any in-app permission approval is done), return to PWA and use `Sync now`.
 
 ## Database Backup / Restore

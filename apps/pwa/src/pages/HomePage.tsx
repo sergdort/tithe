@@ -40,12 +40,6 @@ export const HomePage = () => {
 
   const connectMutation = useMutation({
     mutationFn: () => api.monzo.connectStart(),
-    onSuccess: (payload) => {
-      const popup = globalThis.open?.(payload.authUrl, '_blank', 'noopener,noreferrer');
-      if (!popup) {
-        globalThis.location?.assign(payload.authUrl);
-      }
-    },
   });
 
   const syncMutation = useMutation({
@@ -74,6 +68,27 @@ export const HomePage = () => {
   const dueData = dueQuery.data ?? [];
   const latestTrend = trendData.at(-1);
   const monzoStatus = monzoStatusQuery.data;
+
+  const handleConnectClick = async () => {
+    const popup = globalThis.open?.('', '_blank', 'noopener,noreferrer');
+
+    try {
+      const payload = await connectMutation.mutateAsync();
+
+      if (popup) {
+        popup.location.replace(payload.authUrl);
+        popup.focus?.();
+        return;
+      }
+
+      const opened = globalThis.open?.(payload.authUrl, '_blank', 'noopener,noreferrer');
+      if (!opened) {
+        globalThis.location?.assign(payload.authUrl);
+      }
+    } catch {
+      popup?.close?.();
+    }
+  };
 
   return (
     <Stack spacing={2}>
@@ -150,7 +165,7 @@ export const HomePage = () => {
           <Stack direction="row" spacing={1}>
             <Button
               variant="outlined"
-              onClick={() => connectMutation.mutate()}
+              onClick={() => void handleConnectClick()}
               disabled={!monzoStatus?.configured || connectMutation.isPending}
             >
               Connect
