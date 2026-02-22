@@ -1,8 +1,6 @@
 import { ok } from '@tithe/contracts';
 import type { FastifyInstance } from 'fastify';
 
-import type { AppContext } from '../../http/app-context.js';
-
 interface TrendsQuery {
   months?: number;
 }
@@ -16,11 +14,11 @@ interface CommitmentForecastQuery {
   days?: number;
 }
 
-export const registerReportRoutes = (app: FastifyInstance, ctx: AppContext): void => {
-  const { services } = ctx;
+export const registerReportRoutes = (app: FastifyInstance): void => {
+  const { services, docs } = app.tithe;
   const reportsService = services.reports;
   const { defaultErrorResponses, genericObjectSchema, isoDateTimeSchema, successEnvelopeSchema } =
-    ctx.docs;
+    docs;
 
   app.get<{ Querystring: TrendsQuery }>(
     '/trends',

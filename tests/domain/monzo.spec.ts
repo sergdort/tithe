@@ -14,6 +14,10 @@ const setupService = () => {
   return { services, dir, dbPath };
 };
 
+const closeServices = (services: unknown): void => {
+  (services as { close?: () => void }).close?.();
+};
+
 const jsonResponse = (payload: unknown, status = 200): Response =>
   new Response(JSON.stringify(payload), {
     status,
@@ -87,6 +91,7 @@ describe('Monzo integration domain service', () => {
         sqlite.close();
       }
     } finally {
+      closeServices(services);
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
@@ -111,6 +116,7 @@ describe('Monzo integration domain service', () => {
         code: 'MONZO_OAUTH_STATE_INVALID',
       });
     } finally {
+      closeServices(services);
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
@@ -236,6 +242,7 @@ describe('Monzo integration domain service', () => {
         sqlite.close();
       }
     } finally {
+      closeServices(services);
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
@@ -281,6 +288,7 @@ describe('Monzo integration domain service', () => {
         statusCode: 403,
       });
     } finally {
+      closeServices(services);
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });

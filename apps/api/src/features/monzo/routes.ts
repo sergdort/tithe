@@ -1,8 +1,6 @@
 import { ok } from '@tithe/contracts';
 import type { FastifyInstance } from 'fastify';
 
-import type { AppContext } from '../../http/app-context.js';
-
 interface MonzoCallbackQuery {
   code?: string;
   state?: string;
@@ -10,10 +8,10 @@ interface MonzoCallbackQuery {
   error_description?: string;
 }
 
-export const registerMonzoRoutes = (app: FastifyInstance, ctx: AppContext): void => {
-  const { services } = ctx;
+export const registerMonzoRoutes = (app: FastifyInstance): void => {
+  const { services, docs } = app.tithe;
   const monzoService = services.monzo;
-  const { defaultErrorResponses, genericObjectSchema, successEnvelopeSchema } = ctx.docs;
+  const { defaultErrorResponses, genericObjectSchema, successEnvelopeSchema } = docs;
 
   app.post(
     '/connect/start',

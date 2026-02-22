@@ -132,11 +132,13 @@ Failure:
 - Domain business logic is feature-split and created via `createDomainServices()` in `packages/domain/src/services/create-domain-services.ts`.
 - Service registry shape is `DomainServices`:
   - `categories`, `expenses`, `commitments`, `reports`, `query`, `monzo`.
+- `createDomainServices()` returns a closable service registry (`DomainServices` + `close()`), backed by a single long-lived SQLite connection for that runtime instance.
 - Shared infrastructure lives under `packages/domain/src/services/shared`:
-  - `deps.ts`: DB session + repository factories.
+  - `domain-db.ts`: long-lived DB runtime (`db`, `sqlite`, `close`) + `DomainServiceOptions`.
   - `approval-service.ts`: approval token creation/consumption.
   - `audit-service.ts`: audit log writes.
   - `common.ts`: date/currency/hash helpers + default actor.
+- Feature services instantiate repository classes directly against the runtime DB/transaction handle; `RepositoryFactories` and `DomainRuntimeDeps` are no longer used.
 - Keep feature boundaries pragmatic: cross-feature flows are allowed inside feature services when transactional consistency is required.
   - Example: expense create/delete may update commitment instance status.
   - Example: category delete may reassign both expense and commitment references.
@@ -145,9 +147,10 @@ Failure:
 
 ### API route-handler architecture notes
 
-- App context is registry-based:
-  - `createAppContext()` injects `services: DomainServices` (not a single `service`).
-  - `BuildServerOptions` accepts `services?: DomainServices`.
+- Fastify app context is decorator-based:
+  - `apps/api/src/http/tithe-plugin.ts` decorates `FastifyInstance` with `app.tithe` (`services`, docs helpers, actor parsing helpers).
+  - `BuildServerOptions` accepts `services?: DomainServices` for external injection/stubs.
+  - The plugin owns lifecycle cleanup only for internally created services (`createDomainServices()`), and calls `close()` during `app.close()`.
 - Each feature route module owns only its feature service reference:
   - `categories/routes.ts` -> `services.categories`
   - `expenses/routes.ts` -> `services.expenses`
@@ -155,6 +158,7 @@ Failure:
   - `reports/routes.ts` -> `services.reports`
   - `query/routes.ts` -> `services.query`
   - `monzo/routes.ts` -> `services.monzo`
+- Feature route registrars read dependencies from `app.tithe` (no explicit `ctx` parameter plumbing).
 - Handler style:
   - Parse/validate with Fastify schemas.
   - Delegate to one feature service call.

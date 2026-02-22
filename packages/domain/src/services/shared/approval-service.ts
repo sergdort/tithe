@@ -1,8 +1,9 @@
 import crypto from 'node:crypto';
 
 import { AppError } from '../../errors.js';
+import { SqliteApprovalsRepository } from '../../repositories/approvals.repository.js';
 import { operationHash, toIso } from './common.js';
-import type { DomainRuntimeDeps } from './deps.js';
+import type { DomainDbRuntime } from './domain-db.js';
 
 export interface ApprovalToken {
   operationId: string;
@@ -16,7 +17,7 @@ export interface ApprovalService {
   consumeApproval: (action: string, operationId: string, payload: unknown) => Promise<void>;
 }
 
-export const createApprovalService = (deps: DomainRuntimeDeps): ApprovalService => ({
+export const createApprovalService = (runtime: DomainDbRuntime): ApprovalService => ({
   async createApproval(action: string, payload: unknown): Promise<ApprovalToken> {
     const payloadJson = JSON.stringify(payload);
     const approval: ApprovalToken = {
@@ -26,16 +27,14 @@ export const createApprovalService = (deps: DomainRuntimeDeps): ApprovalService 
       expiresAt: toIso(new Date(Date.now() + 15 * 60 * 1000)),
     };
 
-    await deps.withDb(({ db }) => {
-      deps.repositories.approvals(db).createApproval({
-        id: approval.operationId,
-        action,
-        payloadJson,
-        payloadHash: approval.hash,
-        expiresAt: approval.expiresAt,
-        approvedAt: null,
-        createdAt: toIso(new Date()),
-      });
+    new SqliteApprovalsRepository(runtime.db).createApproval({
+      id: approval.operationId,
+      action,
+      payloadJson,
+      payloadHash: approval.hash,
+      expiresAt: approval.expiresAt,
+      approvedAt: null,
+      createdAt: toIso(new Date()),
     });
 
     return approval;
@@ -45,34 +44,33 @@ export const createApprovalService = (deps: DomainRuntimeDeps): ApprovalService 
     const payloadJson = JSON.stringify(payload);
     const hash = operationHash(action, payloadJson);
 
-    await deps.withDb(({ db }) => {
-      const existing = deps.repositories.approvals(db).findApproval({ operationId }).approval;
+    const approvalsRepo = new SqliteApprovalsRepository(runtime.db);
+    const existing = approvalsRepo.findApproval({ operationId }).approval;
 
-      if (!existing) {
-        throw new AppError('APPROVAL_NOT_FOUND', 'Approval token is invalid', 403, { operationId });
-      }
-      if (existing.action !== action) {
-        throw new AppError('APPROVAL_ACTION_MISMATCH', 'Approval token action mismatch', 403, {
-          expectedAction: action,
-          actualAction: existing.action,
-        });
-      }
-      if (existing.payloadHash !== hash) {
-        throw new AppError('APPROVAL_PAYLOAD_MISMATCH', 'Approval token payload mismatch', 403);
-      }
-      if (existing.approvedAt) {
-        throw new AppError('APPROVAL_ALREADY_USED', 'Approval token already used', 403);
-      }
-      if (new Date(existing.expiresAt).getTime() < Date.now()) {
-        throw new AppError('APPROVAL_EXPIRED', 'Approval token has expired', 403, {
-          expiresAt: existing.expiresAt,
-        });
-      }
-
-      deps.repositories.approvals(db).markApprovalUsed({
-        operationId,
-        approvedAt: toIso(new Date()),
+    if (!existing) {
+      throw new AppError('APPROVAL_NOT_FOUND', 'Approval token is invalid', 403, { operationId });
+    }
+    if (existing.action !== action) {
+      throw new AppError('APPROVAL_ACTION_MISMATCH', 'Approval token action mismatch', 403, {
+        expectedAction: action,
+        actualAction: existing.action,
       });
+    }
+    if (existing.payloadHash !== hash) {
+      throw new AppError('APPROVAL_PAYLOAD_MISMATCH', 'Approval token payload mismatch', 403);
+    }
+    if (existing.approvedAt) {
+      throw new AppError('APPROVAL_ALREADY_USED', 'Approval token already used', 403);
+    }
+    if (new Date(existing.expiresAt).getTime() < Date.now()) {
+      throw new AppError('APPROVAL_EXPIRED', 'Approval token has expired', 403, {
+        expiresAt: existing.expiresAt,
+      });
+    }
+
+    approvalsRepo.markApprovalUsed({
+      operationId,
+      approvedAt: toIso(new Date()),
     });
   },
 });

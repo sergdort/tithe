@@ -1,10 +1,8 @@
 import { ok } from '@tithe/contracts';
 import type { FastifyInstance } from 'fastify';
 
-import type { AppContext } from '../../http/app-context.js';
-
-export const registerSystemRoutes = (app: FastifyInstance, ctx: AppContext): void => {
-  const { errorEnvelopeSchema, successEnvelopeSchema } = ctx.docs;
+export const registerSystemRoutes = (app: FastifyInstance): void => {
+  const { errorEnvelopeSchema, successEnvelopeSchema } = app.tithe.docs;
 
   app.get(
     '/health',

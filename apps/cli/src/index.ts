@@ -10,7 +10,12 @@ import { runWebCommand } from './web.js';
 loadWorkspaceEnv();
 
 const program = new Command();
-const services = createDomainServices();
+type CliServices = ReturnType<typeof createDomainServices> & { close?: () => void };
+let services: CliServices | null = null;
+const getServices = (): CliServices => (services ??= createDomainServices());
+process.once('exit', () => {
+  services?.close?.();
+});
 let migrationsReady = false;
 
 const asBoolean = (value?: string | boolean): boolean => {
@@ -71,7 +76,7 @@ category
   .description('List categories')
   .action(async () => {
     const opts = program.opts<{ json: boolean }>();
-    await run(opts.json, () => services.categories.list());
+    await run(opts.json, () => getServices().categories.list());
   });
 
 category
@@ -83,7 +88,7 @@ category
   .action(async (options) => {
     const opts = program.opts<{ json: boolean }>();
     await run(opts.json, () =>
-      services.categories.create(
+      getServices().categories.create(
         {
           name: options.name,
           kind: options.kind,
@@ -108,7 +113,7 @@ category
     const opts = program.opts<{ json: boolean }>();
 
     await run(opts.json, () =>
-      services.categories.update(
+      getServices().categories.update(
         options.id,
         {
           name: options.name,
@@ -133,7 +138,7 @@ category
 
     if (options.dryRun) {
       await run(opts.json, () =>
-        services.categories.createDeleteApproval(options.id, options.reassign),
+        getServices().categories.createDeleteApproval(options.id, options.reassign),
       );
       return;
     }
@@ -148,7 +153,7 @@ category
     }
 
     await run(opts.json, async () => {
-      await services.categories.delete(options.id, options.approve, options.reassign, {
+      await getServices().categories.delete(options.id, options.approve, options.reassign, {
         actor: 'cli',
         channel: 'cli',
       });
@@ -167,7 +172,7 @@ expense
   .action(async (options) => {
     const opts = program.opts<{ json: boolean }>();
     await run(opts.json, () =>
-      services.expenses.list({
+      getServices().expenses.list({
         from: options.from,
         to: options.to,
         categoryId: options.categoryId,
@@ -194,7 +199,7 @@ expense
     const opts = program.opts<{ json: boolean }>();
 
     await run(opts.json, () =>
-      services.expenses.create(
+      getServices().expenses.create(
         {
           occurredAt: options.occurredAt,
           postedAt: options.postedAt,
@@ -230,7 +235,7 @@ expense
     const opts = program.opts<{ json: boolean }>();
 
     await run(opts.json, () =>
-      services.expenses.update(
+      getServices().expenses.update(
         options.id,
         {
           occurredAt: options.occurredAt,
@@ -257,7 +262,7 @@ expense
     const opts = program.opts<{ json: boolean }>();
 
     if (options.dryRun) {
-      await run(opts.json, () => services.expenses.createDeleteApproval(options.id));
+      await run(opts.json, () => getServices().expenses.createDeleteApproval(options.id));
       return;
     }
 
@@ -271,7 +276,7 @@ expense
     }
 
     await run(opts.json, async () => {
-      await services.expenses.delete(options.id, options.approve, { actor: 'cli', channel: 'cli' });
+      await getServices().expenses.delete(options.id, options.approve, { actor: 'cli', channel: 'cli' });
       return { deleted: true, id: options.id };
     });
   });
@@ -280,7 +285,7 @@ const commitment = program.command('commitment').description('Recurring commitme
 
 commitment.command('list').action(async () => {
   const opts = program.opts<{ json: boolean }>();
-  await run(opts.json, () => services.commitments.list());
+  await run(opts.json, () => getServices().commitments.list());
 });
 
 commitment
@@ -297,7 +302,7 @@ commitment
     const opts = program.opts<{ json: boolean }>();
 
     await run(opts.json, () =>
-      services.commitments.create(
+      getServices().commitments.create(
         {
           name: options.name,
           rrule: options.rrule,
@@ -336,7 +341,7 @@ commitment
     }
 
     await run(opts.json, () =>
-      services.commitments.update(
+      getServices().commitments.update(
         options.id,
         {
           name: options.name,
@@ -364,7 +369,7 @@ commitment
     const opts = program.opts<{ json: boolean }>();
 
     if (options.dryRun) {
-      await run(opts.json, () => services.commitments.createDeleteApproval(options.id));
+      await run(opts.json, () => getServices().commitments.createDeleteApproval(options.id));
       return;
     }
 
@@ -378,7 +383,7 @@ commitment
     }
 
     await run(opts.json, async () => {
-      await services.commitments.delete(options.id, options.approve, {
+      await getServices().commitments.delete(options.id, options.approve, {
         actor: 'cli',
         channel: 'cli',
       });
@@ -392,7 +397,7 @@ commitment
   .action(async (options) => {
     const opts = program.opts<{ json: boolean }>();
     await run(opts.json, () =>
-      services.commitments.runDueGeneration(options.upTo, { actor: 'cli', channel: 'cli' }),
+      getServices().commitments.runDueGeneration(options.upTo, { actor: 'cli', channel: 'cli' }),
     );
   });
 
@@ -401,7 +406,7 @@ commitment
   .option('--status <status>', 'pending|paid|overdue|skipped')
   .action(async (options) => {
     const opts = program.opts<{ json: boolean }>();
-    await run(opts.json, () => services.commitments.listInstances(options.status));
+    await run(opts.json, () => getServices().commitments.listInstances(options.status));
   });
 
 const report = program.command('report').description('Reporting and insights');
@@ -411,7 +416,7 @@ report
   .option('--months <months>', 'months', '6')
   .action(async (options) => {
     const opts = program.opts<{ json: boolean }>();
-    await run(opts.json, () => services.reports.monthlyTrends(Number(options.months)));
+    await run(opts.json, () => getServices().reports.monthlyTrends(Number(options.months)));
   });
 
 report
@@ -420,7 +425,7 @@ report
   .option('--to <isoDate>', 'to date')
   .action(async (options) => {
     const opts = program.opts<{ json: boolean }>();
-    await run(opts.json, () => services.reports.categoryBreakdown(options.from, options.to));
+    await run(opts.json, () => getServices().reports.categoryBreakdown(options.from, options.to));
   });
 
 report
@@ -428,7 +433,7 @@ report
   .option('--days <days>', 'forecast days', '30')
   .action(async (options) => {
     const opts = program.opts<{ json: boolean }>();
-    await run(opts.json, () => services.reports.commitmentForecast(Number(options.days)));
+    await run(opts.json, () => getServices().reports.commitmentForecast(Number(options.days)));
   });
 
 program
@@ -447,7 +452,7 @@ program
     const filters = (options.filter ?? []).map((item: string) => JSON.parse(item));
 
     await run(opts.json, () =>
-      services.query.run({
+      getServices().query.run({
         entity: options.entity,
         filters,
         sortBy: options.sortBy ?? 'created_at',
@@ -461,17 +466,17 @@ const monzo = program.command('monzo').description('Monzo integration');
 
 monzo.command('connect').action(async () => {
   const opts = program.opts<{ json: boolean }>();
-  await run(opts.json, () => services.monzo.connectStart());
+  await run(opts.json, () => getServices().monzo.connectStart());
 });
 
 monzo.command('sync').action(async () => {
   const opts = program.opts<{ json: boolean }>();
-  await run(opts.json, () => services.monzo.syncNow());
+  await run(opts.json, () => getServices().monzo.syncNow());
 });
 
 monzo.command('status').action(async () => {
   const opts = program.opts<{ json: boolean }>();
-  await run(opts.json, () => services.monzo.status());
+  await run(opts.json, () => getServices().monzo.status());
 });
 
 program

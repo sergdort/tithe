@@ -2,8 +2,6 @@ import { ok } from '@tithe/contracts';
 import { AppError } from '@tithe/domain';
 import type { FastifyInstance } from 'fastify';
 
-import type { AppContext } from '../../http/app-context.js';
-
 type ExpenseSource = 'manual' | 'monzo_import' | 'commitment';
 
 interface ExpenseParams {
@@ -49,8 +47,8 @@ interface DeleteExpenseQuery {
   approveOperationId?: string;
 }
 
-export const registerExpenseRoutes = (app: FastifyInstance, ctx: AppContext): void => {
-  const { services, actorFromRequest, parseBoolean } = ctx;
+export const registerExpenseRoutes = (app: FastifyInstance): void => {
+  const { services, actorFromRequest, parseBoolean, docs } = app.tithe;
   const expensesService = services.expenses;
   const {
     defaultErrorResponses,
@@ -59,7 +57,7 @@ export const registerExpenseRoutes = (app: FastifyInstance, ctx: AppContext): vo
     isoDateTimeSchema,
     successEnvelopeSchema,
     uuidSchema,
-  } = ctx.docs;
+  } = docs;
 
   app.get<{ Querystring: ExpenseListQuery }>(
     '',

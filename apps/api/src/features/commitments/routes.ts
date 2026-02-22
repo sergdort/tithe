@@ -2,8 +2,6 @@ import { ok } from '@tithe/contracts';
 import { AppError } from '@tithe/domain';
 import type { FastifyInstance } from 'fastify';
 
-import type { AppContext } from '../../http/app-context.js';
-
 interface CommitmentParams {
   id: string;
 }
@@ -47,8 +45,8 @@ interface CommitmentInstanceQuery {
   status?: 'pending' | 'paid' | 'overdue' | 'skipped';
 }
 
-export const registerCommitmentRoutes = (app: FastifyInstance, ctx: AppContext): void => {
-  const { services, actorFromRequest, parseBoolean } = ctx;
+export const registerCommitmentRoutes = (app: FastifyInstance): void => {
+  const { services, actorFromRequest, parseBoolean, docs } = app.tithe;
   const commitmentsService = services.commitments;
   const {
     defaultErrorResponses,
@@ -57,7 +55,7 @@ export const registerCommitmentRoutes = (app: FastifyInstance, ctx: AppContext):
     isoDateTimeSchema,
     successEnvelopeSchema,
     uuidSchema,
-  } = ctx.docs;
+  } = docs;
 
   app.get(
     '/commitments',

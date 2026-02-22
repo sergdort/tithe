@@ -1,7 +1,5 @@
 import type { FastifyInstance } from 'fastify';
 
-import type { AppContext } from '../../http/app-context.js';
-
 type QueryEntity = 'expenses' | 'categories' | 'commitment_instances' | 'recurring_commitments';
 type QueryOperation = 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'like';
 type QueryFilterValue = string | number | boolean | Array<string | number>;
@@ -20,11 +18,11 @@ interface QueryBody {
   limit?: number;
 }
 
-export const registerQueryRoutes = (app: FastifyInstance, ctx: AppContext): void => {
-  const { services } = ctx;
+export const registerQueryRoutes = (app: FastifyInstance): void => {
+  const { services, docs } = app.tithe;
   const queryService = services.query;
   const { defaultErrorResponses, errorEnvelopeSchema, genericObjectSchema, successEnvelopeSchema } =
-    ctx.docs;
+    docs;
 
   app.post<{ Body: QueryBody }>(
     '/run',

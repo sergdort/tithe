@@ -8,8 +8,11 @@ import {
   featureRouteRegistrations,
   loadApiRuntimeConfig,
   resolveCorsOrigin,
+  tithePlugin,
 } from '@tithe/api/server';
 import { AppError, type DomainServices } from '@tithe/domain';
+import Fastify from 'fastify';
+import { vi } from 'vitest';
 
 const workspaceRoot = fileURLToPath(new URL('../../', import.meta.url));
 
@@ -146,6 +149,46 @@ describe('API Fastify enforcement', () => {
     } finally {
       await app.close();
     }
+  });
+
+  it('does not close externally injected services on app.close', async () => {
+    const close = vi.fn();
+    const services = {
+      categories: { list: async () => [] },
+      close,
+    } as unknown as DomainServices;
+
+    const app = buildServer({ services, config: baseConfig });
+
+    try {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/v1/categories',
+      });
+
+      expect(response.statusCode).toBe(200);
+    } finally {
+      await app.close();
+    }
+
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it('closes plugin-owned services on app.close', async () => {
+    const close = vi.fn();
+    const app = Fastify({ logger: false });
+
+    app.register(tithePlugin, {
+      createServices: () =>
+        ({
+          close,
+        }) as any,
+    });
+
+    await app.ready();
+    await app.close();
+
+    expect(close).toHaveBeenCalledTimes(1);
   });
 
   it('enforces explicit CORS allow-list behavior', async () => {

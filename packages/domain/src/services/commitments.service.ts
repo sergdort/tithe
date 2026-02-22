@@ -7,6 +7,7 @@ import type {
   CommitmentDto,
   CommitmentInstanceDto,
 } from '../repositories/commitments.repository.js';
+import { SqliteCommitmentsRepository } from '../repositories/commitments.repository.js';
 import { type RepositoryDb, withTransaction } from '../repositories/shared.js';
 import type { ActorContext, CreateCommitmentInput, UpdateCommitmentInput } from '../types.js';
 import type { ApprovalToken } from './shared/approval-service.js';
@@ -19,7 +20,7 @@ import {
   toIso,
   toRruleDate,
 } from './shared/common.js';
-import type { DomainRuntimeDeps } from './shared/deps.js';
+import type { DomainDbRuntime } from './shared/domain-db.js';
 
 export interface CommitmentsService {
   list: () => Promise<CommitmentDto[]>;
@@ -44,7 +45,7 @@ export interface CommitmentsService {
 type RRule = InstanceType<(typeof rrule)['RRule']>;
 
 interface CommitmentServiceDeps {
-  runtime: DomainRuntimeDeps;
+  runtime: DomainDbRuntime;
   approvals: ApprovalService;
   audit: AuditService;
 }
@@ -60,8 +61,8 @@ const assertRrule = (rruleExpr: string, startDate: string): void => {
   }
 };
 
-const markOverdueWithinDb = (runtime: DomainRuntimeDeps, db: RepositoryDb, now: Date): void => {
-  const pendingRows = runtime.repositories.commitments(db).listPendingWithGrace({}).rows;
+const markOverdueWithinDb = (db: RepositoryDb, now: Date): void => {
+  const pendingRows = new SqliteCommitmentsRepository(db).listPendingWithGrace({}).rows;
 
   const overdueIds: string[] = [];
   for (const row of pendingRows) {
@@ -73,7 +74,7 @@ const markOverdueWithinDb = (runtime: DomainRuntimeDeps, db: RepositoryDb, now: 
   }
 
   withTransaction(db, (tx) => {
-    runtime.repositories.commitments(tx).markOverdue({ instanceIds: overdueIds });
+    new SqliteCommitmentsRepository(tx).markOverdue({ instanceIds: overdueIds });
   });
 };
 
@@ -81,11 +82,12 @@ export const createCommitmentsService = ({
   runtime,
   approvals,
   audit,
-}: CommitmentServiceDeps): CommitmentsService => ({
+}: CommitmentServiceDeps): CommitmentsService => {
+  const commitmentsRepo = (db: RepositoryDb = runtime.db) => new SqliteCommitmentsRepository(db);
+
+  return {
   async list() {
-    return runtime.withDb(
-      ({ db }) => runtime.repositories.commitments(db).listCommitments({}).commitments,
-    );
+    return commitmentsRepo().listCommitments({}).commitments;
   },
 
   async create(input: CreateCommitmentInput, context: ActorContext = DEFAULT_ACTOR) {
@@ -111,78 +113,68 @@ export const createCommitmentsService = ({
       updatedAt: now,
     };
 
-    const commitment = await runtime.withDb(({ db }) => {
-      try {
-        return runtime.repositories.commitments(db).createCommitment(payload).commitment;
-      } catch (error) {
-        throw new AppError(
-          'COMMITMENT_CREATE_FAILED',
-          'Could not create recurring commitment',
-          409,
-          {
-            reason: error instanceof Error ? error.message : String(error),
-          },
-        );
-      }
-    });
+    let commitment: CommitmentDto;
+    try {
+      commitment = commitmentsRepo().createCommitment(payload).commitment;
+    } catch (error) {
+      throw new AppError(
+        'COMMITMENT_CREATE_FAILED',
+        'Could not create recurring commitment',
+        409,
+        {
+          reason: error instanceof Error ? error.message : String(error),
+        },
+      );
+    }
 
     await audit.writeAudit('commitment.create', payload, context);
     return commitment;
   },
 
   async get(id: string) {
-    return runtime.withDb(({ db }) => {
-      const commitment = runtime.repositories.commitments(db).findCommitmentById({ id }).commitment;
-      if (!commitment) {
-        throw new AppError('COMMITMENT_NOT_FOUND', `Commitment ${id} does not exist`, 404);
-      }
-      return commitment;
-    });
+    const commitment = commitmentsRepo().findCommitmentById({ id }).commitment;
+    if (!commitment) {
+      throw new AppError('COMMITMENT_NOT_FOUND', `Commitment ${id} does not exist`, 404);
+    }
+    return commitment;
   },
 
   async update(id: string, input: UpdateCommitmentInput, context: ActorContext = DEFAULT_ACTOR) {
-    const { commitment, patch } = await runtime.withDb(({ db }) => {
-      const existing = runtime.repositories.commitments(db).findCommitmentById({ id }).commitment;
-      if (!existing) {
-        throw new AppError('COMMITMENT_NOT_FOUND', `Commitment ${id} does not exist`, 404);
-      }
+    const existing = commitmentsRepo().findCommitmentById({ id }).commitment;
+    if (!existing) {
+      throw new AppError('COMMITMENT_NOT_FOUND', `Commitment ${id} does not exist`, 404);
+    }
 
-      const nextStartDate = input.startDate
-        ? assertDate(input.startDate, 'startDate')
-        : existing.startDate;
-      const nextRule = input.rrule ?? existing.rrule;
-      assertRrule(nextRule, nextStartDate);
+    const nextStartDate = input.startDate
+      ? assertDate(input.startDate, 'startDate')
+      : existing.startDate;
+    const nextRule = input.rrule ?? existing.rrule;
+    assertRrule(nextRule, nextStartDate);
 
-      const nextPatch = {
-        name: input.name?.trim() ?? existing.name,
-        rrule: nextRule,
-        startDate: nextStartDate,
-        defaultAmountMinor: input.defaultAmountMinor ?? existing.defaultMoney.amountMinor,
-        currency: input.currency
-          ? normalizeCurrency(input.currency)
-          : existing.defaultMoney.currency,
-        amountBaseMinor: input.amountBaseMinor ?? existing.defaultMoney.amountBaseMinor,
-        fxRate: input.fxRate ?? existing.defaultMoney.fxRate,
-        categoryId: input.categoryId ?? existing.categoryId,
-        graceDays: input.graceDays ?? existing.graceDays,
-        active: input.active ?? existing.active,
-        updatedAt: toIso(new Date()),
-      };
+    const patch = {
+      name: input.name?.trim() ?? existing.name,
+      rrule: nextRule,
+      startDate: nextStartDate,
+      defaultAmountMinor: input.defaultAmountMinor ?? existing.defaultMoney.amountMinor,
+      currency: input.currency
+        ? normalizeCurrency(input.currency)
+        : existing.defaultMoney.currency,
+      amountBaseMinor: input.amountBaseMinor ?? existing.defaultMoney.amountBaseMinor,
+      fxRate: input.fxRate ?? existing.defaultMoney.fxRate,
+      categoryId: input.categoryId ?? existing.categoryId,
+      graceDays: input.graceDays ?? existing.graceDays,
+      active: input.active ?? existing.active,
+      updatedAt: toIso(new Date()),
+    };
 
-      const updated = runtime.repositories.commitments(db).updateCommitment({
-        id,
-        ...nextPatch,
-      }).commitment;
+    const commitment = commitmentsRepo().updateCommitment({
+      id,
+      ...patch,
+    }).commitment;
 
-      if (!updated) {
-        throw new AppError('COMMITMENT_NOT_FOUND', `Commitment ${id} does not exist`, 404);
-      }
-
-      return {
-        commitment: updated,
-        patch: nextPatch,
-      };
-    });
+    if (!commitment) {
+      throw new AppError('COMMITMENT_NOT_FOUND', `Commitment ${id} does not exist`, 404);
+    }
 
     await audit.writeAudit('commitment.update', { id, patch }, context);
 
@@ -196,14 +188,12 @@ export const createCommitmentsService = ({
   async delete(id: string, approveOperationId: string, context: ActorContext = DEFAULT_ACTOR) {
     await approvals.consumeApproval('commitment.delete', approveOperationId, { id });
 
-    await runtime.withDb(({ db }) => {
-      const existing = runtime.repositories.commitments(db).findCommitmentById({ id }).commitment;
-      if (!existing) {
-        throw new AppError('COMMITMENT_NOT_FOUND', `Commitment ${id} does not exist`, 404);
-      }
+    const existing = commitmentsRepo().findCommitmentById({ id }).commitment;
+    if (!existing) {
+      throw new AppError('COMMITMENT_NOT_FOUND', `Commitment ${id} does not exist`, 404);
+    }
 
-      runtime.repositories.commitments(db).deleteCommitment({ id });
-    });
+    commitmentsRepo().deleteCommitment({ id });
 
     await audit.writeAudit('commitment.delete', { id }, context);
   },
@@ -213,61 +203,58 @@ export const createCommitmentsService = ({
 
     let created = 0;
 
-    await runtime.withDb(({ db }) => {
-      const activeCommitments = runtime.repositories
-        .commitments(db)
-        .listActiveCommitments({}).commitments;
+    const activeCommitments = commitmentsRepo().listActiveCommitments({}).commitments;
 
-      for (const commitment of activeCommitments) {
-        const rule = buildRule(commitment.rrule, commitment.startDate);
+    for (const commitment of activeCommitments) {
+      const rule = buildRule(commitment.rrule, commitment.startDate);
 
-        withTransaction(db, (tx) => {
-          const lastInstance = runtime.repositories.commitments(tx).findLastInstance({
-            commitmentId: commitment.id,
-          }).instance;
+      withTransaction(runtime.db, (tx) => {
+        const txCommitmentsRepo = commitmentsRepo(tx);
+        const lastInstance = txCommitmentsRepo.findLastInstance({
+          commitmentId: commitment.id,
+        }).instance;
 
-          const fromDate = lastInstance
-            ? new Date(new Date(lastInstance.dueAt).getTime() + 1000)
-            : new Date(commitment.startDate);
+        const fromDate = lastInstance
+          ? new Date(new Date(lastInstance.dueAt).getTime() + 1000)
+          : new Date(commitment.startDate);
 
-          const dueDates = rule
-            .between(fromDate, targetDate, true)
-            .map((date) => toIso(date))
-            .filter((date) => date >= commitment.startDate);
+        const dueDates = rule
+          .between(fromDate, targetDate, true)
+          .map((date) => toIso(date))
+          .filter((date) => date >= commitment.startDate);
 
-          for (const dueAt of dueDates) {
-            try {
-              runtime.repositories.commitments(tx).createInstance({
-                id: crypto.randomUUID(),
-                commitmentId: commitment.id,
-                dueAt,
-                expectedAmountMinor: commitment.defaultAmountMinor,
-                currency: commitment.currency,
-                amountBaseMinor: commitment.amountBaseMinor,
-                fxRate: commitment.fxRate,
-                status: 'pending',
-                expenseId: null,
-                resolvedAt: null,
-                createdAt: toIso(new Date()),
-              });
+        for (const dueAt of dueDates) {
+          try {
+            txCommitmentsRepo.createInstance({
+              id: crypto.randomUUID(),
+              commitmentId: commitment.id,
+              dueAt,
+              expectedAmountMinor: commitment.defaultAmountMinor,
+              currency: commitment.currency,
+              amountBaseMinor: commitment.amountBaseMinor,
+              fxRate: commitment.fxRate,
+              status: 'pending',
+              expenseId: null,
+              resolvedAt: null,
+              createdAt: toIso(new Date()),
+            });
 
-              created += 1;
-            } catch {
-              // Ignore duplicates due to unique(commitment_id, due_at).
-            }
+            created += 1;
+          } catch {
+            // Ignore duplicates due to unique(commitment_id, due_at).
           }
+        }
 
-          const nextDue = rule.after(targetDate, false);
-          runtime.repositories.commitments(tx).updateNextDue({
-            commitmentId: commitment.id,
-            nextDueAt: nextDue ? toIso(nextDue) : null,
-            updatedAt: toIso(new Date()),
-          });
+        const nextDue = rule.after(targetDate, false);
+        txCommitmentsRepo.updateNextDue({
+          commitmentId: commitment.id,
+          nextDueAt: nextDue ? toIso(nextDue) : null,
+          updatedAt: toIso(new Date()),
         });
-      }
+      });
+    }
 
-      markOverdueWithinDb(runtime, db, targetDate);
-    });
+    markOverdueWithinDb(runtime.db, targetDate);
 
     await audit.writeAudit(
       'commitment.generate_due',
@@ -282,8 +269,7 @@ export const createCommitmentsService = ({
   },
 
   async listInstances(status?: 'pending' | 'paid' | 'overdue' | 'skipped') {
-    return runtime.withDb(
-      ({ db }) => runtime.repositories.commitments(db).listInstances({ status }).instances,
-    );
+    return commitmentsRepo().listInstances({ status }).instances;
   },
-});
+};
+};

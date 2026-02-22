@@ -12,8 +12,8 @@ import { createReportsService } from './reports.service.js';
 import type { ReportsService } from './reports.service.js';
 import { createApprovalService } from './shared/approval-service.js';
 import { createAuditService } from './shared/audit-service.js';
-import { createDomainRuntimeDeps } from './shared/deps.js';
-import type { DomainServiceOptions } from './shared/deps.js';
+import { createDomainDbRuntime } from './shared/domain-db.js';
+import type { DomainServiceOptions } from './shared/domain-db.js';
 
 export interface DomainServices {
   categories: CategoriesService;
@@ -24,17 +24,25 @@ export interface DomainServices {
   monzo: MonzoService;
 }
 
-export const createDomainServices = (options: DomainServiceOptions = {}): DomainServices => {
-  const runtime = createDomainRuntimeDeps(options);
+export interface ClosableDomainServices extends DomainServices {
+  close: () => void;
+}
+
+export const createDomainServices = (
+  options: DomainServiceOptions = {},
+): ClosableDomainServices => {
+  const runtime = createDomainDbRuntime(options);
   const approvals = createApprovalService(runtime);
   const audit = createAuditService(runtime);
-
-  return {
+  const services: ClosableDomainServices = {
     categories: createCategoriesService({ runtime, approvals, audit }),
     expenses: createExpensesService({ runtime, approvals, audit }),
     commitments: createCommitmentsService({ runtime, approvals, audit }),
     reports: createReportsService({ runtime }),
     query: createQueryService({ runtime }),
     monzo: createMonzoService({ runtime, audit }),
+    close: () => runtime.close(),
   };
+
+  return services;
 };

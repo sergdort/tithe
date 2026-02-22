@@ -2,13 +2,14 @@ import crypto from 'node:crypto';
 
 import { AppError } from '../errors.js';
 import type { CategoryDto } from '../repositories/categories.repository.js';
-import { withTransaction } from '../repositories/shared.js';
+import { SqliteCategoriesRepository } from '../repositories/categories.repository.js';
+import { type RepositoryDb, withTransaction } from '../repositories/shared.js';
 import type { ActorContext, CreateCategoryInput, UpdateCategoryInput } from '../types.js';
 import type { ApprovalToken } from './shared/approval-service.js';
 import type { ApprovalService } from './shared/approval-service.js';
 import type { AuditService } from './shared/audit-service.js';
 import { DEFAULT_ACTOR, assertDate, toIso } from './shared/common.js';
-import type { DomainRuntimeDeps } from './shared/deps.js';
+import type { DomainDbRuntime } from './shared/domain-db.js';
 
 export interface CategoriesService {
   list: () => Promise<CategoryDto[]>;
@@ -24,7 +25,7 @@ export interface CategoriesService {
 }
 
 interface CategoryServiceDeps {
-  runtime: DomainRuntimeDeps;
+  runtime: DomainDbRuntime;
   approvals: ApprovalService;
   audit: AuditService;
 }
@@ -33,9 +34,12 @@ export const createCategoriesService = ({
   runtime,
   approvals,
   audit,
-}: CategoryServiceDeps): CategoriesService => ({
+}: CategoryServiceDeps): CategoriesService => {
+  const categoriesRepo = (db: RepositoryDb = runtime.db) => new SqliteCategoriesRepository(db);
+
+  return {
   async list() {
-    return runtime.withDb(({ db }) => runtime.repositories.categories(db).list({}).categories);
+    return categoriesRepo().list({}).categories;
   },
 
   async create(input: CreateCategoryInput, context: ActorContext = DEFAULT_ACTOR) {
@@ -52,54 +56,46 @@ export const createCategoriesService = ({
       updatedAt: now,
     };
 
-    const category = await runtime.withDb(({ db }) => {
-      try {
-        return runtime.repositories.categories(db).create(payload).category;
-      } catch (error) {
-        throw new AppError('CATEGORY_CREATE_FAILED', 'Could not create category', 409, {
-          reason: error instanceof Error ? error.message : String(error),
-        });
-      }
-    });
+    let category: CategoryDto;
+    try {
+      category = categoriesRepo().create(payload).category;
+    } catch (error) {
+      throw new AppError('CATEGORY_CREATE_FAILED', 'Could not create category', 409, {
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
 
     await audit.writeAudit('category.create', payload, context);
     return category;
   },
 
   async update(id: string, input: UpdateCategoryInput, context: ActorContext = DEFAULT_ACTOR) {
-    const { category, patch } = await runtime.withDb(({ db }) => {
-      const existing = runtime.repositories.categories(db).findById({ id }).category;
-      if (!existing) {
-        throw new AppError('CATEGORY_NOT_FOUND', `Category ${id} does not exist`, 404);
-      }
+    const existing = categoriesRepo().findById({ id }).category;
+    if (!existing) {
+      throw new AppError('CATEGORY_NOT_FOUND', `Category ${id} does not exist`, 404);
+    }
 
-      const nextPatch = {
-        name: input.name?.trim() ?? existing.name,
-        kind: input.kind ?? existing.kind,
-        icon: input.icon ?? existing.icon,
-        color: input.color ?? existing.color,
-        archivedAt:
-          input.archivedAt === undefined
-            ? existing.archivedAt
-            : input.archivedAt === null
-              ? null
-              : assertDate(input.archivedAt, 'archivedAt'),
-        updatedAt: toIso(new Date()),
-      };
+    const nextPatch = {
+      name: input.name?.trim() ?? existing.name,
+      kind: input.kind ?? existing.kind,
+      icon: input.icon ?? existing.icon,
+      color: input.color ?? existing.color,
+      archivedAt:
+        input.archivedAt === undefined
+          ? existing.archivedAt
+          : input.archivedAt === null
+            ? null
+            : assertDate(input.archivedAt, 'archivedAt'),
+      updatedAt: toIso(new Date()),
+    };
 
-      const updated = runtime.repositories.categories(db).update({ id, ...nextPatch }).category;
+    const category = categoriesRepo().update({ id, ...nextPatch }).category;
 
-      if (!updated) {
-        throw new AppError('CATEGORY_NOT_FOUND', `Category ${id} does not exist`, 404);
-      }
+    if (!category) {
+      throw new AppError('CATEGORY_NOT_FOUND', `Category ${id} does not exist`, 404);
+    }
 
-      return {
-        category: updated,
-        patch: nextPatch,
-      };
-    });
-
-    await audit.writeAudit('category.update', { id, patch }, context);
+    await audit.writeAudit('category.update', { id, patch: nextPatch }, context);
 
     return category;
   },
@@ -119,56 +115,56 @@ export const createCategoriesService = ({
       reassignCategoryId,
     });
 
-    await runtime.withDb(({ db }) => {
-      const target = runtime.repositories.categories(db).findById({ id }).category;
-      if (!target) {
-        throw new AppError('CATEGORY_NOT_FOUND', `Category ${id} does not exist`, 404);
+    const target = categoriesRepo().findById({ id }).category;
+    if (!target) {
+      throw new AppError('CATEGORY_NOT_FOUND', `Category ${id} does not exist`, 404);
+    }
+
+    if (reassignCategoryId) {
+      const replacement = categoriesRepo().findById({
+        id: reassignCategoryId,
+      }).category;
+
+      if (!replacement) {
+        throw new AppError(
+          'CATEGORY_REASSIGN_TARGET_NOT_FOUND',
+          'Reassign category does not exist',
+          404,
+          {
+            reassignCategoryId,
+          },
+        );
       }
 
-      if (reassignCategoryId) {
-        const replacement = runtime.repositories.categories(db).findById({
-          id: reassignCategoryId,
-        }).category;
-
-        if (!replacement) {
-          throw new AppError(
-            'CATEGORY_REASSIGN_TARGET_NOT_FOUND',
-            'Reassign category does not exist',
-            404,
-            {
-              reassignCategoryId,
-            },
-          );
-        }
-
-        withTransaction(db, (tx) => {
-          runtime.repositories.categories(tx).reassignReferences({
-            fromCategoryId: id,
-            toCategoryId: reassignCategoryId,
-            updatedAt: toIso(new Date()),
-          });
-
-          runtime.repositories.categories(tx).deleteById({ id });
+      withTransaction(runtime.db, (tx) => {
+        const txCategoriesRepo = categoriesRepo(tx);
+        txCategoriesRepo.reassignReferences({
+          fromCategoryId: id,
+          toCategoryId: reassignCategoryId,
+          updatedAt: toIso(new Date()),
         });
-      } else {
-        const refs = runtime.repositories.categories(db).countReferences({ categoryId: id });
 
-        if (refs.expenseCount > 0 || refs.commitmentCount > 0) {
-          throw new AppError(
-            'CATEGORY_IN_USE',
-            'Category has linked expenses or commitments. Pass reassign category.',
-            409,
-            {
-              expenseCount: refs.expenseCount,
-              commitmentCount: refs.commitmentCount,
-            },
-          );
-        }
+        txCategoriesRepo.deleteById({ id });
+      });
+    } else {
+      const refs = categoriesRepo().countReferences({ categoryId: id });
 
-        runtime.repositories.categories(db).deleteById({ id });
+      if (refs.expenseCount > 0 || refs.commitmentCount > 0) {
+        throw new AppError(
+          'CATEGORY_IN_USE',
+          'Category has linked expenses or commitments. Pass reassign category.',
+          409,
+          {
+            expenseCount: refs.expenseCount,
+            commitmentCount: refs.commitmentCount,
+          },
+        );
       }
-    });
+
+      categoriesRepo().deleteById({ id });
+    }
 
     await audit.writeAudit('category.delete', { id, reassignCategoryId }, context);
   },
-});
+};
+};

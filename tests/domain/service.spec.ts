@@ -13,6 +13,10 @@ const setupService = () => {
   return { services, dir };
 };
 
+const closeServices = (services: unknown): void => {
+  (services as { close?: () => void }).close?.();
+};
+
 describe('Domain services', () => {
   it('creates categories and expenses then returns monthly trends', async () => {
     const { services, dir } = setupService();
@@ -37,6 +41,7 @@ describe('Domain services', () => {
       expect(trends.length).toBeGreaterThan(0);
       expect(trends[0]?.spendMinor).toBe(1234);
     } finally {
+      closeServices(services);
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
@@ -59,6 +64,7 @@ describe('Domain services', () => {
       const categories = await services.categories.list();
       expect(categories.find((item) => item.id === category.id)).toBeUndefined();
     } finally {
+      closeServices(services);
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
@@ -116,6 +122,7 @@ describe('Domain services', () => {
       expect(expenses[0]?.categoryId).toBe(targetCategory.id);
       expect(updatedCommitment.categoryId).toBe(targetCategory.id);
     } finally {
+      closeServices(services);
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
@@ -176,6 +183,7 @@ describe('Domain services', () => {
       expect(resetInstance?.expenseId).toBeNull();
       expect(resetInstance?.status).toBe('pending');
     } finally {
+      closeServices(services);
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
@@ -215,6 +223,7 @@ describe('Domain services', () => {
       expect(secondRun.created).toBe(0);
       expect(refreshedCommitment.nextDueAt).toBeTruthy();
     } finally {
+      closeServices(services);
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
@@ -256,6 +265,18 @@ describe('Domain services', () => {
       ).rejects.toMatchObject({
         code: 'APPROVAL_ALREADY_USED',
       });
+    } finally {
+      closeServices(services);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('closes domain services idempotently', () => {
+    const { services, dir } = setupService();
+
+    try {
+      closeServices(services);
+      closeServices(services);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

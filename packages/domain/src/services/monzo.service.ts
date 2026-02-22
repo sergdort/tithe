@@ -12,11 +12,15 @@ import type {
   MonzoConnectionDto,
   UpsertMonzoConnectionInput,
 } from '../repositories/monzo.repository.js';
+import { SqliteCategoriesRepository } from '../repositories/categories.repository.js';
+import { SqliteExpensesRepository } from '../repositories/expenses.repository.js';
+import { SqliteMonzoRepository } from '../repositories/monzo.repository.js';
+import type { RepositoryDb } from '../repositories/shared.js';
 import { withTransaction } from '../repositories/shared.js';
 import type { ActorContext } from '../types.js';
 import type { AuditService } from './shared/audit-service.js';
 import { DEFAULT_ACTOR, assertDate, normalizeCurrency, toIso } from './shared/common.js';
-import type { DomainRuntimeDeps } from './shared/deps.js';
+import type { DomainDbRuntime } from './shared/domain-db.js';
 
 const MONZO_SYNC_PROVIDER = 'monzo';
 const MONZO_CONNECTION_ID = 'primary';
@@ -89,7 +93,7 @@ export interface MonzoService {
 }
 
 interface MonzoServiceDeps {
-  runtime: DomainRuntimeDeps;
+  runtime: DomainDbRuntime;
   audit: AuditService;
 }
 
@@ -339,6 +343,10 @@ const collectTransactions = async ({
 };
 
 export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoService => {
+  const monzoRepo = (db: RepositoryDb = runtime.db) => new SqliteMonzoRepository(db);
+  const expensesRepo = (db: RepositoryDb = runtime.db) => new SqliteExpensesRepository(db);
+  const categoriesRepo = (db: RepositoryDb = runtime.db) => new SqliteCategoriesRepository(db);
+
   const syncInternal = async ({
     context,
     forceSince,
@@ -362,9 +370,7 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
       });
 
       if (!connection) {
-        connection = await runtime.withDb(
-          ({ db }) => runtime.repositories.monzo(db).findLatestConnection().connection,
-        );
+        connection = monzoRepo().findLatestConnection().connection;
       }
 
       if (!connection || connection.status === 'disconnected') {
@@ -372,15 +378,13 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
       }
       let currentConnection: MonzoConnectionDto = connection;
 
-      await runtime.withDb(({ db }) => {
-        runtime.repositories.monzo(db).createSyncRun({
-          id: runId,
-          provider: MONZO_SYNC_PROVIDER,
-          startedAt,
-          status: 'running',
-          importedCount: 0,
-          errorText: null,
-        });
+      monzoRepo().createSyncRun({
+        id: runId,
+        provider: MONZO_SYNC_PROVIDER,
+        startedAt,
+        status: 'running',
+        importedCount: 0,
+        errorText: null,
       });
       createdSyncRun = true;
 
@@ -407,9 +411,8 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
         const refreshed = await client.refreshToken({
           refreshToken: currentConnection.refreshToken,
         });
-        currentConnection = await runtime.withDb(({ db }) => {
-          const monzoRepo = runtime.repositories.monzo(db);
-          const saved = monzoRepo.upsertConnection(
+        {
+          const saved = monzoRepo().upsertConnection(
             mergeConnection(currentConnection, {
               id: currentConnection.id,
               accessToken: refreshed.access_token,
@@ -420,8 +423,8 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
             }),
           );
 
-          return saved.connection;
-        });
+          currentConnection = saved.connection;
+        }
       }
 
       if (!currentConnection.accountId || currentConnection.accountId.length === 0) {
@@ -431,9 +434,8 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
           throw new AppError('MONZO_ACCOUNT_NOT_FOUND', 'No open Monzo account available', 400);
         }
 
-        currentConnection = await runtime.withDb(({ db }) => {
-          const monzoRepo = runtime.repositories.monzo(db);
-          const saved = monzoRepo.upsertConnection(
+        {
+          const saved = monzoRepo().upsertConnection(
             mergeConnection(currentConnection, {
               id: currentConnection.id,
               accountId: account.id,
@@ -443,8 +445,8 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
             }),
           );
 
-          return saved.connection;
-        });
+          currentConnection = saved.connection;
+        }
       }
 
       const window = resolveWindow(currentConnection, new Date(), forceSince);
@@ -473,21 +475,20 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
         }
       }
 
-      await runtime.withDb(({ db }) => {
-        withTransaction(db, (tx) => {
-          const monzoRepo = runtime.repositories.monzo(tx);
-          const expensesRepo = runtime.repositories.expenses(tx);
-          const categoriesRepo = runtime.repositories.categories(tx);
+      withTransaction(runtime.db, (tx) => {
+          const monzoTxRepo = monzoRepo(tx);
+          const expensesTxRepo = expensesRepo(tx);
+          const categoriesTxRepo = categoriesRepo(tx);
 
           for (const transaction of eligible) {
             const nowIso = toIso(new Date());
             const monzoCategory = normalizeMonzoCategory(transaction.category);
-            let mapping = monzoRepo.findCategoryMapping({ monzoCategory }).mapping;
+            let mapping = monzoTxRepo.findCategoryMapping({ monzoCategory }).mapping;
 
             if (!mapping) {
               const categoryName = titleCaseCategory(monzoCategory);
               const legacyCategoryName = `Monzo: ${categoryName}`;
-              let category = categoriesRepo
+              let category = categoriesTxRepo
                 .list({})
                 .categories.find(
                   (item) =>
@@ -497,7 +498,7 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
 
               if (!category) {
                 try {
-                  category = categoriesRepo.create({
+                  category = categoriesTxRepo.create({
                     id: crypto.randomUUID(),
                     name: categoryName,
                     kind: 'expense',
@@ -509,7 +510,7 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
                     updatedAt: nowIso,
                   }).category;
                 } catch {
-                  category = categoriesRepo
+                  category = categoriesTxRepo
                     .list({})
                     .categories.find(
                       (item) => item.kind === 'expense' && item.name === categoryName,
@@ -525,7 +526,7 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
                 );
               }
 
-              mapping = monzoRepo.upsertCategoryMapping({
+              mapping = monzoTxRepo.upsertCategoryMapping({
                 monzoCategory,
                 categoryId: category.id,
                 createdAt: nowIso,
@@ -533,7 +534,7 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
               }).mapping;
             }
 
-            monzoRepo.upsertRawTransaction({
+            monzoTxRepo.upsertRawTransaction({
               transactionId: transaction.id,
               payloadJson: JSON.stringify(transaction),
               createdAt: nowIso,
@@ -545,7 +546,7 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
               : null;
 
             try {
-              expensesRepo.create({
+              expensesTxRepo.create({
                 id: crypto.randomUUID(),
                 occurredAt: assertDate(transaction.created, 'transaction.created'),
                 postedAt,
@@ -576,7 +577,7 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
             }
           }
 
-          monzoRepo.upsertConnection(
+          monzoTxRepo.upsertConnection(
             mergeConnection(currentConnection, {
               id: currentConnection.id,
               status: 'connected',
@@ -593,14 +594,13 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
             }),
           );
 
-          monzoRepo.finishSyncRun({
+          monzoTxRepo.finishSyncRun({
             id: runId,
             endedAt: toIso(new Date()),
             status: 'success',
             importedCount: imported,
             errorText: null,
           });
-        });
       });
 
       const skipped = skippedNonEligible + skippedDuplicates;
@@ -633,11 +633,9 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
       const appError = toAppError(error);
 
       if (createdSyncRun) {
-        await runtime.withDb(({ db }) => {
-          const monzoRepo = runtime.repositories.monzo(db);
-          const latest = monzoRepo.findLatestConnection().connection;
+        const latest = monzoRepo().findLatestConnection().connection;
           if (latest) {
-            monzoRepo.upsertConnection(
+            monzoRepo().upsertConnection(
               mergeConnection(latest, {
                 id: latest.id,
                 status:
@@ -646,17 +644,16 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
                     : 'sync_error',
                 lastErrorText: appError.message,
                 updatedAt: toIso(new Date()),
-              }),
+                }),
             );
           }
 
-          monzoRepo.finishSyncRun({
-            id: runId,
-            endedAt: toIso(new Date()),
-            status: 'failed',
-            importedCount: imported,
-            errorText: appError.message,
-          });
+        monzoRepo().finishSyncRun({
+          id: runId,
+          endedAt: toIso(new Date()),
+          status: 'failed',
+          importedCount: imported,
+          errorText: appError.message,
         });
       }
 
@@ -681,20 +678,17 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
       const nowIso = now.toISOString();
       const stateExpiresAt = new Date(now.getTime() + OAUTH_STATE_TTL_MS).toISOString();
 
-      await runtime.withDb(({ db }) => {
-        const monzoRepo = runtime.repositories.monzo(db);
-        const existing = monzoRepo.findLatestConnection().connection;
-        monzoRepo.upsertConnection(
-          mergeConnection(existing, {
-            id: existing?.id ?? MONZO_CONNECTION_ID,
-            status: 'awaiting_oauth',
-            oauthState: state,
-            oauthStateExpiresAt: stateExpiresAt,
-            lastErrorText: null,
-            updatedAt: nowIso,
-          }),
-        );
-      });
+      const existing = monzoRepo().findLatestConnection().connection;
+      monzoRepo().upsertConnection(
+        mergeConnection(existing, {
+          id: existing?.id ?? MONZO_CONNECTION_ID,
+          status: 'awaiting_oauth',
+          oauthState: state,
+          oauthStateExpiresAt: stateExpiresAt,
+          lastErrorText: null,
+          updatedAt: nowIso,
+        }),
+      );
 
       const authUrl = client.buildAuthorizeUrl({ state });
       await audit.writeAudit('monzo.connect_start', { stateExpiresAt }, context);
@@ -733,9 +727,7 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
           scope: env.scope,
         });
 
-        const existing = await runtime.withDb(
-          ({ db }) => runtime.repositories.monzo(db).findLatestConnection().connection,
-        );
+        const existing = monzoRepo().findLatestConnection().connection;
 
         if (!existing?.oauthState || !existing.oauthStateExpiresAt) {
           throw new AppError('MONZO_OAUTH_STATE_MISSING', 'No active Monzo OAuth state found', 400);
@@ -751,27 +743,22 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
 
         const token = await client.exchangeCode({ code: input.code });
 
-        const updatedConnection = await runtime.withDb(({ db }) => {
-          const monzoRepo = runtime.repositories.monzo(db);
-          const nowIso = toIso(new Date());
-          const saved = monzoRepo.upsertConnection(
-            mergeConnection(existing, {
-              id: existing.id,
-              accountId: existing.accountId,
-              status: 'connected',
-              accessToken: token.access_token,
-              refreshToken: token.refresh_token ?? existing.refreshToken,
-              tokenExpiresAt: tokenExpiresAtFromMonzoResponse(token),
-              scope: token.scope ?? existing.scope,
-              oauthState: null,
-              oauthStateExpiresAt: null,
-              lastErrorText: null,
-              updatedAt: nowIso,
-            }),
-          );
-
-          return saved.connection;
-        });
+        const nowIso = toIso(new Date());
+        const updatedConnection = monzoRepo().upsertConnection(
+          mergeConnection(existing, {
+            id: existing.id,
+            accountId: existing.accountId,
+            status: 'connected',
+            accessToken: token.access_token,
+            refreshToken: token.refresh_token ?? existing.refreshToken,
+            tokenExpiresAt: tokenExpiresAtFromMonzoResponse(token),
+            scope: token.scope ?? existing.scope,
+            oauthState: null,
+            oauthStateExpiresAt: null,
+            lastErrorText: null,
+            updatedAt: nowIso,
+          }),
+        ).connection;
 
         const initialFrom = new Date(Date.now() - INITIAL_BACKFILL_DAYS * DAY_MS).toISOString();
 
@@ -806,20 +793,17 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
         } catch (syncError) {
           const appError = toAppError(syncError);
           if (appError.code === 'forbidden.insufficient_permissions') {
-            await runtime.withDb(({ db }) => {
-              const monzoRepo = runtime.repositories.monzo(db);
-              const latest = monzoRepo.findLatestConnection().connection;
-              if (latest) {
-                monzoRepo.upsertConnection(
-                  mergeConnection(latest, {
-                    id: latest.id,
-                    status: 'connected',
-                    lastErrorText: appError.message,
-                    updatedAt: toIso(new Date()),
-                  }),
-                );
-              }
-            });
+            const latest = monzoRepo().findLatestConnection().connection;
+            if (latest) {
+              monzoRepo().upsertConnection(
+                mergeConnection(latest, {
+                  id: latest.id,
+                  status: 'connected',
+                  lastErrorText: appError.message,
+                  updatedAt: toIso(new Date()),
+                }),
+              );
+            }
 
             return {
               status: 'connected_pending_permissions',
@@ -846,12 +830,8 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
 
     async status() {
       const env = readMonzoEnv();
-      const connection = await runtime.withDb(
-        ({ db }) => runtime.repositories.monzo(db).findLatestConnection().connection,
-      );
-      const mappingCount = await runtime.withDb(
-        ({ db }) => runtime.repositories.monzo(db).countCategoryMappings().count,
-      );
+      const connection = monzoRepo().findLatestConnection().connection;
+      const mappingCount = monzoRepo().countCategoryMappings().count;
 
       return {
         status: !env.config ? 'not_configured' : (connection?.status ?? 'disconnected'),

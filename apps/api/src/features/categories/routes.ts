@@ -2,8 +2,6 @@ import { ok } from '@tithe/contracts';
 import { AppError } from '@tithe/domain';
 import type { FastifyInstance } from 'fastify';
 
-import type { AppContext } from '../../http/app-context.js';
-
 type CategoryKind = 'expense' | 'income' | 'transfer';
 
 interface CategoryParams {
@@ -31,8 +29,8 @@ interface DeleteCategoryQuery {
   approveOperationId?: string;
 }
 
-export const registerCategoryRoutes = (app: FastifyInstance, ctx: AppContext): void => {
-  const { services, actorFromRequest, parseBoolean } = ctx;
+export const registerCategoryRoutes = (app: FastifyInstance): void => {
+  const { services, actorFromRequest, parseBoolean, docs } = app.tithe;
   const categoriesService = services.categories;
   const {
     defaultErrorResponses,
@@ -41,7 +39,7 @@ export const registerCategoryRoutes = (app: FastifyInstance, ctx: AppContext): v
     isoDateTimeSchema,
     successEnvelopeSchema,
     uuidSchema,
-  } = ctx.docs;
+  } = docs;
 
   app.get(
     '',

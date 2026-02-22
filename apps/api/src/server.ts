@@ -7,11 +7,11 @@ import Fastify, { type FastifyInstance } from 'fastify';
 
 import { type ApiRuntimeConfig, loadApiRuntimeConfig, resolveCorsOrigin } from './config.js';
 import { openApiTags } from './http/api-docs.js';
-import { createAppContext } from './http/app-context.js';
 import {
   featureRouteRegistrations,
   registerFeatureRoutes,
 } from './http/register-feature-routes.js';
+import { tithePlugin } from './http/tithe-plugin.js';
 
 export interface BuildServerOptions {
   services?: DomainServices;
@@ -67,8 +67,12 @@ export const buildServer = (options: BuildServerOptions = {}): FastifyInstance =
     reply.status(404).send(fail('NOT_FOUND', `Route ${request.method} ${request.url} not found`)),
   );
 
-  const ctx = createAppContext({ services: options.services });
-  registerFeatureRoutes(app, ctx);
+  app.register(async (apiApp) => {
+    await tithePlugin(apiApp, {
+      services: options.services,
+    });
+    registerFeatureRoutes(apiApp);
+  });
 
   return app;
 };
@@ -96,4 +100,5 @@ const requestLogError = (
 };
 
 export { loadApiRuntimeConfig, resolveCorsOrigin, featureRouteRegistrations };
+export { tithePlugin } from './http/tithe-plugin.js';
 export type { ApiRuntimeConfig };

@@ -7,9 +7,8 @@ import { registerMonzoRoutes } from '../features/monzo/routes.js';
 import { registerQueryRoutes } from '../features/query/routes.js';
 import { registerReportRoutes } from '../features/reports/routes.js';
 import { registerSystemRoutes } from '../features/system/routes.js';
-import type { AppContext } from './app-context.js';
 
-type FeatureRegistrar = (app: FastifyInstance, ctx: AppContext) => void;
+type FeatureRegistrar = (app: FastifyInstance) => void;
 
 interface FeatureRouteRegistration {
   name: string;
@@ -29,12 +28,11 @@ export const featureRouteRegistrations: readonly FeatureRouteRegistration[] = [
 
 const registerFeature = (
   app: FastifyInstance,
-  ctx: AppContext,
   registration: FeatureRouteRegistration,
   prefix?: string,
 ): void => {
   const plugin = async (featureApp: FastifyInstance): Promise<void> => {
-    registration.registrar(featureApp, ctx);
+    registration.registrar(featureApp);
   };
 
   if (prefix) {
@@ -45,8 +43,8 @@ const registerFeature = (
   app.register(plugin);
 };
 
-export const registerFeatureRoutes = (app: FastifyInstance, ctx: AppContext): void => {
+export const registerFeatureRoutes = (app: FastifyInstance): void => {
   for (const registration of featureRouteRegistrations) {
-    registerFeature(app, ctx, registration, registration.prefix);
+    registerFeature(app, registration, registration.prefix);
   }
 };

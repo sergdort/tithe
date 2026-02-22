@@ -2,7 +2,10 @@ import crypto from 'node:crypto';
 
 import { AppError } from '../errors.js';
 import type { ExpenseDto } from '../repositories/expenses.repository.js';
-import { withTransaction } from '../repositories/shared.js';
+import { SqliteCategoriesRepository } from '../repositories/categories.repository.js';
+import { SqliteCommitmentsRepository } from '../repositories/commitments.repository.js';
+import { SqliteExpensesRepository } from '../repositories/expenses.repository.js';
+import { type RepositoryDb, withTransaction } from '../repositories/shared.js';
 import type {
   ActorContext,
   CreateExpenseInput,
@@ -13,7 +16,7 @@ import type { ApprovalToken } from './shared/approval-service.js';
 import type { ApprovalService } from './shared/approval-service.js';
 import type { AuditService } from './shared/audit-service.js';
 import { DEFAULT_ACTOR, assertDate, normalizeCurrency, toIso } from './shared/common.js';
-import type { DomainRuntimeDeps } from './shared/deps.js';
+import type { DomainDbRuntime } from './shared/domain-db.js';
 
 export interface ExpensesService {
   list: (input?: ListExpensesInput) => Promise<ExpenseDto[]>;
@@ -25,7 +28,7 @@ export interface ExpensesService {
 }
 
 interface ExpenseServiceDeps {
-  runtime: DomainRuntimeDeps;
+  runtime: DomainDbRuntime;
   approvals: ApprovalService;
   audit: AuditService;
 }
@@ -34,29 +37,30 @@ export const createExpensesService = ({
   runtime,
   approvals,
   audit,
-}: ExpenseServiceDeps): ExpensesService => ({
-  async list(input: ListExpensesInput = {}) {
-    return runtime.withDb(({ db }) => {
-      const from = input.from ? assertDate(input.from, 'from') : undefined;
-      const to = input.to ? assertDate(input.to, 'to') : undefined;
+}: ExpenseServiceDeps): ExpensesService => {
+  const categoriesRepo = (db: RepositoryDb = runtime.db) => new SqliteCategoriesRepository(db);
+  const commitmentsRepo = (db: RepositoryDb = runtime.db) => new SqliteCommitmentsRepository(db);
+  const expensesRepo = (db: RepositoryDb = runtime.db) => new SqliteExpensesRepository(db);
 
-      return runtime.repositories.expenses(db).list({
-        from,
-        to,
-        categoryId: input.categoryId,
-        limit: input.limit ?? 200,
-      }).expenses;
-    });
+  return {
+  async list(input: ListExpensesInput = {}) {
+    const from = input.from ? assertDate(input.from, 'from') : undefined;
+    const to = input.to ? assertDate(input.to, 'to') : undefined;
+
+    return expensesRepo().list({
+      from,
+      to,
+      categoryId: input.categoryId,
+      limit: input.limit ?? 200,
+    }).expenses;
   },
 
   async get(id: string) {
-    return runtime.withDb(({ db }) => {
-      const expense = runtime.repositories.expenses(db).findById({ id }).expense;
-      if (!expense) {
-        throw new AppError('EXPENSE_NOT_FOUND', `Expense ${id} does not exist`, 404);
-      }
-      return expense;
-    });
+    const expense = expensesRepo().findById({ id }).expense;
+    if (!expense) {
+      throw new AppError('EXPENSE_NOT_FOUND', `Expense ${id} does not exist`, 404);
+    }
+    return expense;
   },
 
   async create(input: CreateExpenseInput, context: ActorContext = DEFAULT_ACTOR) {
@@ -79,89 +83,81 @@ export const createExpensesService = ({
       updatedAt: now,
     };
 
-    const createdExpense = await runtime.withDb(({ db }) => {
-      const category = runtime.repositories
-        .categories(db)
-        .findById({ id: payload.categoryId }).category;
+    const category = categoriesRepo().findById({ id: payload.categoryId }).category;
 
-      if (!category) {
-        throw new AppError(
-          'CATEGORY_NOT_FOUND',
-          'Cannot create expense with unknown category',
-          404,
-          {
-            categoryId: payload.categoryId,
-          },
-        );
-      }
+    if (!category) {
+      throw new AppError(
+        'CATEGORY_NOT_FOUND',
+        'Cannot create expense with unknown category',
+        404,
+        {
+          categoryId: payload.categoryId,
+        },
+      );
+    }
 
-      try {
-        return withTransaction(db, (tx) => {
-          const created = runtime.repositories.expenses(tx).create(payload).expense;
+    let createdExpense: ExpenseDto;
+    try {
+      createdExpense = withTransaction(runtime.db, (tx) => {
+        const txExpensesRepo = expensesRepo(tx);
 
-          if (payload.commitmentInstanceId) {
-            runtime.repositories.commitments(tx).markInstancePaid({
-              instanceId: payload.commitmentInstanceId,
-              expenseId: payload.id,
-              resolvedAt: now,
-            });
-          }
+        const created = txExpensesRepo.create(payload).expense;
 
-          return created;
-        });
-      } catch (error) {
-        if (error instanceof AppError) {
-          throw error;
+        if (payload.commitmentInstanceId) {
+          commitmentsRepo(tx).markInstancePaid({
+            instanceId: payload.commitmentInstanceId,
+            expenseId: payload.id,
+            resolvedAt: now,
+          });
         }
 
-        throw new AppError('EXPENSE_CREATE_FAILED', 'Could not create expense', 409, {
-          reason: error instanceof Error ? error.message : String(error),
-        });
+        return created;
+      });
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
       }
-    });
+
+      throw new AppError('EXPENSE_CREATE_FAILED', 'Could not create expense', 409, {
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
 
     await audit.writeAudit('expense.create', payload, context);
     return createdExpense;
   },
 
   async update(id: string, input: UpdateExpenseInput, context: ActorContext = DEFAULT_ACTOR) {
-    const { expense, patch } = await runtime.withDb(({ db }) => {
-      const existing = runtime.repositories.expenses(db).findById({ id }).expense;
-      if (!existing) {
-        throw new AppError('EXPENSE_NOT_FOUND', `Expense ${id} does not exist`, 404);
-      }
+    const existing = expensesRepo().findById({ id }).expense;
+    if (!existing) {
+      throw new AppError('EXPENSE_NOT_FOUND', `Expense ${id} does not exist`, 404);
+    }
 
-      const nextPatch = {
-        occurredAt: input.occurredAt
-          ? assertDate(input.occurredAt, 'occurredAt')
-          : existing.occurredAt,
-        postedAt:
-          input.postedAt === undefined
-            ? existing.postedAt
-            : input.postedAt === null
-              ? null
-              : assertDate(input.postedAt, 'postedAt'),
-        amountMinor: input.amountMinor ?? existing.money.amountMinor,
-        currency: input.currency ? normalizeCurrency(input.currency) : existing.money.currency,
-        amountBaseMinor: input.amountBaseMinor ?? existing.money.amountBaseMinor,
-        fxRate: input.fxRate ?? existing.money.fxRate,
-        categoryId: input.categoryId ?? existing.categoryId,
-        merchantName: input.merchantName ?? existing.merchantName,
-        note: input.note ?? existing.note,
-        updatedAt: toIso(new Date()),
-      };
+    const patch = {
+      occurredAt: input.occurredAt
+        ? assertDate(input.occurredAt, 'occurredAt')
+        : existing.occurredAt,
+      postedAt:
+        input.postedAt === undefined
+          ? existing.postedAt
+          : input.postedAt === null
+            ? null
+            : assertDate(input.postedAt, 'postedAt'),
+      amountMinor: input.amountMinor ?? existing.money.amountMinor,
+      currency: input.currency ? normalizeCurrency(input.currency) : existing.money.currency,
+      amountBaseMinor: input.amountBaseMinor ?? existing.money.amountBaseMinor,
+      fxRate: input.fxRate ?? existing.money.fxRate,
+      categoryId: input.categoryId ?? existing.categoryId,
+      merchantName: input.merchantName ?? existing.merchantName,
+      note: input.note ?? existing.note,
+      updatedAt: toIso(new Date()),
+    };
 
-      const updated = runtime.repositories.expenses(db).update({ id, ...nextPatch }).expense;
+    const expense = expensesRepo().update({ id, ...patch }).expense;
 
-      if (!updated) {
-        throw new AppError('EXPENSE_NOT_FOUND', `Expense ${id} does not exist`, 404);
-      }
-
-      return {
-        expense: updated,
-        patch: nextPatch,
-      };
-    });
+    if (!expense) {
+      throw new AppError('EXPENSE_NOT_FOUND', `Expense ${id} does not exist`, 404);
+    }
 
     await audit.writeAudit('expense.update', { id, patch }, context);
 
@@ -175,23 +171,22 @@ export const createExpensesService = ({
   async delete(id: string, approveOperationId: string, context: ActorContext = DEFAULT_ACTOR) {
     await approvals.consumeApproval('expense.delete', approveOperationId, { id });
 
-    await runtime.withDb(({ db }) => {
-      const existing = runtime.repositories.expenses(db).findById({ id }).expense;
-      if (!existing) {
-        throw new AppError('EXPENSE_NOT_FOUND', `Expense ${id} does not exist`, 404);
+    const existing = expensesRepo().findById({ id }).expense;
+    if (!existing) {
+      throw new AppError('EXPENSE_NOT_FOUND', `Expense ${id} does not exist`, 404);
+    }
+
+    withTransaction(runtime.db, (tx) => {
+      if (existing.commitmentInstanceId) {
+        commitmentsRepo(tx).resetInstanceToPending({
+          instanceId: existing.commitmentInstanceId,
+        });
       }
 
-      withTransaction(db, (tx) => {
-        if (existing.commitmentInstanceId) {
-          runtime.repositories.commitments(tx).resetInstanceToPending({
-            instanceId: existing.commitmentInstanceId,
-          });
-        }
-
-        runtime.repositories.expenses(tx).deleteById({ id });
-      });
+      expensesRepo(tx).deleteById({ id });
     });
 
     await audit.writeAudit('expense.delete', { id }, context);
   },
-});
+};
+};
