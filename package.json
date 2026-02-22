@@ -5,18 +5,21 @@
   "type": "module",
   "packageManager": "pnpm@10.16.1",
   "engines": {
-    "node": ">=22"
+    "node": "22.x"
   },
   "scripts": {
     "build": "turbo run build",
-    "dev": "VITE_API_BASE=${VITE_API_BASE:-http://127.0.0.1:8787/v1} turbo run dev --parallel",
-    "dev:api": "pnpm --filter @tithe/api dev",
+    "dev": "pnpm check:sqlite && VITE_API_BASE=${VITE_API_BASE:-http://127.0.0.1:8787/v1} turbo run dev --parallel",
+    "dev:api": "pnpm check:sqlite && pnpm --filter @tithe/api dev",
     "dev:cli": "pnpm --filter @tithe/cli dev",
     "dev:pwa": "pnpm --filter @tithe/pwa dev",
-    "start:api": "pnpm --filter @tithe/api start",
+    "start:api": "pnpm check:sqlite && pnpm --filter @tithe/api start",
     "start:cli": "pnpm --filter @tithe/cli start",
     "start:pwa": "pnpm --filter @tithe/pwa start",
-    "db:migrate": "pnpm --filter @tithe/db migrate",
+    "db:migrate": "pnpm check:sqlite && pnpm --filter @tithe/db migrate",
+    "check:sqlite": "pnpm --filter @tithe/db check:native",
+    "repair:sqlite": "node ./scripts/repair-sqlite-native.mjs && pnpm check:sqlite",
+    "setup:first-time": "node ./scripts/setup-first-time.mjs",
     "test": "turbo run test",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
@@ -29,5 +32,10 @@
     "tsx": "^4.19.3",
     "turbo": "^2.4.4",
     "typescript": "^5.8.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
   }
 }

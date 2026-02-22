@@ -9,7 +9,8 @@
     "dev": "tsc -w -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "biome check src",
-    "migrate": "tsx src/migrate.ts"
+    "migrate": "tsx src/migrate.ts",
+    "check:native": "node --input-type=module -e \"import Database from 'better-sqlite3'; const db = new Database(':memory:'); db.pragma('foreign_keys = ON'); db.close(); console.log('better-sqlite3 native binding OK');\""
   },
   "dependencies": {
     "better-sqlite3": "^11.8.1",

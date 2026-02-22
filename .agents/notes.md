@@ -19,3 +19,5 @@
 [0] `dotenv@17` can print an injection banner by default; set `quiet: true` in `dotenv.config(...)` to preserve deterministic `--json` CLI output.
 [0] Fastify rejects requests with `FST_ERR_CTP_EMPTY_JSON_BODY` when `Content-Type: application/json` is sent on empty-body POSTs; frontend should only set JSON content-type when a body exists.
 [0] Monzo can return `forbidden.insufficient_permissions` on `/accounts`; map it to `MONZO_REAUTH_REQUIRED` with clear remediation and avoid hard-coding stored OAuth scope.
+[0] `pnpm ignored-builds` can reveal `better-sqlite3` was auto-ignored during install; deleting `node_modules`/lockfile alone won't fix missing bindings unless pnpm build-script policy is updated (for example `pnpm.onlyBuiltDependencies`) and install/rebuild is rerun.
+[0] Avoid naming repo scripts `setup` in pnpm workspaces when onboarding docs also reference the built-in `pnpm setup`; use a distinct name like `setup:first-time` to prevent command ambiguity.

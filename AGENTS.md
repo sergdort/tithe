@@ -168,6 +168,11 @@ Failure:
 
 - Root dev scripts: `pnpm dev:api`, `pnpm dev:pwa`, `pnpm dev:cli`.
 - Root start scripts (for built artifacts): `pnpm start:api`, `pnpm start:pwa`, `pnpm start:cli`.
+- Root native SQLite smoke check: `pnpm check:sqlite` (runs `@tithe/db` `better-sqlite3` `:memory:` open/close).
+- Root native SQLite repair: `pnpm repair:sqlite` (runs `better-sqlite3` package install script, then `pnpm check:sqlite`).
+- Root first-time bootstrap: `pnpm setup:first-time` (runs install, creates `.env` from `.env.example` if missing, checks sqlite binding, and attempts repair on failure).
+- Root SQLite-dependent scripts (`pnpm dev`, `pnpm dev:api`, `pnpm start:api`, `pnpm db:migrate`) run `pnpm check:sqlite` first and fail fast when the native binding is missing.
+- Root `package.json` allowlists `better-sqlite3` in `pnpm.onlyBuiltDependencies` so pnpm can run its native build script during install/rebuild.
 - Root `pnpm dev` defaults `VITE_API_BASE` to `http://127.0.0.1:8787/v1`; override it explicitly for Tailnet/mobile runs.
 - PWA ports are configurable through root env vars: `PWA_PORT` (dev) and `PWA_PREVIEW_PORT` (preview/start).
 - Global CLI link workflow: `pnpm --filter @tithe/cli build`, then `pnpm link --global ./apps/cli`.
@@ -176,6 +181,10 @@ Failure:
 - Force-refresh global link if needed: `pnpm remove --global tithe`, `pnpm link --global ./apps/cli`, then `hash -r`/`exec zsh`.
 - If `tithe` is not found after linking, run `pnpm setup`, restart zsh, and verify `PNPM_HOME` is on `PATH`.
 - Remove global CLI link with `pnpm remove --global tithe`.
+- Team runtime pin for native SQLite stability: use Node `22.x` (`.nvmrc`).
+- If `better-sqlite3` fails with "Could not locate the bindings file", the native addon was not built for the active Node ABI. First check `pnpm check:sqlite`; if broken, run `pnpm repair:sqlite` under Node `22.x`.
+- Fallback manual repair remains `pnpm rebuild better-sqlite3` (or `pnpm rebuild --pending better-sqlite3`) plus `pnpm check:sqlite`.
+- If reinstalling still does not fix native bindings, inspect `pnpm ignored-builds`; pnpm may have auto-ignored `better-sqlite3` script execution.
 
 ## Approval Token Workflow
 

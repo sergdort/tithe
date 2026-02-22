@@ -31,17 +31,49 @@ Local-first personal expense tracker built for a single user on a personal machi
 
 ### 1. Prerequisites
 
-- Node.js 22+
+- Node.js 22 LTS (`22.x`, see `.nvmrc`)
 - pnpm 10+
 - Tailscale configured on host and mobile device (for private access)
 
 ### 2. Install
 
+Recommended first-time bootstrap (installs deps, creates `.env` if missing, checks/repairs `better-sqlite3`):
+
+```bash
+pnpm setup:first-time
+```
+
+Manual steps (if you prefer to run them separately):
+
 ```bash
 pnpm install
 ```
 
+If `pnpm` prompts to approve dependency build scripts, approve `better-sqlite3` (native SQLite addon) and rerun install:
+
+```bash
+pnpm approve-builds
+pnpm install
+```
+
+This repo also allowlists `better-sqlite3` in `package.json` (`pnpm.onlyBuiltDependencies`) so pnpm can run its native build script during install/rebuild without interactive approval.
+
+Verify the native SQLite binding before starting dev servers:
+
+```bash
+pnpm check:sqlite
+```
+
+If the check fails due to a missing `better-sqlite3` binding, run the one-shot repair command:
+
+```bash
+pnpm repair:sqlite
+```
+
 ### 3. Configure env
+
+If you used `pnpm setup:first-time`, `.env` is created automatically when missing.
+Otherwise:
 
 ```bash
 cp .env.example .env
@@ -79,6 +111,7 @@ pnpm dev
 ```
 
 `pnpm dev` defaults `VITE_API_BASE` to `http://127.0.0.1:8787/v1` for local development.
+Root scripts that depend on SQLite (`pnpm dev`, `pnpm dev:api`, `pnpm start:api`, `pnpm db:migrate`) run `pnpm check:sqlite` first and fail fast if the native `better-sqlite3` binding is missing.
 To test mobile/Tailnet against `pnpm dev`, override it explicitly, for example:
 
 ```bash
@@ -134,6 +167,9 @@ Development note:
 - `dev:api` runs the API directly (`node --import tsx src/index.ts`) without automatic reload.
 - API and CLI entrypoints auto-load workspace `.env` via `dotenv` if present (without overriding already exported env vars).
 - Set `PWA_PORT` (for example `5174`) when another PWA already uses `5173`.
+- If you see `better-sqlite3` "Could not locate the bindings file", the native addon was not built for your current Node runtime. Use Node `22.x`, then run `pnpm repair:sqlite` and rerun your original command.
+- Fallback repair (if you want the lower-level steps): `pnpm rebuild better-sqlite3` or `pnpm rebuild --pending better-sqlite3`, then `pnpm check:sqlite`.
+- If reinstalling does not help, check `pnpm ignored-builds`; pnpm may have auto-ignored `better-sqlite3` build scripts.
 
 ## API Overview
 
