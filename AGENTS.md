@@ -103,6 +103,7 @@ Failure:
 - Invoking `tithe` without a subcommand should print help and exit successfully.
 - DB migrations are expected to run lazily on command execution, not on help-only invocations.
 - API and CLI entrypoints auto-load workspace-root `.env` via `dotenv` if present (existing exported env vars still take precedence).
+- Default `DB_PATH` is `~/.tithe/tithe.db`; leading `~` is expanded to the current user's home directory.
 - `tithe web` launches API + PWA in foreground mode (`--mode dev` by default).
 - `tithe web --mode preview` builds `@tithe/api` and `@tithe/pwa` before launch.
 - `--api-port` overrides API `PORT`; for `tithe web`, PWA `VITE_API_BASE` is preserved by default and has its port rewritten when `--api-port` is provided (fallback: `http://<api-host>:<api-port>/v1`).

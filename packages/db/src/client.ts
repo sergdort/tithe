@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import Database from 'better-sqlite3';
@@ -16,9 +17,22 @@ export interface DbConnection {
   schema: typeof schema;
 }
 
+const expandHomeDir = (value: string): string => {
+  if (value === '~') {
+    return os.homedir();
+  }
+
+  if (value.startsWith('~/') || value.startsWith('~\\')) {
+    return path.join(os.homedir(), value.slice(2));
+  }
+
+  return value;
+};
+
 export const resolveDbPath = (dbPath?: string): string => {
-  const configured = dbPath ?? process.env.DB_PATH ?? './tithe/tithe.sqlite';
-  return path.isAbsolute(configured) ? configured : path.resolve(process.cwd(), configured);
+  const configured = dbPath ?? process.env.DB_PATH ?? '~/.tithe/tithe.db';
+  const expanded = expandHomeDir(configured);
+  return path.isAbsolute(expanded) ? expanded : path.resolve(process.cwd(), expanded);
 };
 
 export const createSqlite = (options: DbClientOptions = {}): Database.Database => {
