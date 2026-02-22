@@ -3,6 +3,9 @@ import type {
   Category,
   CommitmentInstance,
   Expense,
+  MonzoConnectStart,
+  MonzoStatus,
+  MonzoSyncSummary,
   RecurringCommitment,
   TrendPoint,
 } from './types.js';
@@ -13,14 +16,16 @@ const requestTimeoutMs = 10_000;
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+  const headers = new Headers(init?.headers);
+
+  if (init?.body !== undefined && init.body !== null && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
 
   try {
     const response = await fetch(`${baseUrl}${path}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(init?.headers ?? {}),
-      },
       ...init,
+      headers,
       signal: controller.signal,
     });
 
@@ -114,5 +119,16 @@ export const api = {
           status: string;
         }>
       >('/reports/commitment-forecast?days=30'),
+  },
+  monzo: {
+    connectStart: () =>
+      request<MonzoConnectStart>('/integrations/monzo/connect/start', {
+        method: 'POST',
+      }),
+    syncNow: () =>
+      request<MonzoSyncSummary>('/integrations/monzo/sync', {
+        method: 'POST',
+      }),
+    status: () => request<MonzoStatus>('/integrations/monzo/status'),
   },
 };

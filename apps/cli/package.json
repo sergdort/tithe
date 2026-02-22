@@ -19,6 +19,7 @@
     "@tithe/db": "workspace:*",
     "@tithe/domain": "workspace:*",
     "commander": "^13.1.0",
+    "dotenv": "^17.3.1",
     "tsx": "^4.19.3"
   }
 }

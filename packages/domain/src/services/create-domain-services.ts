@@ -35,6 +35,6 @@ export const createDomainServices = (options: DomainServiceOptions = {}): Domain
     commitments: createCommitmentsService({ runtime, approvals, audit }),
     reports: createReportsService({ runtime }),
     query: createQueryService({ runtime }),
-    monzo: createMonzoService(),
+    monzo: createMonzoService({ runtime, audit }),
   };
 };

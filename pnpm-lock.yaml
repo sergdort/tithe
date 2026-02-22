@@ -44,12 +44,12 @@ importers:
       '@tithe/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      dotenv:
+        specifier: ^17.3.1
+        version: 17.3.1
       fastify:
         specifier: ^5.2.1
         version: 5.7.4
-      zod:
-        specifier: ^3.24.2
-        version: 3.25.76
     devDependencies:
       tsx:
         specifier: ^4.19.3
@@ -69,6 +69,9 @@ importers:
       commander:
         specifier: ^13.1.0
         version: 13.1.0
+      dotenv:
+        specifier: ^17.3.1
+        version: 17.3.1
       tsx:
         specifier: ^4.19.3
         version: 4.21.0
@@ -1879,6 +1882,10 @@ packages:
 
   dom-helpers@5.2.1:
     resolution: {integrity: sha512-nRCa7CK3VTrM2NmGkIy4cbK7IZlgBE/PYMn55rrXefr5xXDP0LdtfPnblFDoVdcAfslJ7or6iqAUnx0CCGIWQA==}
+
+  dotenv@17.3.1:
+    resolution: {integrity: sha512-IO8C/dzEb6O3F9/twg6ZLXz164a2fhTnEWb95H23Dm4OuN+92NmEAlTrupP9VW6Jm3sO26tQlqyvyi4CsnY9GA==}
+    engines: {node: '>=12'}
 
   drizzle-orm@0.41.0:
     resolution: {integrity: sha512-7A4ZxhHk9gdlXmTdPj/lREtP+3u8KvZ4yEN6MYVxBzZGex5Wtdc+CWSbu7btgF6TB0N+MNPrvW7RKBbxJchs/Q==}
@@ -5021,6 +5028,8 @@ snapshots:
     dependencies:
       '@babel/runtime': 7.28.6
       csstype: 3.2.3
+
+  dotenv@17.3.1: {}
 
   drizzle-orm@0.41.0(@types/better-sqlite3@7.6.13)(better-sqlite3@11.10.0):
     optionalDependencies:

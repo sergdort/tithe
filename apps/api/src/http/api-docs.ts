@@ -10,7 +10,7 @@ export const openApiTags: OpenApiTag[] = [
   { name: 'Commitments', description: 'Recurring commitment endpoints.' },
   { name: 'Reports', description: 'Aggregated reporting endpoints.' },
   { name: 'Query', description: 'Ad-hoc filtered query endpoint.' },
-  { name: 'Monzo', description: 'Monzo integration scaffold endpoints.' },
+  { name: 'Monzo', description: 'Monzo OAuth connect, sync, and status endpoints.' },
 ];
 
 export const genericObjectSchema = {

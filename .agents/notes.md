@@ -13,3 +13,9 @@
 [0] Fastify schema validation errors reach `setErrorHandler`; if not mapped explicitly, they can be wrapped as generic 500s and break envelope contracts.
 [0] In Drizzle with better-sqlite3, transaction callbacks are synchronous; repository methods used inside transactions should execute queries explicitly with `.run()`/`.all()`/`.get()` instead of relying on awaited query builders.
 [0] In this workspace, downstream package typechecks may read dependency declarations from built `dist` outputs; after API-surface changes, build producer packages (`@tithe/domain`, `@tithe/api`) before consumer typechecks, and avoid parallelizing those steps.
+[0] In restricted/offline sessions, `pnpm install` can fail with registry DNS errors; avoid introducing new dependency links that require install, and prefer local source wiring plus package builds.
+[0] `biome format --write` may not resolve `organizeImports` lint issues; reorder imports manually (or run an imports-aware fix step) when lint still fails after formatting.
+[0] `pnpm --filter <pkg> ...` scripts may run with package-local CWD, so `.env` autoload must resolve workspace-root path explicitly instead of relying on default `process.loadEnvFile()` behavior.
+[0] `dotenv@17` can print an injection banner by default; set `quiet: true` in `dotenv.config(...)` to preserve deterministic `--json` CLI output.
+[0] Fastify rejects requests with `FST_ERR_CTP_EMPTY_JSON_BODY` when `Content-Type: application/json` is sent on empty-body POSTs; frontend should only set JSON content-type when a body exists.
+[0] Monzo can return `forbidden.insufficient_permissions` on `/accounts`; map it to `MONZO_REAUTH_REQUIRED` with clear remediation and avoid hard-coding stored OAuth scope.

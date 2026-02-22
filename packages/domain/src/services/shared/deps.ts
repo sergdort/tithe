@@ -19,6 +19,10 @@ import {
   SqliteExpensesRepository,
 } from '../../repositories/expenses.repository.js';
 import {
+  type MonzoRepository,
+  SqliteMonzoRepository,
+} from '../../repositories/monzo.repository.js';
+import {
   type QueryRepository,
   SqliteQueryRepository,
 } from '../../repositories/query.repository.js';
@@ -37,6 +41,7 @@ export interface RepositoryFactories {
   expenses: (db: RepositoryDb) => ExpensesRepository;
   commitments: (db: RepositoryDb) => CommitmentsRepository;
   reports: (db: RepositoryDb) => ReportsRepository;
+  monzo: (db: RepositoryDb) => MonzoRepository;
   query: (sqlite: SessionContext['sqlite']) => QueryRepository;
   approvals: (db: RepositoryDb) => ApprovalsRepository;
   audit: (db: RepositoryDb) => AuditRepository;
@@ -54,6 +59,7 @@ export const createDomainRuntimeDeps = (options: DomainServiceOptions = {}): Dom
     expenses: (db) => new SqliteExpensesRepository(db),
     commitments: (db) => new SqliteCommitmentsRepository(db),
     reports: (db) => new SqliteReportsRepository(db),
+    monzo: (db) => new SqliteMonzoRepository(db),
     query: (sqlite) => new SqliteQueryRepository(sqlite),
     approvals: (db) => new SqliteApprovalsRepository(db),
     audit: (db) => new SqliteAuditRepository(db),

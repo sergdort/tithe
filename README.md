@@ -11,7 +11,7 @@ Local-first personal expense tracker built for a single user on a personal machi
 - `packages/db`: SQLite + Drizzle schema and migration tooling.
 - `packages/domain`: business logic used by both API and CLI.
 - `packages/analytics`: trend summary helpers.
-- `packages/integrations-monzo`: Monzo integration contracts/stubs.
+- `packages/integrations-monzo`: Monzo API client and payload schemas.
 - `tests`: Vitest + Supertest + Playwright test suites.
 
 ## Core Architecture
@@ -56,7 +56,7 @@ Important variables:
 - `VITE_API_BASE`: PWA API target (default local: `http://127.0.0.1:8787/v1`; set Tailnet URL for mobile access)
 - `PWA_PORT`: PWA dev server port (default `5173`)
 - `PWA_PREVIEW_PORT`: PWA preview server port (default `4173`)
-- `MONZO_*`: Monzo OAuth settings (needed in Milestone 3+)
+- `MONZO_*`: Monzo OAuth settings for connect/sync (`MONZO_CLIENT_ID`, `MONZO_CLIENT_SECRET`, `MONZO_REDIRECT_URI`, optional `MONZO_SCOPE`)
 
 ### 4. Run migrations
 
@@ -132,6 +132,7 @@ hash -r
 Development note:
 
 - `dev:api` runs the API directly (`node --import tsx src/index.ts`) without automatic reload.
+- API and CLI entrypoints auto-load workspace `.env` via `dotenv` if present (without overriding already exported env vars).
 - Set `PWA_PORT` (for example `5174`) when another PWA already uses `5173`.
 
 ## API Overview
@@ -249,8 +250,32 @@ Same pattern applies to category and commitment delete.
 
 Current status in this implementation:
 
-- Endpoints and contracts are scaffolded.
-- Full OAuth token management and incremental import engine are pending Milestone 3.
+- OAuth connect flow is implemented (`tithe --json monzo connect` returns `authUrl`).
+- OAuth callback endpoint is implemented at `GET /v1/integrations/monzo/connect/callback`.
+- Manual sync is implemented (`tithe --json monzo sync`).
+- Status endpoint is implemented (`tithe --json monzo status` and `GET /v1/integrations/monzo/status`).
+- PWA Home screen includes a Monzo card with `Connect` and `Sync now` actions.
+- Initial import window is last 90 days; subsequent sync uses cursor overlap.
+- Import policy is expenses-only (`amount < 0`) and settled-only (pending skipped).
+- Imported expenses use `source=monzo_import` and `externalRef=<transaction_id>` for dedupe.
+- Monzo category mappings auto-create `expense` categories named `Monzo: <Category>`.
+- If Monzo denies permissions during callback (`forbidden.insufficient_permissions`), Tithe returns `MONZO_REAUTH_REQUIRED`.
+
+Typical local flow:
+
+```bash
+tithe --json monzo connect
+# Open returned data.authUrl in browser and approve access
+# Monzo redirects back to /v1/integrations/monzo/connect/callback
+tithe --json monzo status
+tithe --json monzo sync
+```
+
+PWA flow:
+
+- Open Home page in the PWA.
+- Use `Connect` to start OAuth (opens Monzo auth URL).
+- After OAuth callback completes, return to PWA and use `Sync now`.
 
 ## Database Backup / Restore
 
@@ -288,5 +313,5 @@ pnpm --filter @tithe/tests test:pwa
 
 - Milestone 1: monorepo, DB migrations, API/CLI/PWA shell, Biome, docs.
 - Milestone 2: category/expense/commitment features + safety gates + mobile flows.
-- Milestone 3: full Monzo OAuth + import + scheduled sync.
+- Milestone 3: Monzo OAuth + import + sync lifecycle hardening.
 - Milestone 4: analytics expansion, encrypted backups, hardening.

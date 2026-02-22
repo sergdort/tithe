@@ -105,8 +105,24 @@ export const monzoConnections = sqliteTable('monzo_connections', {
   id: text('id').primaryKey(),
   accountId: text('account_id').notNull(),
   status: text('status').notNull().default('disconnected'),
+  accessToken: text('access_token'),
+  refreshToken: text('refresh_token'),
+  tokenExpiresAt: text('token_expires_at'),
+  scope: text('scope'),
+  oauthState: text('oauth_state'),
+  oauthStateExpiresAt: text('oauth_state_expires_at'),
+  lastErrorText: text('last_error_text'),
   lastSyncAt: text('last_sync_at'),
   lastCursor: text('last_cursor'),
+  createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const monzoCategoryMappings = sqliteTable('monzo_category_mappings', {
+  monzoCategory: text('monzo_category').primaryKey(),
+  categoryId: text('category_id')
+    .notNull()
+    .references(() => categories.id, { onDelete: 'restrict' }),
   createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
 });
@@ -166,6 +182,7 @@ export type DbSchema = {
   recurringCommitments: typeof recurringCommitments;
   commitmentInstances: typeof commitmentInstances;
   monzoConnections: typeof monzoConnections;
+  monzoCategoryMappings: typeof monzoCategoryMappings;
   monzoTransactionsRaw: typeof monzoTransactionsRaw;
   syncRuns: typeof syncRuns;
   auditLog: typeof auditLog;

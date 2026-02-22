@@ -1,8 +1,10 @@
 import { runMigrations } from '@tithe/db';
 import { loadApiRuntimeConfig } from './config.js';
+import { loadWorkspaceEnv } from './load-env.js';
 import { buildServer } from './server.js';
 
 const start = async (): Promise<void> => {
+  loadWorkspaceEnv();
   const config = loadApiRuntimeConfig();
   runMigrations();
   const app = buildServer({ config });

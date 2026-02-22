@@ -4,7 +4,10 @@ import { Command } from 'commander';
 import { fail, ok } from '@tithe/contracts';
 import { runMigrations } from '@tithe/db';
 import { AppError, createDomainServices } from '@tithe/domain';
+import { loadWorkspaceEnv } from './load-env.js';
 import { runWebCommand } from './web.js';
+
+loadWorkspaceEnv();
 
 const program = new Command();
 const services = createDomainServices();
@@ -468,7 +471,7 @@ monzo.command('sync').action(async () => {
 
 monzo.command('status').action(async () => {
   const opts = program.opts<{ json: boolean }>();
-  await run(opts.json, async () => ({ status: 'not_implemented' }));
+  await run(opts.json, () => services.monzo.status());
 });
 
 program

@@ -146,4 +146,50 @@ describe('API routes', () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('validates Monzo callback query and exposes status endpoint', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tithe-api-monzo-test-'));
+    const dbPath = path.join(dir, 'api.sqlite');
+    const previousDbPath = process.env.DB_PATH;
+    process.env.DB_PATH = dbPath;
+    runMigrations(dbPath);
+
+    const app = buildServer();
+
+    try {
+      const callbackResponse = await app.inject({
+        method: 'GET',
+        url: '/v1/integrations/monzo/connect/callback',
+      });
+      const callbackBody = callbackResponse.json();
+
+      expect(callbackResponse.statusCode).toBe(400);
+      expect(callbackBody.ok).toBe(false);
+      expect(callbackBody.error.code).toBe('VALIDATION_ERROR');
+
+      const statusResponse = await app.inject({
+        method: 'GET',
+        url: '/v1/integrations/monzo/status',
+      });
+      const statusBody = statusResponse.json();
+
+      expect(statusResponse.statusCode).toBe(200);
+      expect(statusBody.ok).toBe(true);
+      expect(statusBody.data).toMatchObject({
+        mode: 'developer_api_expenses_only',
+      });
+      expect(typeof statusBody.data.status).toBe('string');
+      expect(typeof statusBody.data.configured).toBe('boolean');
+      expect(typeof statusBody.data.connected).toBe('boolean');
+      expect(typeof statusBody.data.mappingCount).toBe('number');
+    } finally {
+      await app.close();
+      if (previousDbPath === undefined) {
+        process.env.DB_PATH = undefined;
+      } else {
+        process.env.DB_PATH = previousDbPath;
+      }
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

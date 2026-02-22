@@ -91,22 +91,31 @@ Failure:
 - `tithe web [--mode dev|preview] [--api-port <port>] [--pwa-port <port>]`
 - `tithe --json web [--mode dev|preview] [--api-port <port>] [--pwa-port <port>]`
 
-### Monzo (scaffold)
+### Monzo
 
 - `tithe --json monzo connect`
 - `tithe --json monzo sync`
 - `tithe --json monzo status`
+- PWA Home exposes Monzo controls (`Connect`, `Sync now`) and shows last sync/error state.
 
 ### CLI invocation notes
 
 - Invoking `tithe` without a subcommand should print help and exit successfully.
 - DB migrations are expected to run lazily on command execution, not on help-only invocations.
+- API and CLI entrypoints auto-load workspace-root `.env` via `dotenv` if present (existing exported env vars still take precedence).
 - `tithe web` launches API + PWA in foreground mode (`--mode dev` by default).
 - `tithe web --mode preview` builds `@tithe/api` and `@tithe/pwa` before launch.
 - `--api-port` overrides API `PORT`; for `tithe web`, PWA `VITE_API_BASE` is preserved by default and has its port rewritten when `--api-port` is provided (fallback: `http://<api-host>:<api-port>/v1`).
 - `--pwa-port` sets `PWA_PORT` in `dev` mode or `PWA_PREVIEW_PORT` in `preview` mode.
 - `tithe --json web` emits one startup envelope first, then streams prefixed service logs.
 - PWA API requests use a 10-second timeout and transition to error state if backend is unreachable.
+- `tithe --json monzo connect` stores short-lived OAuth `state` and returns `authUrl`.
+- `GET /v1/integrations/monzo/connect/callback` requires query `code+state` or `error`.
+- `tithe --json monzo sync` imports settled debit Monzo transactions only (`amount < 0`, pending skipped).
+- Monzo import dedupe key is `source='monzo_import' + externalRef=transaction.id`.
+- Initial Monzo sync backfills 90 days; subsequent syncs use a 3-day overlap from `lastCursor`.
+- Monzo category mappings auto-create categories named `Monzo: <Category>` when missing.
+- Optional `MONZO_SCOPE` can be set when building Monzo auth URL; if unset, no explicit scope is requested.
 
 ### API dev runtime notes
 
@@ -207,6 +216,17 @@ For destructive actions:
 - `APPROVAL_EXPIRED`
 - `APPROVAL_PAYLOAD_MISMATCH`
 - `APPROVAL_ALREADY_USED`
+- `MONZO_NOT_CONFIGURED`
+- `MONZO_CONNECTION_REQUIRED`
+- `MONZO_REAUTH_REQUIRED`
+- `MONZO_OAUTH_DENIED`
+- `MONZO_OAUTH_STATE_MISSING`
+- `MONZO_OAUTH_STATE_INVALID`
+- `MONZO_OAUTH_STATE_EXPIRED`
+- `MONZO_ACCOUNT_NOT_FOUND`
+- `MONZO_API_ERROR`
+- `MONZO_RESPONSE_INVALID`
+- `MONZO_CATEGORY_CREATE_FAILED`
 - `INTERNAL_ERROR`
 
 ## Recommended Agent Playbooks
@@ -235,6 +255,7 @@ For destructive actions:
 
 - Capture endpoint error envelope.
 - Check env/token setup.
+- For `MONZO_REAUTH_REQUIRED` with Monzo `forbidden.insufficient_permissions`, verify the Monzo developer client has account/transaction read permissions, then reconnect.
 - Retry with exponential backoff.
 - Do not create synthetic transactions when sync fails.
 

@@ -82,3 +82,33 @@ export interface TrendPoint {
   spendBaseMinor: number;
   txCount: number;
 }
+
+export interface MonzoConnectStart {
+  status: string;
+  message: string;
+  authUrl: string;
+  stateExpiresAt: string;
+}
+
+export interface MonzoSyncSummary {
+  status: string;
+  message: string;
+  imported: number;
+  skipped: number;
+  accountId: string;
+  from: string;
+  to: string;
+  cursor: string | null;
+}
+
+export interface MonzoStatus {
+  status: string;
+  mode: string;
+  configured: boolean;
+  connected: boolean;
+  accountId: string | null;
+  lastSyncAt: string | null;
+  lastCursor: string | null;
+  mappingCount: number;
+  lastError: string | null;
+}

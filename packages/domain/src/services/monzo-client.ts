@@ -2,11 +2,9 @@ import { z } from 'zod';
 
 const DEFAULT_MONZO_AUTH_BASE = 'https://auth.monzo.com';
 const DEFAULT_MONZO_API_BASE = 'https://api.monzo.com';
-const DEFAULT_TX_LIMIT = 100;
 
-export const monzoTokenResponseSchema = z.object({
+const monzoTokenResponseSchema = z.object({
   access_token: z.string(),
-  client_id: z.string().optional(),
   expires_in: z.number().int().positive().optional(),
   refresh_token: z.string().optional(),
   scope: z.string().optional(),
@@ -14,42 +12,41 @@ export const monzoTokenResponseSchema = z.object({
   user_id: z.string().optional(),
 });
 
-export const monzoAccountSchema = z.object({
-  id: z.string(),
-  closed: z.boolean().optional(),
-  description: z.string().optional(),
-  currency: z.string().optional(),
-  type: z.string().optional(),
+const monzoAccountsResponseSchema = z.object({
+  accounts: z.array(
+    z.object({
+      id: z.string(),
+      closed: z.boolean().optional(),
+    }),
+  ),
 });
 
-export const monzoAccountsResponseSchema = z.object({
-  accounts: z.array(monzoAccountSchema),
-});
-
-export const monzoTransactionSchema = z.object({
-  id: z.string(),
-  account_id: z.string(),
-  amount: z.number().int(),
-  currency: z.string(),
-  description: z.string(),
-  category: z.string().optional(),
-  created: z.string(),
-  settled: z.string().nullable().optional(),
-  merchant: z
-    .object({
-      name: z.string().optional(),
-    })
-    .nullable()
-    .optional(),
-});
-
-export const monzoTransactionsResponseSchema = z.object({
-  transactions: z.array(monzoTransactionSchema),
+const monzoTransactionsResponseSchema = z.object({
+  transactions: z.array(
+    z.object({
+      id: z.string(),
+      account_id: z.string(),
+      amount: z.number().int(),
+      currency: z.string(),
+      description: z.string(),
+      category: z.string().optional(),
+      created: z.string(),
+      settled: z.string().nullable().optional(),
+      merchant: z
+        .object({
+          name: z.string().optional(),
+        })
+        .nullable()
+        .optional(),
+    }),
+  ),
 });
 
 export type MonzoTokenResponse = z.infer<typeof monzoTokenResponseSchema>;
-export type MonzoAccount = z.infer<typeof monzoAccountSchema>;
-export type MonzoTransaction = z.infer<typeof monzoTransactionSchema>;
+export type MonzoAccount = z.infer<typeof monzoAccountsResponseSchema.shape.accounts.element>;
+export type MonzoTransaction = z.infer<
+  typeof monzoTransactionsResponseSchema.shape.transactions.element
+>;
 
 export interface MonzoClientConfig {
   clientId: string;
@@ -58,39 +55,6 @@ export interface MonzoClientConfig {
   authBaseUrl?: string;
   apiBaseUrl?: string;
   scope?: string;
-  fetchImpl?: typeof fetch;
-}
-
-export interface BuildAuthorizeUrlInput {
-  state: string;
-}
-
-export interface ExchangeCodeInput {
-  code: string;
-}
-
-export interface RefreshTokenInput {
-  refreshToken: string;
-}
-
-export interface ListAccountsInput {
-  accessToken: string;
-}
-
-export interface ListTransactionsInput {
-  accessToken: string;
-  accountId: string;
-  since: string;
-  before?: string;
-  limit?: number;
-}
-
-export interface MonzoIntegrationClient {
-  buildAuthorizeUrl(input: BuildAuthorizeUrlInput): string;
-  exchangeCode(input: ExchangeCodeInput): Promise<MonzoTokenResponse>;
-  refreshToken(input: RefreshTokenInput): Promise<MonzoTokenResponse>;
-  listAccounts(input: ListAccountsInput): Promise<MonzoAccount[]>;
-  listTransactions(input: ListTransactionsInput): Promise<MonzoTransaction[]>;
 }
 
 export class MonzoApiError extends Error {
@@ -106,6 +70,8 @@ export class MonzoApiError extends Error {
     this.details = details;
   }
 }
+
+const trimTrailingSlash = (value: string): string => value.replace(/\/+$/, '');
 
 const parseJson = async (response: Response): Promise<unknown> => {
   try {
@@ -131,21 +97,18 @@ const parseWithSchema = <T>(
   return parsed.data;
 };
 
-const trimTrailingSlash = (value: string): string => value.replace(/\/+$/, '');
-
-const toIsoFromExpiresIn = (expiresIn?: number): string | null => {
-  if (!expiresIn || !Number.isFinite(expiresIn) || expiresIn <= 0) {
+export const tokenExpiresAtFromMonzoResponse = (payload: MonzoTokenResponse): string | null => {
+  if (!payload.expires_in || !Number.isFinite(payload.expires_in) || payload.expires_in <= 0) {
     return null;
   }
 
-  return new Date(Date.now() + expiresIn * 1000).toISOString();
+  return new Date(Date.now() + payload.expires_in * 1000).toISOString();
 };
 
-export const createMonzoIntegrationClient = (config: MonzoClientConfig): MonzoIntegrationClient => {
+export const createMonzoClient = (config: MonzoClientConfig) => {
   const authBaseUrl = trimTrailingSlash(config.authBaseUrl ?? DEFAULT_MONZO_AUTH_BASE);
   const apiBaseUrl = trimTrailingSlash(config.apiBaseUrl ?? DEFAULT_MONZO_API_BASE);
   const scope = config.scope?.trim();
-  const fetchImpl = config.fetchImpl ?? fetch;
 
   const postForm = async <T>({
     path,
@@ -158,7 +121,7 @@ export const createMonzoIntegrationClient = (config: MonzoClientConfig): MonzoIn
     schema: z.ZodType<T>;
     context: string;
   }): Promise<T> => {
-    const response = await fetchImpl(`${apiBaseUrl}${path}`, {
+    const response = await fetch(`${apiBaseUrl}${path}`, {
       method: 'POST',
       headers: {
         'content-type': 'application/x-www-form-urlencoded',
@@ -199,7 +162,7 @@ export const createMonzoIntegrationClient = (config: MonzoClientConfig): MonzoIn
       ? `${apiBaseUrl}${path}?${searchParams.toString()}`
       : `${apiBaseUrl}${path}`;
 
-    const response = await fetchImpl(url, {
+    const response = await fetch(url, {
       method: 'GET',
       headers: {
         authorization: `Bearer ${accessToken}`,
@@ -223,12 +186,12 @@ export const createMonzoIntegrationClient = (config: MonzoClientConfig): MonzoIn
   };
 
   return {
-    buildAuthorizeUrl({ state }: BuildAuthorizeUrlInput): string {
+    buildAuthorizeUrl(input: { state: string }): string {
       const query = new URLSearchParams({
         client_id: config.clientId,
         redirect_uri: config.redirectUri,
         response_type: 'code',
-        state,
+        state: input.state,
       });
       if (scope) {
         query.set('scope', scope);
@@ -236,7 +199,7 @@ export const createMonzoIntegrationClient = (config: MonzoClientConfig): MonzoIn
       return `${authBaseUrl}/?${query.toString()}`;
     },
 
-    async exchangeCode({ code }: ExchangeCodeInput): Promise<MonzoTokenResponse> {
+    async exchangeCode(input: { code: string }): Promise<MonzoTokenResponse> {
       return postForm({
         path: '/oauth2/token',
         context: 'oauth_code_exchange',
@@ -246,12 +209,12 @@ export const createMonzoIntegrationClient = (config: MonzoClientConfig): MonzoIn
           client_id: config.clientId,
           client_secret: config.clientSecret,
           redirect_uri: config.redirectUri,
-          code,
+          code: input.code,
         }),
       });
     },
 
-    async refreshToken({ refreshToken }: RefreshTokenInput): Promise<MonzoTokenResponse> {
+    async refreshToken(input: { refreshToken: string }): Promise<MonzoTokenResponse> {
       return postForm({
         path: '/oauth2/token',
         context: 'oauth_refresh',
@@ -260,15 +223,15 @@ export const createMonzoIntegrationClient = (config: MonzoClientConfig): MonzoIn
           grant_type: 'refresh_token',
           client_id: config.clientId,
           client_secret: config.clientSecret,
-          refresh_token: refreshToken,
+          refresh_token: input.refreshToken,
         }),
       });
     },
 
-    async listAccounts({ accessToken }: ListAccountsInput): Promise<MonzoAccount[]> {
+    async listAccounts(input: { accessToken: string }): Promise<MonzoAccount[]> {
       const payload = await getJson({
         path: '/accounts',
-        accessToken,
+        accessToken: input.accessToken,
         schema: monzoAccountsResponseSchema,
         context: 'accounts_list',
       });
@@ -276,25 +239,25 @@ export const createMonzoIntegrationClient = (config: MonzoClientConfig): MonzoIn
       return payload.accounts;
     },
 
-    async listTransactions({
-      accessToken,
-      accountId,
-      since,
-      before,
-      limit = DEFAULT_TX_LIMIT,
-    }: ListTransactionsInput): Promise<MonzoTransaction[]> {
+    async listTransactions(input: {
+      accessToken: string;
+      accountId: string;
+      since: string;
+      before?: string;
+      limit?: number;
+    }): Promise<MonzoTransaction[]> {
       const searchParams = new URLSearchParams({
-        account_id: accountId,
-        since,
-        limit: String(limit),
+        account_id: input.accountId,
+        since: input.since,
+        limit: String(input.limit ?? 100),
       });
-      if (before) {
-        searchParams.set('before', before);
+      if (input.before) {
+        searchParams.set('before', input.before);
       }
 
       const payload = await getJson({
         path: '/transactions',
-        accessToken,
+        accessToken: input.accessToken,
         searchParams,
         schema: monzoTransactionsResponseSchema,
         context: 'transactions_list',
@@ -304,6 +267,3 @@ export const createMonzoIntegrationClient = (config: MonzoClientConfig): MonzoIn
     },
   };
 };
-
-export const tokenExpiresAtFromMonzoResponse = (payload: MonzoTokenResponse): string | null =>
-  toIsoFromExpiresIn(payload.expires_in);
