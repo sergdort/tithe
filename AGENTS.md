@@ -112,6 +112,7 @@ Failure:
 - PWA API requests use a 10-second timeout and transition to error state if backend is unreachable.
 - `tithe --json monzo connect` stores short-lived OAuth `state` and returns `authUrl`.
 - `GET /v1/integrations/monzo/connect/callback` requires query `code+state` or `error`.
+- Monzo OAuth callback stores/refreshes tokens only and does not auto-run sync; first import happens on manual `monzo sync` / PWA `Sync now`.
 - `tithe --json monzo sync` imports settled debit Monzo transactions only (`amount < 0`, pending skipped).
 - Monzo import dedupe key is `source='monzo_import' + externalRef=transaction.id`.
 - Initial Monzo sync backfills 90 days; subsequent syncs use a 3-day overlap from `lastCursor`.

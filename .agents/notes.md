@@ -24,3 +24,6 @@
 [0] Avoid naming repo scripts `setup` in pnpm workspaces when onboarding docs also reference the built-in `pnpm setup`; use a distinct name like `setup:first-time` to prevent command ambiguity.
 [0] In React page components here, hooks (`useMemo`, etc.) must be declared before loading/error early returns; conditionally skipping a hook on the first render causes a blank route via hooks-order runtime crash (`Rendered more hooks than during the previous render`).
 [0] `DB_PATH` values using a leading `~` need explicit home-directory expansion in Node path resolution (`path.resolve` treats `~` as a literal path segment); keep README/.env defaults in sync with runtime defaults.
+[0] PWA Monzo `Sync now` uses the shared 10s request timeout and only invalidates Monzo status on success; a slow/failed sync can show a mutation error while backend status/`lastError` stays stale in the card until a later refetch.
+[0] In patch/merge helpers for nullable fields, avoid `??` when explicit `null` is a valid "clear this value" update (for example Monzo connection `lastErrorText`/OAuth state); use `value === undefined ? fallback : value`.
+[0] Do not auto-run Monzo sync from OAuth callback: Monzo app permission approval can lag token exchange, so callback-time sync often fails with temporary permission errors; connect should store tokens and require manual `Sync now`.

@@ -236,19 +236,24 @@ const mergeConnection = (
   patch: Partial<UpsertMonzoConnectionInput>,
 ): UpsertMonzoConnectionInput => {
   const now = patch.updatedAt ?? toIso(new Date());
+  const patched = <T>(value: T | undefined, fallback: T): T =>
+    value === undefined ? fallback : value;
   return {
     id: patch.id ?? existing?.id ?? MONZO_CONNECTION_ID,
     accountId: patch.accountId ?? existing?.accountId ?? '',
     status: patch.status ?? existing?.status ?? 'disconnected',
-    accessToken: patch.accessToken ?? existing?.accessToken ?? null,
-    refreshToken: patch.refreshToken ?? existing?.refreshToken ?? null,
-    tokenExpiresAt: patch.tokenExpiresAt ?? existing?.tokenExpiresAt ?? null,
-    scope: patch.scope ?? existing?.scope ?? null,
-    oauthState: patch.oauthState ?? existing?.oauthState ?? null,
-    oauthStateExpiresAt: patch.oauthStateExpiresAt ?? existing?.oauthStateExpiresAt ?? null,
-    lastErrorText: patch.lastErrorText ?? existing?.lastErrorText ?? null,
-    lastSyncAt: patch.lastSyncAt ?? existing?.lastSyncAt ?? null,
-    lastCursor: patch.lastCursor ?? existing?.lastCursor ?? null,
+    accessToken: patched(patch.accessToken, existing?.accessToken ?? null),
+    refreshToken: patched(patch.refreshToken, existing?.refreshToken ?? null),
+    tokenExpiresAt: patched(patch.tokenExpiresAt, existing?.tokenExpiresAt ?? null),
+    scope: patched(patch.scope, existing?.scope ?? null),
+    oauthState: patched(patch.oauthState, existing?.oauthState ?? null),
+    oauthStateExpiresAt: patched(
+      patch.oauthStateExpiresAt,
+      existing?.oauthStateExpiresAt ?? null,
+    ),
+    lastErrorText: patched(patch.lastErrorText, existing?.lastErrorText ?? null),
+    lastSyncAt: patched(patch.lastSyncAt, existing?.lastSyncAt ?? null),
+    lastCursor: patched(patch.lastCursor, existing?.lastCursor ?? null),
     createdAt: patch.createdAt ?? existing?.createdAt ?? now,
     updatedAt: now,
   };
@@ -760,65 +765,27 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
           }),
         ).connection;
 
+        await audit.writeAudit(
+          'monzo.callback',
+          {
+            accountId: updatedConnection.accountId || null,
+            manualSyncRequired: true,
+          },
+          context,
+        );
+
         const initialFrom = new Date(Date.now() - INITIAL_BACKFILL_DAYS * DAY_MS).toISOString();
 
-        try {
-          const syncResult = await syncInternal({
-            context,
-            forceSince: initialFrom,
-            preloadedConnection: updatedConnection,
-          });
-
-          await audit.writeAudit(
-            'monzo.callback',
-            {
-              accountId: syncResult.accountId,
-              imported: syncResult.imported,
-              skipped: syncResult.skipped,
-              from: syncResult.from,
-              to: syncResult.to,
-            },
-            context,
-          );
-
-          return {
-            status: 'connected',
-            message: 'Monzo OAuth callback completed and initial sync finished',
-            accountId: syncResult.accountId,
-            imported: syncResult.imported,
-            skipped: syncResult.skipped,
-            from: syncResult.from,
-            to: syncResult.to,
-          };
-        } catch (syncError) {
-          const appError = toAppError(syncError);
-          if (appError.code === 'forbidden.insufficient_permissions') {
-            const latest = monzoRepo().findLatestConnection().connection;
-            if (latest) {
-              monzoRepo().upsertConnection(
-                mergeConnection(latest, {
-                  id: latest.id,
-                  status: 'connected',
-                  lastErrorText: appError.message,
-                  updatedAt: toIso(new Date()),
-                }),
-              );
-            }
-
-            return {
-              status: 'connected_pending_permissions',
-              message:
-                'Monzo token acquired. Waiting for in-app approval to activate account permissions. Use Sync now to retry.',
-              accountId: '',
-              imported: 0,
-              skipped: 0,
-              from: initialFrom,
-              to: new Date().toISOString(),
-            };
-          }
-
-          throw appError;
-        }
+        return {
+          status: 'connected',
+          message:
+            'Monzo OAuth callback completed. No sync was run automatically; approve permissions in Monzo (if prompted), then use Sync now.',
+          accountId: updatedConnection.accountId,
+          imported: 0,
+          skipped: 0,
+          from: initialFrom,
+          to: nowIso,
+        };
       } catch (error) {
         throw toAppError(error);
       }

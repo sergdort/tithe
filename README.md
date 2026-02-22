@@ -288,6 +288,7 @@ Current status in this implementation:
 
 - OAuth connect flow is implemented (`tithe --json monzo connect` returns `authUrl`).
 - OAuth callback endpoint is implemented at `GET /v1/integrations/monzo/connect/callback`.
+- OAuth callback stores tokens/connection state only (no automatic sync).
 - Manual sync is implemented (`tithe --json monzo sync`).
 - Status endpoint is implemented (`tithe --json monzo status` and `GET /v1/integrations/monzo/status`).
 - PWA Home screen includes a Monzo card with `Connect` and `Sync now` actions.
@@ -295,14 +296,14 @@ Current status in this implementation:
 - Import policy is expenses-only (`amount < 0`) and settled-only (pending skipped).
 - Imported expenses use `source=monzo_import` and `externalRef=<transaction_id>` for dedupe.
 - Monzo category mappings auto-create `expense` categories named `Monzo: <Category>`.
-- If Monzo denies permissions during callback (`forbidden.insufficient_permissions`), Tithe returns `MONZO_REAUTH_REQUIRED`.
+- If Monzo denies permissions during sync/account access (`forbidden.insufficient_permissions`), Tithe surfaces a sync error and preserves the message in Monzo status `lastError` until a later successful sync clears it.
 
 Typical local flow:
 
 ```bash
 tithe --json monzo connect
 # Open returned data.authUrl in browser and approve access
-# Monzo redirects back to /v1/integrations/monzo/connect/callback
+# Monzo redirects back to /v1/integrations/monzo/connect/callback (stores tokens only; no auto-sync)
 tithe --json monzo status
 tithe --json monzo sync
 ```
@@ -311,7 +312,7 @@ PWA flow:
 
 - Open Home page in the PWA.
 - Use `Connect` to start OAuth (opens Monzo auth URL).
-- After OAuth callback completes, return to PWA and use `Sync now`.
+- After OAuth callback completes (and any in-app permission approval is done), return to PWA and use `Sync now`.
 
 ## Database Backup / Restore
 
