@@ -117,18 +117,6 @@ export const ExpensesPage = () => {
     return map;
   }, [categoriesQuery.data]);
 
-  if (categoriesQuery.isLoading || expensesQuery.isLoading) {
-    return (
-      <Stack alignItems="center" sx={{ py: 6 }}>
-        <CircularProgress />
-      </Stack>
-    );
-  }
-
-  if (categoriesQuery.isError || expensesQuery.isError) {
-    return <Alert severity="error">Unable to load expenses.</Alert>;
-  }
-
   const categories = categoriesQuery.data ?? [];
   const expenses = expensesQuery.data ?? [];
   const groupedExpenses = useMemo(() => {
@@ -181,8 +169,6 @@ export const ExpensesPage = () => {
                         const categoryMeta = categoryById.get(expense.categoryId);
                         const categoryName = categoryMeta?.name ?? expense.categoryId;
                         const categoryColor = categoryMeta?.color ?? '#607D8B';
-                        const statusLabel = expense.postedAt ? 'Settled' : 'Pending';
-                        const statusColor: 'success' | 'warning' = expense.postedAt ? 'success' : 'warning';
 
                         return (
                           <ListItem
@@ -210,13 +196,6 @@ export const ExpensesPage = () => {
                                     color: categoryColor,
                                     fontWeight: 600,
                                   }}
-                                />
-                                <Chip
-                                  size="small"
-                                  label={statusLabel}
-                                  color={statusColor}
-                                  variant="outlined"
-                                  sx={{ height: 22, fontWeight: 600 }}
                                 />
                               </Stack>
                             </Box>
