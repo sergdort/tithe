@@ -183,6 +183,7 @@ Base path: `/v1`
 - `POST /commitments/run-due`
 - `GET /commitment-instances`
 - `GET /reports/trends`
+- `GET /reports/monthly-ledger`
 - `GET /reports/category-breakdown`
 - `GET /reports/commitment-forecast`
 - `POST /query/run`
@@ -229,6 +230,7 @@ Use `--json` for deterministic AI parsing.
 ```bash
 tithe --json category list
 tithe --json expense list --limit 50
+tithe --json report monthly-ledger --month 2026-02
 tithe --json commitment run-due
 tithe web
 ```
@@ -237,6 +239,8 @@ CLI behavior note:
 
 - Running `tithe` without a subcommand prints help and exits successfully.
 - Database migrations run lazily when a command executes, so help-only invocations do not touch SQLite.
+- `tithe --json report monthly-ledger` defaults to the current local calendar month if no `--month` or `--from/--to` range is provided.
+- `tithe --json expense add/update` accept `--transfer-direction in|out` for `transfer` categories.
 
 ### Run web stack from CLI
 
@@ -292,11 +296,15 @@ Current status in this implementation:
 - Manual sync is implemented (`tithe --json monzo sync`).
 - Status endpoint is implemented (`tithe --json monzo status` and `GET /v1/integrations/monzo/status`).
 - PWA Home screen includes a Monzo card with `Connect` and `Sync now` actions.
+- PWA Home screen embeds a monthly cashflow ledger with month navigation, category breakdown lists, and both `Operating Surplus` and `Net Cash Movement` totals.
+- PWA Home includes a single `Add Transaction` flow for manual `income`, `expense`, and `transfer` entries (transfer entries require direction: `Money in` / `Money out`).
+- PWA Home pending commitments support `Mark paid`, which creates a linked actual transaction (`source=commitment`) and updates the monthly ledger.
 - `Connect` opens the Monzo OAuth flow in a separate window/tab (opened immediately on click to avoid popup blocking after async API calls).
 - Initial import window is last 90 days; subsequent sync uses cursor overlap.
 - Import policy is expenses-only (`amount < 0`) and settled-only (pending skipped).
 - Imported expenses use `source=monzo_import` and `externalRef=<transaction_id>` for dedupe.
 - Expense API responses include optional Monzo merchant display metadata (`merchantLogoUrl`, `merchantEmoji`) used by the PWA expenses list avatar.
+- Expense API responses also include `transferDirection` (`in|out|null`); transfer-category rows require it, income/expense rows return `null`.
 - PWA expenses list merchant avatars use `logo -> emoji -> initials` fallback for imported Monzo merchants.
 - Monzo sync best-effort resolves pot-transfer descriptions that are raw Monzo pot IDs (`pot_...`) into display labels like `Pot: Savings` for new imports; if pot lookup fails or the pot is missing, the raw description is kept.
 - Merchant logo/emoji metadata is stored for new Monzo imports only (no historical backfill for older imported rows).
@@ -311,6 +319,13 @@ tithe --json monzo connect
 # Monzo redirects back to /v1/integrations/monzo/connect/callback (stores tokens only; no auto-sync)
 tithe --json monzo status
 tithe --json monzo sync
+```
+
+Cashflow ledger and transfer examples:
+
+```bash
+tithe --json report monthly-ledger --month 2026-02
+tithe --json expense add --occurred-at 2026-02-10T09:00:00Z --amount-minor 100000 --currency GBP --category-id <transfer-category-id> --transfer-direction out
 ```
 
 PWA flow:

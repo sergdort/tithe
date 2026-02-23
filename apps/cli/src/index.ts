@@ -28,6 +28,34 @@ const asBoolean = (value?: string | boolean): boolean => {
   return ['1', 'true', 'yes', 'y'].includes(String(value).toLowerCase());
 };
 
+const monthPattern = /^\d{4}-\d{2}$/;
+
+const resolveLocalMonthRange = (month?: string): { from: string; to: string } => {
+  let year: number;
+  let monthIndex: number;
+
+  if (month) {
+    if (!monthPattern.test(month)) {
+      throw new AppError('VALIDATION_ERROR', '--month must match YYYY-MM', 400, { month });
+    }
+    const [yearText, monthText] = month.split('-');
+    year = Number(yearText);
+    monthIndex = Number(monthText) - 1;
+    if (!Number.isInteger(year) || !Number.isInteger(monthIndex) || monthIndex < 0 || monthIndex > 11) {
+      throw new AppError('VALIDATION_ERROR', '--month must match YYYY-MM', 400, { month });
+    }
+  } else {
+    const now = new Date();
+    year = now.getFullYear();
+    monthIndex = now.getMonth();
+  }
+
+  return {
+    from: new Date(year, monthIndex, 1, 0, 0, 0, 0).toISOString(),
+    to: new Date(year, monthIndex + 1, 1, 0, 0, 0, 0).toISOString(),
+  };
+};
+
 const emit = (payload: unknown, json: boolean): void => {
   if (json) {
     console.log(JSON.stringify(payload, null, 2));
@@ -191,6 +219,7 @@ expense
   .option('--amount-base-minor <amountBaseMinor>', 'normalized base amount')
   .option('--fx-rate <fxRate>', 'fx rate')
   .option('--source <source>', 'manual|monzo_import|commitment', 'manual')
+  .option('--transfer-direction <direction>', 'in|out')
   .option('--merchant-name <merchantName>', 'merchant name')
   .option('--note <note>', 'note')
   .option('--external-ref <externalRef>', 'external reference for idempotency')
@@ -209,6 +238,7 @@ expense
           fxRate: options.fxRate ? Number(options.fxRate) : undefined,
           categoryId: options.categoryId,
           source: options.source,
+          transferDirection: options.transferDirection,
           merchantName: options.merchantName,
           note: options.note,
           externalRef: options.externalRef,
@@ -229,6 +259,7 @@ expense
   .option('--amount-base-minor <amountBaseMinor>', 'normalized base amount')
   .option('--fx-rate <fxRate>', 'fx rate')
   .option('--category-id <id>', 'category id')
+  .option('--transfer-direction <direction>', 'in|out')
   .option('--merchant-name <merchantName>', 'merchant name')
   .option('--note <note>', 'note')
   .action(async (options) => {
@@ -245,6 +276,7 @@ expense
           amountBaseMinor: options.amountBaseMinor ? Number(options.amountBaseMinor) : undefined,
           fxRate: options.fxRate ? Number(options.fxRate) : undefined,
           categoryId: options.categoryId,
+          transferDirection: options.transferDirection,
           merchantName: options.merchantName,
           note: options.note,
         },
@@ -434,6 +466,44 @@ report
   .action(async (options) => {
     const opts = program.opts<{ json: boolean }>();
     await run(opts.json, () => getServices().reports.commitmentForecast(Number(options.days)));
+  });
+
+report
+  .command('monthly-ledger')
+  .option('--month <month>', 'month in YYYY-MM')
+  .option('--from <isoDate>', 'from date (inclusive)')
+  .option('--to <isoDate>', 'to date (exclusive)')
+  .action(async (options) => {
+    const opts = program.opts<{ json: boolean }>();
+
+    let range: { from: string; to: string };
+    try {
+      if (options.month && (options.from || options.to)) {
+        emit(fail('VALIDATION_ERROR', 'Use either --month or --from/--to, not both'), true);
+        process.exitCode = 1;
+        return;
+      }
+
+      if (options.from || options.to) {
+        if (!options.from || !options.to) {
+          emit(fail('VALIDATION_ERROR', 'Pass both --from and --to'), true);
+          process.exitCode = 1;
+          return;
+        }
+        range = { from: options.from, to: options.to };
+      } else {
+        range = resolveLocalMonthRange(options.month);
+      }
+    } catch (error) {
+      if (error instanceof AppError) {
+        emit(fail(error.code, error.message, error.details), true);
+        process.exitCode = 1;
+        return;
+      }
+      throw error;
+    }
+
+    await run(opts.json, () => getServices().reports.monthlyLedger(range));
   });
 
 program

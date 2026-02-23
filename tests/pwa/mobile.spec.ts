@@ -129,3 +129,196 @@ test('expenses list avatar prefers logo, then emoji, then initials', async ({ pa
   );
   await expect(initialsRow.locator('[data-testid="expense-avatar-exp-initials"]')).toContainText('MI');
 });
+
+test('home shows monthly ledger and transfer direction in add transaction flow', async ({ page }) => {
+  await page.route('**/v1/reports/monthly-ledger*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        data: {
+          month: '2026-02',
+          range: {
+            from: '2026-02-01T00:00:00.000Z',
+            to: '2026-03-01T00:00:00.000Z',
+          },
+          totals: {
+            incomeMinor: 300000,
+            expenseMinor: 125000,
+            transferInMinor: 5000,
+            transferOutMinor: 20000,
+            operatingSurplusMinor: 175000,
+            netCashMovementMinor: 160000,
+            txCount: 6,
+          },
+          sections: {
+            income: [
+              {
+                categoryId: '22222222-2222-2222-2222-222222222222',
+                categoryName: 'Salary',
+                totalMinor: 300000,
+                txCount: 1,
+              },
+            ],
+            expense: [
+              {
+                categoryId: '11111111-1111-1111-1111-111111111111',
+                categoryName: 'Sports',
+                totalMinor: 125000,
+                txCount: 2,
+              },
+            ],
+            transfer: [
+              {
+                categoryId: '33333333-3333-3333-3333-333333333333',
+                categoryName: 'ISA',
+                direction: 'out',
+                totalMinor: 20000,
+                txCount: 1,
+              },
+            ],
+          },
+        },
+        meta: {},
+      }),
+    });
+  });
+
+  await page.route('**/v1/commitment-instances?status=pending', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, data: [], meta: {} }),
+    });
+  });
+
+  await page.route('**/v1/commitments', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, data: [], meta: {} }),
+    });
+  });
+
+  await page.route('**/v1/categories', async (route) => {
+    if (route.request().method() === 'POST') {
+      await route.continue();
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        data: [
+          {
+            id: '11111111-1111-1111-1111-111111111111',
+            name: 'Sports',
+            kind: 'expense',
+            icon: 'sports_soccer',
+            color: '#2E7D32',
+            isSystem: false,
+            archivedAt: null,
+            createdAt: '2026-02-01T00:00:00.000Z',
+            updatedAt: '2026-02-01T00:00:00.000Z',
+          },
+          {
+            id: '22222222-2222-2222-2222-222222222222',
+            name: 'Football reimbursements',
+            kind: 'income',
+            icon: 'payments',
+            color: '#2E7D32',
+            isSystem: false,
+            archivedAt: null,
+            createdAt: '2026-02-01T00:00:00.000Z',
+            updatedAt: '2026-02-01T00:00:00.000Z',
+          },
+          {
+            id: '33333333-3333-3333-3333-333333333333',
+            name: 'ISA',
+            kind: 'transfer',
+            icon: 'savings',
+            color: '#1976D2',
+            isSystem: false,
+            archivedAt: null,
+            createdAt: '2026-02-01T00:00:00.000Z',
+            updatedAt: '2026-02-01T00:00:00.000Z',
+          },
+        ],
+        meta: {},
+      }),
+    });
+  });
+
+  await page.route('**/v1/integrations/monzo/status', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        data: {
+          status: 'disconnected',
+          mode: 'developer_api_expenses_only',
+          configured: false,
+          connected: false,
+          accountId: null,
+          lastSyncAt: null,
+          lastCursor: null,
+          mappingCount: 0,
+          lastError: null,
+        },
+        meta: {},
+      }),
+    });
+  });
+
+  await page.route('**/v1/expenses', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        data: {
+          id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+          occurredAt: '2026-02-10T12:00:00.000Z',
+          postedAt: null,
+          money: { amountMinor: 1000, currency: 'GBP' },
+          categoryId: '33333333-3333-3333-3333-333333333333',
+          source: 'manual',
+          transferDirection: 'out',
+          merchantName: 'ISA top-up',
+          merchantLogoUrl: null,
+          merchantEmoji: null,
+          note: null,
+          externalRef: null,
+          commitmentInstanceId: null,
+          createdAt: '2026-02-10T12:00:00.000Z',
+          updatedAt: '2026-02-10T12:00:00.000Z',
+        },
+        meta: {},
+      }),
+    });
+  });
+
+  await page.goto('/');
+
+  await expect(page.getByText('Monthly cashflow ledger (actual transactions only)')).toBeVisible();
+  await expect(page.getByText('Operating Surplus')).toBeVisible();
+  await expect(page.getByText('Net Cash Movement')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Add' }).click();
+  await page.getByLabel('Type').click();
+  await page.getByRole('option', { name: 'Transfer' }).click();
+
+  await expect(page.getByLabel('Direction')).toBeVisible();
+});

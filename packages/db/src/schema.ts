@@ -85,6 +85,7 @@ export const expenses = sqliteTable(
       .notNull()
       .references(() => categories.id, { onDelete: 'restrict' }),
     source: text('source').notNull().default('manual'),
+    transferDirection: text('transfer_direction'),
     merchantName: text('merchant_name'),
     merchantLogoUrl: text('merchant_logo_url'),
     merchantEmoji: text('merchant_emoji'),

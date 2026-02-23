@@ -24,6 +24,7 @@ export const categorySchema = z.object({
 });
 
 export const expenseSourceSchema = z.enum(['manual', 'monzo_import', 'commitment']);
+export const transferDirectionSchema = z.enum(['in', 'out']);
 
 export const expenseSchema = z.object({
   id: z.string().uuid(),
@@ -32,6 +33,7 @@ export const expenseSchema = z.object({
   money: moneySchema,
   categoryId: z.string().uuid(),
   source: expenseSourceSchema,
+  transferDirection: transferDirectionSchema.nullable(),
   merchantName: z.string().nullable(),
   merchantLogoUrl: z.string().nullable(),
   merchantEmoji: z.string().nullable(),
@@ -76,6 +78,39 @@ export const trendPointSchema = z.object({
   txCount: z.number().int().nonnegative(),
 });
 
+export const monthlyLedgerCategoryRowSchema = z.object({
+  categoryId: z.string().uuid(),
+  categoryName: z.string(),
+  totalMinor: z.number().int(),
+  txCount: z.number().int().nonnegative(),
+});
+
+export const monthlyLedgerTransferRowSchema = monthlyLedgerCategoryRowSchema.extend({
+  direction: transferDirectionSchema,
+});
+
+export const monthlyLedgerSchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/),
+  range: z.object({
+    from: isoDateTimeSchema,
+    to: isoDateTimeSchema,
+  }),
+  totals: z.object({
+    incomeMinor: z.number().int(),
+    expenseMinor: z.number().int(),
+    transferInMinor: z.number().int(),
+    transferOutMinor: z.number().int(),
+    operatingSurplusMinor: z.number().int(),
+    netCashMovementMinor: z.number().int(),
+    txCount: z.number().int().nonnegative(),
+  }),
+  sections: z.object({
+    income: z.array(monthlyLedgerCategoryRowSchema),
+    expense: z.array(monthlyLedgerCategoryRowSchema),
+    transfer: z.array(monthlyLedgerTransferRowSchema),
+  }),
+});
+
 export const queryFilterSchema = z.object({
   field: z.string(),
   op: z.enum(['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'in', 'like']),
@@ -114,6 +149,7 @@ export type Expense = z.infer<typeof expenseSchema>;
 export type RecurringCommitment = z.infer<typeof recurringCommitmentSchema>;
 export type CommitmentInstance = z.infer<typeof commitmentInstanceSchema>;
 export type TrendPoint = z.infer<typeof trendPointSchema>;
+export type MonthlyLedger = z.infer<typeof monthlyLedgerSchema>;
 export type QuerySpec = z.infer<typeof querySpecSchema>;
 
 export interface SuccessEnvelope<T> {

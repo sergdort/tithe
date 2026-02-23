@@ -33,6 +33,15 @@ interface ExpenseServiceDeps {
   audit: AuditService;
 }
 
+const normalizeTransferDirection = (
+  value: 'in' | 'out' | null | undefined,
+): 'in' | 'out' | null => {
+  if (value === 'in' || value === 'out') {
+    return value;
+  }
+  return null;
+};
+
 export const createExpensesService = ({
   runtime,
   approvals,
@@ -65,6 +74,7 @@ export const createExpensesService = ({
 
   async create(input: CreateExpenseInput, context: ActorContext = DEFAULT_ACTOR) {
     const now = toIso(new Date());
+    const transferDirection = normalizeTransferDirection(input.transferDirection);
     const payload = {
       id: crypto.randomUUID(),
       occurredAt: assertDate(input.occurredAt, 'occurredAt'),
@@ -75,6 +85,7 @@ export const createExpensesService = ({
       fxRate: input.fxRate,
       categoryId: input.categoryId,
       source: input.source ?? 'manual',
+      transferDirection,
       merchantName: input.merchantName ?? null,
       merchantLogoUrl: null,
       merchantEmoji: null,
@@ -96,6 +107,21 @@ export const createExpensesService = ({
           categoryId: payload.categoryId,
         },
       );
+    }
+
+    if (category.kind === 'transfer' && !transferDirection) {
+      throw new AppError(
+        'VALIDATION_ERROR',
+        'transferDirection is required when category kind is transfer',
+        400,
+        {
+          categoryId: payload.categoryId,
+        },
+      );
+    }
+
+    if (category.kind !== 'transfer') {
+      payload.transferDirection = null;
     }
 
     let createdExpense: ExpenseDto;
@@ -135,6 +161,35 @@ export const createExpensesService = ({
       throw new AppError('EXPENSE_NOT_FOUND', `Expense ${id} does not exist`, 404);
     }
 
+    const targetCategoryId = input.categoryId ?? existing.categoryId;
+    const category = categoriesRepo().findById({ id: targetCategoryId }).category;
+    if (!category) {
+      throw new AppError(
+        'CATEGORY_NOT_FOUND',
+        'Cannot update expense with unknown category',
+        404,
+        {
+          categoryId: targetCategoryId,
+        },
+      );
+    }
+
+    const requestedTransferDirection =
+      input.transferDirection === undefined
+        ? existing.transferDirection
+        : normalizeTransferDirection(input.transferDirection);
+
+    if (category.kind === 'transfer' && !requestedTransferDirection) {
+      throw new AppError(
+        'VALIDATION_ERROR',
+        'transferDirection is required when category kind is transfer',
+        400,
+        {
+          categoryId: targetCategoryId,
+        },
+      );
+    }
+
     const patch = {
       occurredAt: input.occurredAt
         ? assertDate(input.occurredAt, 'occurredAt')
@@ -149,7 +204,8 @@ export const createExpensesService = ({
       currency: input.currency ? normalizeCurrency(input.currency) : existing.money.currency,
       amountBaseMinor: input.amountBaseMinor ?? existing.money.amountBaseMinor,
       fxRate: input.fxRate ?? existing.money.fxRate,
-      categoryId: input.categoryId ?? existing.categoryId,
+      categoryId: targetCategoryId,
+      transferDirection: category.kind === 'transfer' ? requestedTransferDirection : null,
       merchantName: input.merchantName ?? existing.merchantName,
       merchantLogoUrl: existing.merchantLogoUrl,
       merchantEmoji: existing.merchantEmoji,

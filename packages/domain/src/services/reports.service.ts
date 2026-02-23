@@ -1,8 +1,10 @@
 import type {
   CategoryBreakdownDto,
   CommitmentForecastDto,
+  MonthlyLedgerDto,
   MonthlyTrendDto,
 } from '../repositories/reports.repository.js';
+import { AppError } from '../errors.js';
 import { SqliteReportsRepository } from '../repositories/reports.repository.js';
 import { assertDate } from './shared/common.js';
 import type { DomainDbRuntime } from './shared/domain-db.js';
@@ -11,6 +13,7 @@ export interface ReportsService {
   monthlyTrends: (months?: number) => Promise<MonthlyTrendDto[]>;
   categoryBreakdown: (from?: string, to?: string) => Promise<CategoryBreakdownDto[]>;
   commitmentForecast: (days?: number) => Promise<CommitmentForecastDto[]>;
+  monthlyLedger: (input: { from: string; to: string }) => Promise<MonthlyLedgerDto>;
 }
 
 interface ReportsServiceDeps {
@@ -40,5 +43,16 @@ export const createReportsService = ({ runtime }: ReportsServiceDeps): ReportsSe
       from: now.toISOString(),
       to,
     }).rows;
+  },
+
+  async monthlyLedger(input: { from: string; to: string }) {
+    const from = assertDate(input.from, 'from');
+    const to = assertDate(input.to, 'to');
+
+    if (new Date(from).getTime() >= new Date(to).getTime()) {
+      throw new AppError('VALIDATION_ERROR', 'from must be before to', 400, { from, to });
+    }
+
+    return new SqliteReportsRepository(runtime.db).monthlyLedger({ from, to }).ledger;
   },
 });

@@ -49,6 +49,118 @@ describe('Domain services', () => {
     }
   });
 
+  it('builds monthly ledger totals and enforces transfer direction for transfer categories', async () => {
+    const { services, dir } = setupService();
+
+    try {
+      const incomeCategory = await services.categories.create(
+        { name: 'Salary', kind: 'income' },
+        { actor: 'test', channel: 'system' },
+      );
+      const expenseCategory = await services.categories.create(
+        { name: 'Sports', kind: 'expense' },
+        { actor: 'test', channel: 'system' },
+      );
+      const transferCategory = await services.categories.create(
+        { name: 'ISA', kind: 'transfer' },
+        { actor: 'test', channel: 'system' },
+      );
+
+      await services.expenses.create(
+        {
+          occurredAt: '2026-02-01T09:00:00.000Z',
+          amountMinor: 250000,
+          currency: 'GBP',
+          categoryId: incomeCategory.id,
+          merchantName: 'Salary',
+        },
+        { actor: 'test', channel: 'system' },
+      );
+      await services.expenses.create(
+        {
+          occurredAt: '2026-02-03T09:00:00.000Z',
+          amountMinor: 10000,
+          currency: 'GBP',
+          categoryId: expenseCategory.id,
+          merchantName: 'Pitch booking',
+        },
+        { actor: 'test', channel: 'system' },
+      );
+      await services.expenses.create(
+        {
+          occurredAt: '2026-02-04T09:00:00.000Z',
+          amountMinor: 4500,
+          currency: 'GBP',
+          categoryId: incomeCategory.id,
+          merchantName: 'Football reimbursements',
+        },
+        { actor: 'test', channel: 'system' },
+      );
+      await services.expenses.create(
+        {
+          occurredAt: '2026-02-10T09:00:00.000Z',
+          amountMinor: 50000,
+          currency: 'GBP',
+          categoryId: transferCategory.id,
+          transferDirection: 'out',
+          merchantName: 'ISA contribution',
+        },
+        { actor: 'test', channel: 'system' },
+      );
+      await services.expenses.create(
+        {
+          occurredAt: '2026-02-12T09:00:00.000Z',
+          amountMinor: 12500,
+          currency: 'GBP',
+          categoryId: transferCategory.id,
+          transferDirection: 'in',
+          merchantName: 'ISA withdrawal',
+        },
+        { actor: 'test', channel: 'system' },
+      );
+
+      const ledger = await services.reports.monthlyLedger({
+        from: '2026-02-01T00:00:00.000Z',
+        to: '2026-03-01T00:00:00.000Z',
+      });
+
+      expect(ledger.month).toBe('2026-02');
+      expect(ledger.totals).toMatchObject({
+        incomeMinor: 254500,
+        expenseMinor: 10000,
+        transferInMinor: 12500,
+        transferOutMinor: 50000,
+        operatingSurplusMinor: 244500,
+        netCashMovementMinor: 207000,
+        txCount: 5,
+      });
+      expect(ledger.sections.transfer).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ categoryName: 'ISA', direction: 'out', totalMinor: 50000 }),
+          expect.objectContaining({ categoryName: 'ISA', direction: 'in', totalMinor: 12500 }),
+        ]),
+      );
+
+      await expect(
+        services.expenses.create(
+          {
+            occurredAt: '2026-02-15T09:00:00.000Z',
+            amountMinor: 2000,
+            currency: 'GBP',
+            categoryId: transferCategory.id,
+            merchantName: 'Missing direction',
+          },
+          { actor: 'test', channel: 'system' },
+        ),
+      ).rejects.toMatchObject({
+        code: 'VALIDATION_ERROR',
+      });
+    } finally {
+      closeServices(services);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('requires approval token for destructive deletes', async () => {
     const { services, dir } = setupService();
 

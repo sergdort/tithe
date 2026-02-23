@@ -64,7 +64,7 @@ Failure:
 ### Expenses
 
 - `tithe --json expense list [--from <iso>] [--to <iso>] [--category-id <id>] [--limit <n>]`
-- `tithe --json expense add --occurred-at <iso> --amount-minor <int> --currency GBP --category-id <id>`
+- `tithe --json expense add --occurred-at <iso> --amount-minor <int> --currency GBP --category-id <id> [--transfer-direction in|out]`
 - `tithe --json expense update --id <id> [fields...]`
 - `tithe --json expense delete --id <id> --dry-run`
 - `tithe --json expense delete --id <id> --approve <operationId>`
@@ -82,6 +82,7 @@ Failure:
 ### Reports and query
 
 - `tithe --json report trends [--months <n>]`
+- `tithe --json report monthly-ledger [--month <YYYY-MM>] [--from <iso>] [--to <iso>]`
 - `tithe --json report category-breakdown [--from <iso>] [--to <iso>]`
 - `tithe --json report commitment-forecast [--days <n>]`
 - `tithe --json query --entity expenses --filter '{"field":"amount_minor","op":"gt","value":1000}'`
@@ -118,11 +119,16 @@ Failure:
 - `tithe --json monzo sync` imports settled debit Monzo transactions only (`amount < 0`, pending skipped).
 - Monzo import dedupe key is `source='monzo_import' + externalRef=transaction.id`.
 - Expense API responses include optional Monzo merchant display metadata (`merchantLogoUrl`, `merchantEmoji`) for UI avatar rendering.
+- Expense API responses include `transferDirection` (`in|out|null`); it is required for `transfer` categories and `null` for non-transfer rows.
 - Monzo sync best-effort resolves pot-transfer descriptions that contain a Monzo pot ID (`pot_...`) to a display label `Pot: <Pot Name>` for new imports; if pot lookup fails or no pot matches, the raw description is kept.
 - Monzo merchant logo/emoji metadata is persisted for new imports only; historical imports are not backfilled automatically.
 - Initial Monzo sync backfills 90 days; subsequent syncs use a 3-day overlap from `lastCursor`.
 - Monzo category mappings auto-create categories named `Monzo: <Category>` when missing.
 - Optional `MONZO_SCOPE` can be set when building Monzo auth URL; if unset, no explicit scope is requested.
+- `GET /v1/reports/monthly-ledger` returns a month-range cashflow ledger with separate `income`, `expense`, and `transfer` sections plus totals for `operatingSurplusMinor` and `netCashMovementMinor`.
+- PWA Home embeds a full monthly cashflow ledger (month navigation, income/expense/transfer totals, category breakdown lists) and replaces the previous spend-only snapshot card.
+- PWA Home `Add Transaction` is a single manual entry flow for `income|expense|transfer`; `transfer` requires a direction (`Money in` / `Money out`).
+- PWA Home pending commitments support a quick `Mark paid` action that creates a linked actual transaction (`source='commitment'`) and updates the ledger.
 
 ### API dev runtime notes
 

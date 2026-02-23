@@ -19,6 +19,7 @@ export interface CreateExpenseInput {
   fxRate?: number;
   categoryId: string;
   source?: 'manual' | 'monzo_import' | 'commitment';
+  transferDirection?: 'in' | 'out' | null;
   merchantName?: string | null;
   note?: string | null;
   externalRef?: string | null;
@@ -33,6 +34,7 @@ export interface UpdateExpenseInput {
   amountBaseMinor?: number;
   fxRate?: number;
   categoryId?: string;
+  transferDirection?: 'in' | 'out' | null;
   merchantName?: string | null;
   note?: string | null;
 }

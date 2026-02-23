@@ -677,6 +677,7 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
                 fxRate: null,
                 categoryId: mapping.categoryId,
                 source: 'monzo_import',
+                transferDirection: null,
                 merchantName: resolveImportedMerchantName(transaction, potNameById),
                 merchantLogoUrl:
                   typeof transaction.merchant === 'object' && transaction.merchant !== null

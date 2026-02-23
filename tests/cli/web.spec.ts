@@ -54,4 +54,32 @@ describe('CLI web command', () => {
     expect(payload.ok).toBe(false);
     expect(payload.error.code).toBe('VALIDATION_ERROR');
   });
+
+  it('validates report monthly-ledger month format before running DB work', () => {
+    const result = runCli(['--json', 'report', 'monthly-ledger', '--month', '2026/02']);
+    const payload = JSON.parse(result.stdout);
+
+    expect(result.status).toBe(1);
+    expect(payload.ok).toBe(false);
+    expect(payload.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('rejects mixing monthly-ledger month with explicit range', () => {
+    const result = runCli([
+      '--json',
+      'report',
+      'monthly-ledger',
+      '--month',
+      '2026-02',
+      '--from',
+      '2026-02-01T00:00:00.000Z',
+      '--to',
+      '2026-03-01T00:00:00.000Z',
+    ]);
+    const payload = JSON.parse(result.stdout);
+
+    expect(result.status).toBe(1);
+    expect(payload.ok).toBe(false);
+    expect(payload.error.code).toBe('VALIDATION_ERROR');
+  });
 });

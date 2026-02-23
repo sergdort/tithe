@@ -1,4 +1,5 @@
 import { ok } from '@tithe/contracts';
+import { AppError } from '@tithe/domain';
 import type { FastifyInstance } from 'fastify';
 
 interface TrendsQuery {
@@ -14,11 +15,138 @@ interface CommitmentForecastQuery {
   days?: number;
 }
 
+interface MonthlyLedgerQuery {
+  from?: string;
+  to?: string;
+  month?: string;
+}
+
+const monthPattern = /^\d{4}-\d{2}$/;
+
+const resolveMonthRange = (month: string): { from: string; to: string } => {
+  if (!monthPattern.test(month)) {
+    throw new AppError('VALIDATION_ERROR', 'month must match YYYY-MM', 400, { month });
+  }
+
+  const [yearText, monthText] = month.split('-');
+  const year = Number(yearText);
+  const monthIndex = Number(monthText) - 1;
+  if (!Number.isInteger(year) || !Number.isInteger(monthIndex) || monthIndex < 0 || monthIndex > 11) {
+    throw new AppError('VALIDATION_ERROR', 'month must match YYYY-MM', 400, { month });
+  }
+
+  return {
+    from: new Date(Date.UTC(year, monthIndex, 1, 0, 0, 0, 0)).toISOString(),
+    to: new Date(Date.UTC(year, monthIndex + 1, 1, 0, 0, 0, 0)).toISOString(),
+  };
+};
+
+const resolveMonthlyLedgerRange = (query: MonthlyLedgerQuery): { from: string; to: string } => {
+  const hasMonth = typeof query.month === 'string' && query.month.length > 0;
+  const hasFrom = typeof query.from === 'string' && query.from.length > 0;
+  const hasTo = typeof query.to === 'string' && query.to.length > 0;
+
+  if (hasMonth) {
+    if (hasFrom || hasTo) {
+      throw new AppError('VALIDATION_ERROR', 'Use either month or from/to, not both', 400);
+    }
+    return resolveMonthRange(query.month as string);
+  }
+
+  if (hasFrom && hasTo) {
+    return { from: query.from as string, to: query.to as string };
+  }
+
+  throw new AppError('VALIDATION_ERROR', 'Pass month or both from and to', 400);
+};
+
 export const registerReportRoutes = (app: FastifyInstance): void => {
   const { services, docs } = app.tithe;
   const reportsService = services.reports;
-  const { defaultErrorResponses, genericObjectSchema, isoDateTimeSchema, successEnvelopeSchema } =
-    docs;
+  const {
+    defaultErrorResponses,
+    genericObjectSchema,
+    isoDateTimeSchema,
+    successEnvelopeSchema,
+    uuidSchema,
+  } = docs;
+  const monthlyLedgerCategoryRowSchema = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['categoryId', 'categoryName', 'totalMinor', 'txCount'],
+    properties: {
+      categoryId: uuidSchema,
+      categoryName: { type: 'string' },
+      totalMinor: { type: 'integer' },
+      txCount: { type: 'integer', minimum: 0 },
+    },
+  } as const;
+  const monthlyLedgerTransferRowSchema = {
+    ...monthlyLedgerCategoryRowSchema,
+    required: [...monthlyLedgerCategoryRowSchema.required, 'direction'],
+    properties: {
+      ...monthlyLedgerCategoryRowSchema.properties,
+      direction: { type: 'string', enum: ['in', 'out'] },
+    },
+  } as const;
+  const monthlyLedgerResponseSchema = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['month', 'range', 'totals', 'sections'],
+    properties: {
+      month: { type: 'string', pattern: '^\\d{4}-\\d{2}$' },
+      range: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['from', 'to'],
+        properties: {
+          from: isoDateTimeSchema,
+          to: isoDateTimeSchema,
+        },
+      },
+      totals: {
+        type: 'object',
+        additionalProperties: false,
+        required: [
+          'incomeMinor',
+          'expenseMinor',
+          'transferInMinor',
+          'transferOutMinor',
+          'operatingSurplusMinor',
+          'netCashMovementMinor',
+          'txCount',
+        ],
+        properties: {
+          incomeMinor: { type: 'integer' },
+          expenseMinor: { type: 'integer' },
+          transferInMinor: { type: 'integer' },
+          transferOutMinor: { type: 'integer' },
+          operatingSurplusMinor: { type: 'integer' },
+          netCashMovementMinor: { type: 'integer' },
+          txCount: { type: 'integer', minimum: 0 },
+        },
+      },
+      sections: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['income', 'expense', 'transfer'],
+        properties: {
+          income: {
+            type: 'array',
+            items: monthlyLedgerCategoryRowSchema,
+          },
+          expense: {
+            type: 'array',
+            items: monthlyLedgerCategoryRowSchema,
+          },
+          transfer: {
+            type: 'array',
+            items: monthlyLedgerTransferRowSchema,
+          },
+        },
+      },
+    },
+  } as const;
 
   app.get<{ Querystring: TrendsQuery }>(
     '/trends',
@@ -103,5 +231,32 @@ export const registerReportRoutes = (app: FastifyInstance): void => {
       },
     },
     async (request) => ok(await reportsService.commitmentForecast(request.query.days ?? 30)),
+  );
+
+  app.get<{ Querystring: MonthlyLedgerQuery }>(
+    '/monthly-ledger',
+    {
+      schema: {
+        tags: ['Reports'],
+        summary: 'Monthly cashflow ledger report',
+        querystring: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            from: isoDateTimeSchema,
+            to: isoDateTimeSchema,
+            month: { type: 'string', pattern: '^\\d{4}-\\d{2}$' },
+          },
+        },
+        response: {
+          200: successEnvelopeSchema(monthlyLedgerResponseSchema),
+          ...defaultErrorResponses,
+        },
+      },
+    },
+    async (request) => {
+      const { from, to } = resolveMonthlyLedgerRange(request.query);
+      return ok(await reportsService.monthlyLedger({ from, to }));
+    },
   );
 };

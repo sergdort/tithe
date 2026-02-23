@@ -24,6 +24,8 @@ export interface Money {
   fxRate?: number;
 }
 
+export type TransferDirection = 'in' | 'out';
+
 export interface Category {
   id: string;
   name: string;
@@ -43,6 +45,7 @@ export interface Expense {
   money: Money;
   categoryId: string;
   source: 'manual' | 'monzo_import' | 'commitment';
+  transferDirection: TransferDirection | null;
   merchantName: string | null;
   merchantLogoUrl: string | null;
   merchantEmoji: string | null;
@@ -83,6 +86,39 @@ export interface TrendPoint {
   spendMinor: number;
   spendBaseMinor: number;
   txCount: number;
+}
+
+export interface MonthlyLedgerCategoryRow {
+  categoryId: string;
+  categoryName: string;
+  totalMinor: number;
+  txCount: number;
+}
+
+export interface MonthlyLedgerTransferRow extends MonthlyLedgerCategoryRow {
+  direction: TransferDirection;
+}
+
+export interface MonthlyLedger {
+  month: string;
+  range: {
+    from: string;
+    to: string;
+  };
+  totals: {
+    incomeMinor: number;
+    expenseMinor: number;
+    transferInMinor: number;
+    transferOutMinor: number;
+    operatingSurplusMinor: number;
+    netCashMovementMinor: number;
+    txCount: number;
+  };
+  sections: {
+    income: MonthlyLedgerCategoryRow[];
+    expense: MonthlyLedgerCategoryRow[];
+    transfer: MonthlyLedgerTransferRow[];
+  };
 }
 
 export interface MonzoConnectStart {

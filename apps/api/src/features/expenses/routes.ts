@@ -3,6 +3,7 @@ import { AppError } from '@tithe/domain';
 import type { FastifyInstance } from 'fastify';
 
 type ExpenseSource = 'manual' | 'monzo_import' | 'commitment';
+type TransferDirection = 'in' | 'out';
 
 interface ExpenseParams {
   id: string;
@@ -24,6 +25,7 @@ interface CreateExpenseBody {
   fxRate?: number;
   categoryId: string;
   source?: ExpenseSource;
+  transferDirection?: TransferDirection | null;
   merchantName?: string | null;
   note?: string | null;
   externalRef?: string | null;
@@ -38,6 +40,7 @@ interface UpdateExpenseBody {
   amountBaseMinor?: number;
   fxRate?: number;
   categoryId?: string;
+  transferDirection?: TransferDirection | null;
   merchantName?: string | null;
   note?: string | null;
 }
@@ -82,6 +85,7 @@ export const registerExpenseRoutes = (app: FastifyInstance): void => {
       'money',
       'categoryId',
       'source',
+      'transferDirection',
       'merchantName',
       'merchantLogoUrl',
       'merchantEmoji',
@@ -100,6 +104,9 @@ export const registerExpenseRoutes = (app: FastifyInstance): void => {
       money: moneyResponseSchema,
       categoryId: uuidSchema,
       source: { type: 'string', enum: ['manual', 'monzo_import', 'commitment'] },
+      transferDirection: {
+        oneOf: [{ type: 'string', enum: ['in', 'out'] }, { type: 'null' }],
+      },
       merchantName: nullableStringSchema,
       merchantLogoUrl: nullableStringSchema,
       merchantEmoji: nullableStringSchema,
@@ -182,6 +189,9 @@ export const registerExpenseRoutes = (app: FastifyInstance): void => {
             fxRate: { type: 'number', exclusiveMinimum: 0 },
             categoryId: uuidSchema,
             source: { type: 'string', enum: ['manual', 'monzo_import', 'commitment'] },
+            transferDirection: {
+              oneOf: [{ type: 'string', enum: ['in', 'out'] }, { type: 'null' }],
+            },
             merchantName: {
               oneOf: [{ type: 'string' }, { type: 'null' }],
             },
@@ -225,6 +235,9 @@ export const registerExpenseRoutes = (app: FastifyInstance): void => {
             amountBaseMinor: { type: 'integer' },
             fxRate: { type: 'number', exclusiveMinimum: 0 },
             categoryId: uuidSchema,
+            transferDirection: {
+              oneOf: [{ type: 'string', enum: ['in', 'out'] }, { type: 'null' }],
+            },
             merchantName: {
               oneOf: [{ type: 'string' }, { type: 'null' }],
             },

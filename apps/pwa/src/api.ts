@@ -3,6 +3,7 @@ import type {
   Category,
   CommitmentInstance,
   Expense,
+  MonthlyLedger,
   MonzoConnectStart,
   MonzoStatus,
   MonzoSyncSummary,
@@ -65,11 +66,16 @@ export const api = {
     list: () => request<Expense[]>('/expenses?limit=100'),
     create: (body: {
       occurredAt: string;
+      postedAt?: string | null;
       amountMinor: number;
       currency: string;
       categoryId: string;
+      source?: 'manual' | 'monzo_import' | 'commitment';
+      transferDirection?: 'in' | 'out' | null;
       merchantName?: string;
       note?: string;
+      externalRef?: string | null;
+      commitmentInstanceId?: string | null;
     }) =>
       request<Expense>('/expenses', {
         method: 'POST',
@@ -103,6 +109,10 @@ export const api = {
   },
   reports: {
     trends: () => request<TrendPoint[]>('/reports/trends?months=6'),
+    monthlyLedger: (input: { from: string; to: string }) =>
+      request<MonthlyLedger>(
+        `/reports/monthly-ledger?from=${encodeURIComponent(input.from)}&to=${encodeURIComponent(input.to)}`,
+      ),
     categoryBreakdown: () =>
       request<
         Array<{ categoryId: string; categoryName: string; totalMinor: number; txCount: number }>

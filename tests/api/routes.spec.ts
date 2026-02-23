@@ -31,6 +31,7 @@ describe('API routes', () => {
         '/v1/commitments/run-due',
         '/v1/commitment-instances',
         '/v1/reports/trends',
+        '/v1/reports/monthly-ledger',
         '/v1/reports/category-breakdown',
         '/v1/reports/commitment-forecast',
         '/v1/query/run',
@@ -136,6 +137,7 @@ describe('API routes', () => {
       expect(expenseBody.data).toMatchObject({
         merchantLogoUrl: null,
         merchantEmoji: null,
+        transferDirection: null,
       });
 
       const listResponse = await app.inject({
@@ -148,7 +150,32 @@ describe('API routes', () => {
       expect(listBody.data[0]).toMatchObject({
         merchantLogoUrl: null,
         merchantEmoji: null,
+        transferDirection: null,
       });
+
+      const ledgerResponse = await app.inject({
+        method: 'GET',
+        url: '/v1/reports/monthly-ledger?month=2026-02',
+      });
+      const ledgerBody = ledgerResponse.json();
+      expect(ledgerResponse.statusCode).toBe(200);
+      expect(ledgerBody.ok).toBe(true);
+      expect(ledgerBody.data.month).toBe('2026-02');
+      expect(ledgerBody.data.totals).toMatchObject({
+        expenseMinor: 700,
+        incomeMinor: 0,
+        transferInMinor: 0,
+        transferOutMinor: 0,
+      });
+
+      const invalidLedgerResponse = await app.inject({
+        method: 'GET',
+        url: '/v1/reports/monthly-ledger?from=2026-02-01T00:00:00.000Z',
+      });
+      const invalidLedgerBody = invalidLedgerResponse.json();
+      expect(invalidLedgerResponse.statusCode).toBe(400);
+      expect(invalidLedgerBody.ok).toBe(false);
+      expect(invalidLedgerBody.error.code).toBe('VALIDATION_ERROR');
     } finally {
       await app.close();
       fs.rmSync(dir, { recursive: true, force: true });
