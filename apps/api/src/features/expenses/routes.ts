@@ -2,7 +2,7 @@ import { ok } from '@tithe/contracts';
 import { AppError } from '@tithe/domain';
 import type { FastifyInstance } from 'fastify';
 
-type ExpenseSource = 'manual' | 'monzo_import' | 'commitment';
+type ExpenseSource = 'local' | 'monzo' | 'commitment';
 type TransferDirection = 'in' | 'out';
 
 interface ExpenseParams {
@@ -28,7 +28,7 @@ interface CreateExpenseBody {
   transferDirection?: TransferDirection | null;
   merchantName?: string | null;
   note?: string | null;
-  externalRef?: string | null;
+  providerTransactionId?: string | null;
   commitmentInstanceId?: string | null;
 }
 
@@ -56,11 +56,18 @@ export const registerExpenseRoutes = (app: FastifyInstance): void => {
   const {
     defaultErrorResponses,
     genericObjectSchema,
-    idParamsSchema,
     isoDateTimeSchema,
     successEnvelopeSchema,
     uuidSchema,
   } = docs;
+  const expenseIdParamsSchema = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['id'],
+    properties: {
+      id: { type: 'string', minLength: 1 },
+    },
+  } as const;
   const nullableStringSchema = {
     oneOf: [{ type: 'string' }, { type: 'null' }],
   } as const;
@@ -90,20 +97,20 @@ export const registerExpenseRoutes = (app: FastifyInstance): void => {
       'merchantLogoUrl',
       'merchantEmoji',
       'note',
-      'externalRef',
+      'providerTransactionId',
       'commitmentInstanceId',
       'createdAt',
       'updatedAt',
     ],
     properties: {
-      id: uuidSchema,
+      id: { type: 'string', minLength: 1 },
       occurredAt: isoDateTimeSchema,
       postedAt: {
         oneOf: [isoDateTimeSchema, { type: 'null' }],
       },
       money: moneyResponseSchema,
       categoryId: uuidSchema,
-      source: { type: 'string', enum: ['manual', 'monzo_import', 'commitment'] },
+      source: { type: 'string', enum: ['local', 'monzo', 'commitment'] },
       transferDirection: {
         oneOf: [{ type: 'string', enum: ['in', 'out'] }, { type: 'null' }],
       },
@@ -111,7 +118,7 @@ export const registerExpenseRoutes = (app: FastifyInstance): void => {
       merchantLogoUrl: nullableStringSchema,
       merchantEmoji: nullableStringSchema,
       note: nullableStringSchema,
-      externalRef: nullableStringSchema,
+      providerTransactionId: nullableStringSchema,
       commitmentInstanceId: {
         oneOf: [uuidSchema, { type: 'null' }],
       },
@@ -158,7 +165,7 @@ export const registerExpenseRoutes = (app: FastifyInstance): void => {
       schema: {
         tags: ['Expenses'],
         summary: 'Get expense by ID',
-        params: idParamsSchema,
+        params: expenseIdParamsSchema,
         response: {
           200: successEnvelopeSchema(expenseResponseSchema),
           ...defaultErrorResponses,
@@ -188,7 +195,7 @@ export const registerExpenseRoutes = (app: FastifyInstance): void => {
             amountBaseMinor: { type: 'integer' },
             fxRate: { type: 'number', exclusiveMinimum: 0 },
             categoryId: uuidSchema,
-            source: { type: 'string', enum: ['manual', 'monzo_import', 'commitment'] },
+            source: { type: 'string', enum: ['local', 'monzo', 'commitment'] },
             transferDirection: {
               oneOf: [{ type: 'string', enum: ['in', 'out'] }, { type: 'null' }],
             },
@@ -198,7 +205,7 @@ export const registerExpenseRoutes = (app: FastifyInstance): void => {
             note: {
               oneOf: [{ type: 'string' }, { type: 'null' }],
             },
-            externalRef: {
+            providerTransactionId: {
               oneOf: [{ type: 'string' }, { type: 'null' }],
             },
             commitmentInstanceId: {
@@ -221,7 +228,7 @@ export const registerExpenseRoutes = (app: FastifyInstance): void => {
       schema: {
         tags: ['Expenses'],
         summary: 'Update expense',
-        params: idParamsSchema,
+        params: expenseIdParamsSchema,
         body: {
           type: 'object',
           additionalProperties: false,
@@ -264,7 +271,7 @@ export const registerExpenseRoutes = (app: FastifyInstance): void => {
         summary: 'Delete expense',
         description:
           'Use `dryRun=true` first to obtain an approval token, then confirm with `approveOperationId`.',
-        params: idParamsSchema,
+        params: expenseIdParamsSchema,
         querystring: {
           type: 'object',
           additionalProperties: false,

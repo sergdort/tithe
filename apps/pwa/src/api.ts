@@ -70,11 +70,11 @@ export const api = {
       amountMinor: number;
       currency: string;
       categoryId: string;
-      source?: 'manual' | 'monzo_import' | 'commitment';
+      source?: 'local' | 'monzo' | 'commitment';
       transferDirection?: 'in' | 'out' | null;
       merchantName?: string;
       note?: string;
-      externalRef?: string | null;
+      providerTransactionId?: string | null;
       commitmentInstanceId?: string | null;
     }) =>
       request<Expense>('/expenses', {

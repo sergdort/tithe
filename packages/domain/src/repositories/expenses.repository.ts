@@ -15,13 +15,13 @@ export interface ExpenseDto {
     fxRate?: number;
   };
   categoryId: string;
-  source: 'manual' | 'monzo_import' | 'commitment';
+  source: 'local' | 'monzo' | 'commitment';
   transferDirection: 'in' | 'out' | null;
   merchantName: string | null;
   merchantLogoUrl: string | null;
   merchantEmoji: string | null;
   note: string | null;
-  externalRef: string | null;
+  providerTransactionId: string | null;
   commitmentInstanceId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -40,14 +40,14 @@ const mapExpense = (row: typeof expenses.$inferSelect): ExpenseDto => ({
     ...(row.fxRate !== null && row.fxRate !== undefined ? { fxRate: row.fxRate } : {}),
   },
   categoryId: row.categoryId,
-  source: row.source as 'manual' | 'monzo_import' | 'commitment',
+  source: row.source as 'local' | 'monzo' | 'commitment',
   transferDirection:
     row.transferDirection === 'in' || row.transferDirection === 'out' ? row.transferDirection : null,
   merchantName: row.merchantName,
   merchantLogoUrl: row.merchantLogoUrl,
   merchantEmoji: row.merchantEmoji,
   note: row.note,
-  externalRef: row.externalRef,
+  providerTransactionId: row.providerTransactionId,
   commitmentInstanceId: row.commitmentInstanceId,
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
@@ -72,12 +72,12 @@ export interface FindExpenseByIdOutput {
   expense: ExpenseDto | null;
 }
 
-export interface FindExpenseBySourceExternalRefInput {
-  source: 'manual' | 'monzo_import' | 'commitment';
-  externalRef: string;
+export interface FindExpenseBySourceProviderTransactionIdInput {
+  source: 'local' | 'monzo' | 'commitment';
+  providerTransactionId: string;
 }
 
-export interface FindExpenseBySourceExternalRefOutput {
+export interface FindExpenseBySourceProviderTransactionIdOutput {
   expense: ExpenseDto | null;
 }
 
@@ -90,13 +90,13 @@ export interface CreateExpenseInput {
   amountBaseMinor?: number | null;
   fxRate?: number | null;
   categoryId: string;
-  source: 'manual' | 'monzo_import' | 'commitment';
+  source: 'local' | 'monzo' | 'commitment';
   transferDirection: 'in' | 'out' | null;
   merchantName: string | null;
   merchantLogoUrl: string | null;
   merchantEmoji: string | null;
   note: string | null;
-  externalRef: string | null;
+  providerTransactionId: string | null;
   commitmentInstanceId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -138,9 +138,9 @@ export interface DeleteExpenseOutput {
 export interface ExpensesRepository {
   list(input: ListExpensesInput): ListExpensesOutput;
   findById(input: FindExpenseByIdInput): FindExpenseByIdOutput;
-  findBySourceExternalRef: (
-    input: FindExpenseBySourceExternalRefInput,
-  ) => FindExpenseBySourceExternalRefOutput;
+  findBySourceProviderTransactionId: (
+    input: FindExpenseBySourceProviderTransactionIdInput,
+  ) => FindExpenseBySourceProviderTransactionIdOutput;
   create(input: CreateExpenseInput): CreateExpenseOutput;
   update(input: UpdateExpenseInput): UpdateExpenseOutput;
   deleteById(input: DeleteExpenseInput): DeleteExpenseOutput;
@@ -175,14 +175,14 @@ export class SqliteExpensesRepository implements ExpensesRepository {
     return { expense: row ? mapExpense(row) : null };
   }
 
-  findBySourceExternalRef({
+  findBySourceProviderTransactionId({
     source,
-    externalRef,
-  }: FindExpenseBySourceExternalRefInput): FindExpenseBySourceExternalRefOutput {
+    providerTransactionId,
+  }: FindExpenseBySourceProviderTransactionIdInput): FindExpenseBySourceProviderTransactionIdOutput {
     const row = this.db
       .select()
       .from(expenses)
-      .where(and(eq(expenses.source, source), eq(expenses.externalRef, externalRef)))
+      .where(and(eq(expenses.source, source), eq(expenses.providerTransactionId, providerTransactionId)))
       .get();
 
     return { expense: row ? mapExpense(row) : null };

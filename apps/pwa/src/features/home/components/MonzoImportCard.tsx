@@ -16,6 +16,11 @@ import { useHomeMonzoStatusQuery } from '../hooks/useHomeQueries.js';
 const errorMessage = (value: unknown): string =>
   value instanceof Error ? value.message : 'Request failed.';
 
+const isLikelyMobileBrowser = (): boolean => {
+  const ua = globalThis.navigator?.userAgent ?? '';
+  return /iPhone|iPad|iPod|Android/i.test(ua);
+};
+
 export const MonzoImportCard = () => {
   const monzoStatusQuery = useHomeMonzoStatusQuery();
   const connectMutation = useMonzoConnectStartMutation();
@@ -25,23 +30,17 @@ export const MonzoImportCard = () => {
   const hasBlockingError = monzoStatusQuery.isError && !monzoStatus;
 
   const handleConnectClick = async () => {
-    const popup = globalThis.open?.('', '_blank', 'noopener,noreferrer');
+    const payload = await connectMutation.mutateAsync();
 
-    try {
-      const payload = await connectMutation.mutateAsync();
+    if (isLikelyMobileBrowser()) {
+      // iOS/Safari is less reliable with popup navigation after async work.
+      globalThis.location?.assign(payload.authUrl);
+      return;
+    }
 
-      if (popup) {
-        popup.location.replace(payload.authUrl);
-        popup.focus?.();
-        return;
-      }
-
-      const opened = globalThis.open?.(payload.authUrl, '_blank', 'noopener,noreferrer');
-      if (!opened) {
-        globalThis.location?.assign(payload.authUrl);
-      }
-    } catch {
-      popup?.close?.();
+    const opened = globalThis.open?.(payload.authUrl, '_blank', 'noopener,noreferrer');
+    if (!opened) {
+      globalThis.location?.assign(payload.authUrl);
     }
   };
 

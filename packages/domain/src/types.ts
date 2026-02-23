@@ -18,11 +18,11 @@ export interface CreateExpenseInput {
   amountBaseMinor?: number;
   fxRate?: number;
   categoryId: string;
-  source?: 'manual' | 'monzo_import' | 'commitment';
+  source?: 'local' | 'monzo' | 'commitment';
   transferDirection?: 'in' | 'out' | null;
   merchantName?: string | null;
   note?: string | null;
-  externalRef?: string | null;
+  providerTransactionId?: string | null;
   commitmentInstanceId?: string | null;
 }
 

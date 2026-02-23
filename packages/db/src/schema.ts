@@ -84,13 +84,13 @@ export const expenses = sqliteTable(
     categoryId: text('category_id')
       .notNull()
       .references(() => categories.id, { onDelete: 'restrict' }),
-    source: text('source').notNull().default('manual'),
+    source: text('source').notNull().default('local'),
     transferDirection: text('transfer_direction'),
     merchantName: text('merchant_name'),
     merchantLogoUrl: text('merchant_logo_url'),
     merchantEmoji: text('merchant_emoji'),
     note: text('note'),
-    externalRef: text('external_ref'),
+    providerTransactionId: text('provider_transaction_id'),
     commitmentInstanceId: text('commitment_instance_id').references(() => commitmentInstances.id, {
       onDelete: 'set null',
     }),
@@ -100,7 +100,7 @@ export const expenses = sqliteTable(
   (table) => [
     index('expenses_category_idx').on(table.categoryId),
     index('expenses_occurred_idx').on(table.occurredAt),
-    uniqueIndex('expenses_source_external_ref_uq').on(table.source, table.externalRef),
+    uniqueIndex('expenses_source_provider_transaction_id_uq').on(table.source, table.providerTransactionId),
   ],
 );
 

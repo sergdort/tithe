@@ -44,13 +44,13 @@ export interface Expense {
   postedAt: string | null;
   money: Money;
   categoryId: string;
-  source: 'manual' | 'monzo_import' | 'commitment';
+  source: 'local' | 'monzo' | 'commitment';
   transferDirection: TransferDirection | null;
   merchantName: string | null;
   merchantLogoUrl: string | null;
   merchantEmoji: string | null;
   note: string | null;
-  externalRef: string | null;
+  providerTransactionId: string | null;
   commitmentInstanceId: string | null;
   createdAt: string;
   updatedAt: string;

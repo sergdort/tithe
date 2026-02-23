@@ -30,7 +30,7 @@ export const buildAddTransactionPayload = (input: {
     amountMinor: parsePositiveAmountMinor(input.amountText),
     currency: 'GBP',
     categoryId: input.categoryId,
-    source: 'manual',
+    source: 'local',
     transferDirection: input.kind === 'transfer' ? input.transferDirection : null,
     merchantName: input.description.trim() || undefined,
     note: input.note.trim() || undefined,

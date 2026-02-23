@@ -218,11 +218,11 @@ expense
   .option('--posted-at <isoDate>', 'posting date')
   .option('--amount-base-minor <amountBaseMinor>', 'normalized base amount')
   .option('--fx-rate <fxRate>', 'fx rate')
-  .option('--source <source>', 'manual|monzo_import|commitment', 'manual')
+  .option('--source <source>', 'local|monzo|commitment', 'local')
   .option('--transfer-direction <direction>', 'in|out')
   .option('--merchant-name <merchantName>', 'merchant name')
   .option('--note <note>', 'note')
-  .option('--external-ref <externalRef>', 'external reference for idempotency')
+  .option('--provider-transaction-id <providerTransactionId>', 'provider transaction id for idempotency')
   .option('--commitment-instance-id <id>', 'link expense to commitment instance')
   .action(async (options) => {
     const opts = program.opts<{ json: boolean }>();
@@ -241,7 +241,7 @@ expense
           transferDirection: options.transferDirection,
           merchantName: options.merchantName,
           note: options.note,
-          externalRef: options.externalRef,
+          providerTransactionId: options.providerTransactionId,
           commitmentInstanceId: options.commitmentInstanceId,
         },
         { actor: 'cli', channel: 'cli' },

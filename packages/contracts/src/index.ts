@@ -23,11 +23,11 @@ export const categorySchema = z.object({
   updatedAt: isoDateTimeSchema,
 });
 
-export const expenseSourceSchema = z.enum(['manual', 'monzo_import', 'commitment']);
+export const expenseSourceSchema = z.enum(['local', 'monzo', 'commitment']);
 export const transferDirectionSchema = z.enum(['in', 'out']);
 
 export const expenseSchema = z.object({
-  id: z.string().uuid(),
+  id: z.string().min(1),
   occurredAt: isoDateTimeSchema,
   postedAt: isoDateTimeSchema.nullable(),
   money: moneySchema,
@@ -38,7 +38,7 @@ export const expenseSchema = z.object({
   merchantLogoUrl: z.string().nullable(),
   merchantEmoji: z.string().nullable(),
   note: z.string().nullable(),
-  externalRef: z.string().nullable(),
+  providerTransactionId: z.string().nullable(),
   commitmentInstanceId: z.string().uuid().nullable(),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,

@@ -128,7 +128,8 @@ const titleCaseCategory = (value: string): string =>
 
 const isExpenseDedupeConflict = (error: unknown): boolean =>
   error instanceof Error &&
-  error.message.includes('UNIQUE constraint failed: expenses.source, expenses.external_ref');
+  (error.message.includes('UNIQUE constraint failed: expenses.source, expenses.provider_transaction_id') ||
+    error.message.includes('UNIQUE constraint failed: expenses.id'));
 
 const normalizeMonzoCategory = (value: string | undefined): string => {
   const normalized = value?.trim().toLowerCase();
@@ -706,37 +707,12 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
                 : null;
             const merchantName = resolveImportedMerchantName(transaction, potNameById);
 
-            if (overrideExisting) {
-              const existingImported = expensesTxRepo.findBySourceExternalRef({
-                source: 'monzo_import',
-                externalRef: transaction.id,
-              }).expense;
+            const canonicalExpenseId = `monzo:${transaction.id}`;
+            const existingImported = expensesTxRepo.findById({ id: canonicalExpenseId }).expense;
 
-              if (existingImported) {
-                expensesTxRepo.update({
-                  id: existingImported.id,
-                  occurredAt,
-                  postedAt,
-                  amountMinor: Math.abs(transaction.amount),
-                  currency: normalizeCurrency(transaction.currency),
-                  amountBaseMinor: null,
-                  fxRate: null,
-                  categoryId: mapping.categoryId,
-                  transferDirection: null,
-                  merchantName,
-                  merchantLogoUrl,
-                  merchantEmoji,
-                  note: existingImported.note,
-                  updatedAt: nowIso,
-                });
-                updated += 1;
-                continue;
-              }
-            }
-
-            try {
-              expensesTxRepo.create({
-                id: crypto.randomUUID(),
+            if (existingImported) {
+              expensesTxRepo.update({
+                id: existingImported.id,
                 occurredAt,
                 postedAt,
                 amountMinor: Math.abs(transaction.amount),
@@ -744,13 +720,34 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
                 amountBaseMinor: null,
                 fxRate: null,
                 categoryId: mapping.categoryId,
-                source: 'monzo_import',
+                transferDirection: null,
+                merchantName,
+                merchantLogoUrl,
+                merchantEmoji,
+                note: existingImported.note,
+                updatedAt: nowIso,
+              });
+              updated += 1;
+              continue;
+            }
+
+            try {
+              expensesTxRepo.create({
+                id: canonicalExpenseId,
+                occurredAt,
+                postedAt,
+                amountMinor: Math.abs(transaction.amount),
+                currency: normalizeCurrency(transaction.currency),
+                amountBaseMinor: null,
+                fxRate: null,
+                categoryId: mapping.categoryId,
+                source: 'monzo',
                 transferDirection: null,
                 merchantName,
                 merchantLogoUrl,
                 merchantEmoji,
                 note: null,
-                externalRef: transaction.id,
+                providerTransactionId: transaction.id,
                 commitmentInstanceId: null,
                 createdAt: nowIso,
                 updatedAt: nowIso,

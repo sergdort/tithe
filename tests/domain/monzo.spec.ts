@@ -232,8 +232,8 @@ describe('Monzo integration domain service', () => {
 
       const expensesAfterResync = await services.expenses.list();
       expect(expensesAfterResync.length).toBe(1);
-      expect(expensesAfterResync[0]?.source).toBe('monzo_import');
-      expect(expensesAfterResync[0]?.externalRef).toBe('tx_debit_settled');
+      expect(expensesAfterResync[0]?.source).toBe('monzo');
+      expect(expensesAfterResync[0]?.providerTransactionId).toBe('tx_debit_settled');
       expect(expensesAfterResync[0]?.money.amountMinor).toBe(1234);
       expect(expensesAfterResync[0]?.merchantName).toBe('Local Shop');
       expect(expensesAfterResync[0]?.merchantLogoUrl).toBe('https://img.test/local-shop.png');
@@ -324,7 +324,7 @@ describe('Monzo integration domain service', () => {
       expect(initialCursor).toBe('2026-02-20T12:00:00.000Z');
 
       const importedExpense = (await services.expenses.list()).find(
-        (expense) => expense.externalRef === 'tx_resync_target',
+        (expense) => expense.providerTransactionId === 'tx_resync_target',
       );
       expect(importedExpense).toBeTruthy();
 
@@ -391,7 +391,7 @@ describe('Monzo integration domain service', () => {
       expect(explicitRangeCall.searchParams.get('before')).toBe(range.to);
 
       const expenses = await services.expenses.list();
-      const updatedExpense = expenses.find((expense) => expense.externalRef === 'tx_resync_target');
+      const updatedExpense = expenses.find((expense) => expense.providerTransactionId === 'tx_resync_target');
       expect(updatedExpense).toBeTruthy();
       expect(updatedExpense?.id).toBe(importedExpense?.id);
       expect(updatedExpense?.note).toBe('Keep this note');
