@@ -10,11 +10,13 @@ export const useMonzoConnectStartMutation = () =>
     mutationFn: () => api.monzo.connectStart(),
   });
 
-export const useMonzoSyncNowMutation = () => {
+type MonzoSyncMutationInput = Parameters<typeof api.monzo.sync>[0];
+
+export const useMonzoSyncMutation = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: () => api.monzo.syncNow(),
+    mutationFn: (input: MonzoSyncMutationInput) => api.monzo.sync(input),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: homeQueryKeys.monzoStatus() }),

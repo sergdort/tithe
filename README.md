@@ -293,10 +293,12 @@ Current status in this implementation:
 - OAuth connect flow is implemented (`tithe --json monzo connect` returns `authUrl`).
 - OAuth callback endpoint is implemented at `GET /v1/integrations/monzo/connect/callback`.
 - OAuth callback stores tokens/connection state only (no automatic sync).
-- Manual sync is implemented (`tithe --json monzo sync`).
+- Manual sync is implemented (`tithe --json monzo sync`, with optional `--month` / `--from --to` windowing and `--override`).
 - Status endpoint is implemented (`tithe --json monzo status` and `GET /v1/integrations/monzo/status`).
-- PWA Home screen includes a Monzo card with `Connect` and `Sync now` actions.
+- PWA Home screen includes a Monzo card with `Connect` plus status/last-sync details (month sync lives on the Monthly Ledger widget).
 - PWA Home screen embeds a monthly cashflow ledger with month navigation, category breakdown lists, and both `Operating Surplus` and `Net Cash Movement` totals.
+- PWA Home Monthly Ledger widget includes `Sync month`, which syncs the selected month window and overwrites existing imported Monzo expenses for that month.
+- Monthly Ledger sync feedback is month-scoped and clears when you navigate to another month.
 - PWA Home includes a single `Add Transaction` flow for manual `income`, `expense`, and `transfer` entries (transfer entries require direction: `Money in` / `Money out`).
 - PWA Home pending commitments support `Mark paid`, which creates a linked actual transaction (`source=commitment`) and updates the monthly ledger.
 - Home dashboard cards load independently: a ledger/Monzo/commitments fetch error is shown in that card without blocking the entire Home screen.
@@ -304,6 +306,7 @@ Current status in this implementation:
 - Initial import window is last 90 days; subsequent sync uses cursor overlap.
 - Import policy is expenses-only (`amount < 0`) and settled-only (pending skipped).
 - Imported expenses use `source=monzo_import` and `externalRef=<transaction_id>` for dedupe.
+- `tithe --json monzo sync --override` (or PWA Monthly Ledger `Sync month`) overwrites existing `monzo_import` rows in place using latest Monzo-derived category/amount/date/merchant fields while preserving local notes.
 - Expense API responses include optional Monzo merchant display metadata (`merchantLogoUrl`, `merchantEmoji`) used by the PWA expenses list avatar.
 - Expense API responses also include `transferDirection` (`in|out|null`); transfer-category rows require it, income/expense rows return `null`.
 - PWA expenses list merchant avatars use `logo -> emoji -> initials` fallback for imported Monzo merchants.
@@ -320,6 +323,8 @@ tithe --json monzo connect
 # Monzo redirects back to /v1/integrations/monzo/connect/callback (stores tokens only; no auto-sync)
 tithe --json monzo status
 tithe --json monzo sync
+tithe --json monzo sync --month 2026-02 --override
+tithe --json monzo sync --from 2026-02-01T00:00:00Z --to 2026-03-01T00:00:00Z --override
 ```
 
 Cashflow ledger and transfer examples:
@@ -333,7 +338,7 @@ PWA flow:
 
 - Open Home page in the PWA.
 - Use `Connect` to start OAuth (opens Monzo auth URL in a new window/tab).
-- After OAuth callback completes (and any in-app permission approval is done), return to PWA and use `Sync now`.
+- After OAuth callback completes (and any in-app permission approval is done), return to PWA Home and use `Sync month` in the Monthly Ledger widget for the month you want to import/refresh.
 
 ## Database Backup / Restore
 

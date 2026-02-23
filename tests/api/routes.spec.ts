@@ -227,4 +227,51 @@ describe('API routes', () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('validates Monzo sync request body range pairing and override type', async () => {
+    const app = buildServer();
+
+    try {
+      const fromOnlyResponse = await app.inject({
+        method: 'POST',
+        url: '/v1/integrations/monzo/sync',
+        headers: { 'content-type': 'application/json' },
+        payload: JSON.stringify({
+          from: '2026-02-01T00:00:00.000Z',
+        }),
+      });
+      const fromOnlyBody = fromOnlyResponse.json();
+      expect(fromOnlyResponse.statusCode).toBe(400);
+      expect(fromOnlyBody.ok).toBe(false);
+      expect(fromOnlyBody.error.code).toBe('VALIDATION_ERROR');
+
+      const toOnlyResponse = await app.inject({
+        method: 'POST',
+        url: '/v1/integrations/monzo/sync',
+        headers: { 'content-type': 'application/json' },
+        payload: JSON.stringify({
+          to: '2026-03-01T00:00:00.000Z',
+        }),
+      });
+      const toOnlyBody = toOnlyResponse.json();
+      expect(toOnlyResponse.statusCode).toBe(400);
+      expect(toOnlyBody.ok).toBe(false);
+      expect(toOnlyBody.error.code).toBe('VALIDATION_ERROR');
+
+      const invalidOverrideResponse = await app.inject({
+        method: 'POST',
+        url: '/v1/integrations/monzo/sync',
+        headers: { 'content-type': 'application/json' },
+        payload: JSON.stringify({
+          overrideExisting: 'yes',
+        }),
+      });
+      const invalidOverrideBody = invalidOverrideResponse.json();
+      expect(invalidOverrideResponse.statusCode).toBe(400);
+      expect(invalidOverrideBody.ok).toBe(false);
+      expect(invalidOverrideBody.error.code).toBe('VALIDATION_ERROR');
+    } finally {
+      await app.close();
+    }
+  });
 });

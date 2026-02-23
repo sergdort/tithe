@@ -82,4 +82,55 @@ describe('CLI web command', () => {
     expect(payload.ok).toBe(false);
     expect(payload.error.code).toBe('VALIDATION_ERROR');
   });
+
+  it('validates monzo sync month format before running DB work', () => {
+    const result = runCli(['--json', 'monzo', 'sync', '--month', '2026/02']);
+    const payload = JSON.parse(result.stdout);
+
+    expect(result.status).toBe(1);
+    expect(payload.ok).toBe(false);
+    expect(payload.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('rejects mixing monzo sync month with explicit range', () => {
+    const result = runCli([
+      '--json',
+      'monzo',
+      'sync',
+      '--month',
+      '2026-02',
+      '--from',
+      '2026-02-01T00:00:00.000Z',
+      '--to',
+      '2026-03-01T00:00:00.000Z',
+    ]);
+    const payload = JSON.parse(result.stdout);
+
+    expect(result.status).toBe(1);
+    expect(payload.ok).toBe(false);
+    expect(payload.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('requires paired from/to options for monzo sync', () => {
+    const fromOnly = runCli(['--json', 'monzo', 'sync', '--from', '2026-02-01T00:00:00.000Z']);
+    const fromOnlyPayload = JSON.parse(fromOnly.stdout);
+    expect(fromOnly.status).toBe(1);
+    expect(fromOnlyPayload.ok).toBe(false);
+    expect(fromOnlyPayload.error.code).toBe('VALIDATION_ERROR');
+
+    const toOnly = runCli(['--json', 'monzo', 'sync', '--to', '2026-03-01T00:00:00.000Z']);
+    const toOnlyPayload = JSON.parse(toOnly.stdout);
+    expect(toOnly.status).toBe(1);
+    expect(toOnlyPayload.ok).toBe(false);
+    expect(toOnlyPayload.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('accepts monzo sync --override syntax', () => {
+    const result = runCli(['--json', 'monzo', 'sync', '--month', '2026-02', '--override']);
+    const payload = JSON.parse(result.stdout);
+
+    expect(result.status).toBe(1);
+    expect(payload.ok).toBe(false);
+    expect(payload.error.code).not.toBe('VALIDATION_ERROR');
+  });
 });

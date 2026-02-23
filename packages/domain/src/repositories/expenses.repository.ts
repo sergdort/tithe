@@ -72,6 +72,15 @@ export interface FindExpenseByIdOutput {
   expense: ExpenseDto | null;
 }
 
+export interface FindExpenseBySourceExternalRefInput {
+  source: 'manual' | 'monzo_import' | 'commitment';
+  externalRef: string;
+}
+
+export interface FindExpenseBySourceExternalRefOutput {
+  expense: ExpenseDto | null;
+}
+
 export interface CreateExpenseInput {
   id: string;
   occurredAt: string;
@@ -129,6 +138,9 @@ export interface DeleteExpenseOutput {
 export interface ExpensesRepository {
   list(input: ListExpensesInput): ListExpensesOutput;
   findById(input: FindExpenseByIdInput): FindExpenseByIdOutput;
+  findBySourceExternalRef: (
+    input: FindExpenseBySourceExternalRefInput,
+  ) => FindExpenseBySourceExternalRefOutput;
   create(input: CreateExpenseInput): CreateExpenseOutput;
   update(input: UpdateExpenseInput): UpdateExpenseOutput;
   deleteById(input: DeleteExpenseInput): DeleteExpenseOutput;
@@ -160,6 +172,19 @@ export class SqliteExpensesRepository implements ExpensesRepository {
 
   findById({ id }: FindExpenseByIdInput): FindExpenseByIdOutput {
     const row = this.db.select().from(expenses).where(eq(expenses.id, id)).get();
+    return { expense: row ? mapExpense(row) : null };
+  }
+
+  findBySourceExternalRef({
+    source,
+    externalRef,
+  }: FindExpenseBySourceExternalRefInput): FindExpenseBySourceExternalRefOutput {
+    const row = this.db
+      .select()
+      .from(expenses)
+      .where(and(eq(expenses.source, source), eq(expenses.externalRef, externalRef)))
+      .get();
+
     return { expense: row ? mapExpense(row) : null };
   }
 

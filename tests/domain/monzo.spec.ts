@@ -226,6 +226,7 @@ describe('Monzo integration domain service', () => {
 
       const syncResult = await services.monzo.syncNow({ actor: 'test', channel: 'system' });
       expect(syncResult.imported).toBe(1);
+      expect(syncResult.updated).toBe(0);
       expect(syncResult.skipped).toBe(2);
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/pots'))).toBe(false);
 
@@ -253,6 +254,164 @@ describe('Monzo integration domain service', () => {
       } finally {
         sqlite.close();
       }
+    } finally {
+      closeServices(services);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('supports explicit range sync with overwrite and preserves local note', async () => {
+    const { services, dir } = setupService();
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const started = await services.monzo.connectStart({ actor: 'test', channel: 'system' });
+      const state = new URL(started.authUrl).searchParams.get('state');
+      expect(state).toBeTruthy();
+
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({
+          access_token: 'token-1',
+          refresh_token: 'refresh-1',
+          expires_in: 3600,
+        }),
+      );
+
+      await services.monzo.callback(
+        {
+          code: 'auth-code',
+          state: state ?? undefined,
+        },
+        { actor: 'test', channel: 'system' },
+      );
+
+      fetchMock
+        .mockResolvedValueOnce(
+          jsonResponse({
+            accounts: [{ id: 'acc_main', closed: false }],
+          }),
+        )
+        .mockResolvedValueOnce(
+          jsonResponse({
+            transactions: [
+              {
+                id: 'tx_resync_target',
+                account_id: 'acc_main',
+                amount: -1000,
+                currency: 'GBP',
+                description: 'Coffee stop',
+                category: 'groceries',
+                created: '2026-02-20T12:00:00.000Z',
+                settled: '2026-02-20T12:30:00.000Z',
+                merchant: {
+                  name: 'Coffee Shop',
+                  logo: 'https://img.test/coffee-old.png',
+                  emoji: '☕',
+                },
+              },
+            ],
+          }),
+        );
+
+      const firstSync = await services.monzo.syncNow({ actor: 'test', channel: 'system' });
+      expect(firstSync.imported).toBe(1);
+      expect(firstSync.updated).toBe(0);
+      expect(firstSync.skipped).toBe(0);
+
+      const initialStatus = await services.monzo.status();
+      const initialCursor = initialStatus.lastCursor;
+      expect(initialCursor).toBe('2026-02-20T12:00:00.000Z');
+
+      const importedExpense = (await services.expenses.list()).find(
+        (expense) => expense.externalRef === 'tx_resync_target',
+      );
+      expect(importedExpense).toBeTruthy();
+
+      const userCategory = await services.categories.create(
+        { name: 'User Override Category', kind: 'expense' },
+        { actor: 'test', channel: 'system' },
+      );
+
+      await services.expenses.update(
+        importedExpense?.id ?? '',
+        {
+          categoryId: userCategory.id,
+          note: 'Keep this note',
+        },
+        { actor: 'test', channel: 'system' },
+      );
+
+      const range = {
+        from: '2026-02-01T00:00:00.000Z',
+        to: '2026-03-01T00:00:00.000Z',
+      };
+
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({
+          transactions: [
+            {
+              id: 'tx_resync_target',
+              account_id: 'acc_main',
+              amount: -2550,
+              currency: 'GBP',
+              description: 'Coffee stop updated',
+              category: 'shopping',
+              created: '2026-02-10T08:00:00.000Z',
+              settled: '2026-02-10T08:05:00.000Z',
+              merchant: {
+                name: 'Coffee Shop Updated',
+                logo: 'https://img.test/coffee-new.png',
+                emoji: '🧾',
+              },
+            },
+          ],
+        }),
+      );
+
+      const secondSync = await services.monzo.sync(
+        {
+          ...range,
+          overrideExisting: true,
+        },
+        { actor: 'test', channel: 'system' },
+      );
+
+      expect(secondSync.imported).toBe(0);
+      expect(secondSync.updated).toBe(1);
+      expect(secondSync.skipped).toBe(0);
+      expect(secondSync.from).toBe(range.from);
+      expect(secondSync.to).toBe(range.to);
+
+      const transactionCalls = fetchMock.mock.calls
+        .map(([url]) => String(url))
+        .filter((url) => url.includes('/transactions?'));
+      const explicitRangeCall = new URL(transactionCalls.at(-1) ?? '');
+      expect(explicitRangeCall.searchParams.get('since')).toBe(range.from);
+      expect(explicitRangeCall.searchParams.get('before')).toBe(range.to);
+
+      const expenses = await services.expenses.list();
+      const updatedExpense = expenses.find((expense) => expense.externalRef === 'tx_resync_target');
+      expect(updatedExpense).toBeTruthy();
+      expect(updatedExpense?.id).toBe(importedExpense?.id);
+      expect(updatedExpense?.note).toBe('Keep this note');
+      expect(updatedExpense?.money.amountMinor).toBe(2550);
+      expect(updatedExpense?.merchantName).toBe('Coffee Shop Updated');
+      expect(updatedExpense?.merchantLogoUrl).toBe('https://img.test/coffee-new.png');
+      expect(updatedExpense?.merchantEmoji).toBe('🧾');
+      expect(updatedExpense?.occurredAt).toBe('2026-02-10T08:00:00.000Z');
+      expect(updatedExpense?.postedAt).toBe('2026-02-10T08:05:00.000Z');
+      expect(updatedExpense?.categoryId).not.toBe(userCategory.id);
+
+      const categories = await services.categories.list();
+      const shoppingCategory = categories.find(
+        (category) => category.kind === 'expense' && category.name === 'Shopping',
+      );
+      expect(shoppingCategory).toBeTruthy();
+      expect(updatedExpense?.categoryId).toBe(shoppingCategory?.id);
+
+      const statusAfterResync = await services.monzo.status();
+      expect(statusAfterResync.lastCursor).toBe(initialCursor);
     } finally {
       closeServices(services);
       fs.rmSync(dir, { recursive: true, force: true });
@@ -324,6 +483,7 @@ describe('Monzo integration domain service', () => {
 
       const syncResult = await services.monzo.syncNow({ actor: 'test', channel: 'system' });
       expect(syncResult.imported).toBe(1);
+      expect(syncResult.updated).toBe(0);
       expect(syncResult.skipped).toBe(0);
 
       const expenses = await services.expenses.list();
@@ -403,6 +563,7 @@ describe('Monzo integration domain service', () => {
 
       const syncResult = await services.monzo.syncNow({ actor: 'test', channel: 'system' });
       expect(syncResult.imported).toBe(1);
+      expect(syncResult.updated).toBe(0);
       expect(syncResult.skipped).toBe(0);
 
       const expenses = await services.expenses.list();

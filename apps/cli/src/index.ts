@@ -539,10 +539,56 @@ monzo.command('connect').action(async () => {
   await run(opts.json, () => getServices().monzo.connectStart());
 });
 
-monzo.command('sync').action(async () => {
-  const opts = program.opts<{ json: boolean }>();
-  await run(opts.json, () => getServices().monzo.syncNow());
-});
+monzo
+  .command('sync')
+  .option('--month <month>', 'month in YYYY-MM')
+  .option('--from <isoDate>', 'from date (inclusive)')
+  .option('--to <isoDate>', 'to date (exclusive)')
+  .option('--override', 'overwrite already imported Monzo expenses in range', false)
+  .action(async (options) => {
+    const opts = program.opts<{ json: boolean }>();
+
+    let range: { from: string; to: string } | null = null;
+    try {
+      if (options.month && (options.from || options.to)) {
+        emit(fail('VALIDATION_ERROR', 'Use either --month or --from/--to, not both'), true);
+        process.exitCode = 1;
+        return;
+      }
+
+      if (options.from || options.to) {
+        if (!options.from || !options.to) {
+          emit(fail('VALIDATION_ERROR', 'Pass both --from and --to'), true);
+          process.exitCode = 1;
+          return;
+        }
+        range = { from: options.from, to: options.to };
+      } else if (options.month) {
+        range = resolveLocalMonthRange(options.month);
+      }
+    } catch (error) {
+      if (error instanceof AppError) {
+        emit(fail(error.code, error.message, error.details), true);
+        process.exitCode = 1;
+        return;
+      }
+
+      throw error;
+    }
+
+    if (!range && !options.override) {
+      await run(opts.json, () => getServices().monzo.syncNow());
+      return;
+    }
+
+    await run(opts.json, () =>
+      getServices().monzo.sync({
+        from: range?.from,
+        to: range?.to,
+        overrideExisting: asBoolean(options.override),
+      }),
+    );
+  });
 
 monzo.command('status').action(async () => {
   const opts = program.opts<{ json: boolean }>();

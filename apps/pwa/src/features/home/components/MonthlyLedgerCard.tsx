@@ -1,6 +1,7 @@
 import {
   Alert,
   Box,
+  Button,
   Card,
   CardContent,
   CircularProgress,
@@ -11,10 +12,12 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
+import { useEffect, useState } from 'react';
 
 import type { MonthWindow } from '../../../lib/date/month.js';
 import { pounds, signedPounds } from '../../../lib/format/money.js';
-import { useHomeMonthlyLedgerQuery } from '../hooks/useHomeQueries.js';
+import { useMonzoSyncMutation } from '../hooks/useHomeMutations.js';
+import { useHomeMonzoStatusQuery, useHomeMonthlyLedgerQuery } from '../hooks/useHomeQueries.js';
 import { MonthNavigator } from './MonthNavigator.js';
 
 interface MonthlyLedgerCardProps {
@@ -119,6 +122,9 @@ const LedgerTransferSection = ({
   </Box>
 );
 
+const errorMessage = (value: unknown): string =>
+  value instanceof Error ? value.message : 'Request failed.';
+
 export const MonthlyLedgerCard = ({
   monthWindow,
   onPreviousMonth,
@@ -126,10 +132,32 @@ export const MonthlyLedgerCard = ({
   onAddTransaction,
 }: MonthlyLedgerCardProps) => {
   const ledgerQuery = useHomeMonthlyLedgerQuery(monthWindow);
+  const monzoStatusQuery = useHomeMonzoStatusQuery();
+  const syncMutation = useMonzoSyncMutation();
   const ledger = ledgerQuery.data;
+  const monzoStatus = monzoStatusQuery.data;
+  const monthKey = `${monthWindow.from}|${monthWindow.to}`;
+  const resetSyncMutation = syncMutation.reset;
+  const [visibleSyncFeedbackMonthKey, setVisibleSyncFeedbackMonthKey] = useState<string | null>(null);
 
   const isInitialLoading = ledgerQuery.isLoading && !ledger;
   const hasBlockingError = ledgerQuery.isError && !ledger;
+  const syncDisabled = !monzoStatus?.connected || syncMutation.isPending;
+  const showSyncFeedback = visibleSyncFeedbackMonthKey === monthKey;
+
+  useEffect(() => {
+    setVisibleSyncFeedbackMonthKey(null);
+    resetSyncMutation();
+  }, [monthKey, resetSyncMutation]);
+
+  const handleSyncMonth = () => {
+    setVisibleSyncFeedbackMonthKey(monthKey);
+    syncMutation.mutate({
+      from: monthWindow.from,
+      to: monthWindow.to,
+      overrideExisting: true,
+    });
+  };
 
   return (
     <Card>
@@ -144,6 +172,43 @@ export const MonthlyLedgerCard = ({
         <Typography variant="caption" color="text.secondary">
           Monthly cashflow ledger (actual transactions only)
         </Typography>
+
+        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 1.5 }}>
+          <Typography variant="caption" color="text.secondary">
+            Monzo sync for this month overwrites existing imported transactions.
+          </Typography>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={handleSyncMonth}
+            disabled={syncDisabled}
+          >
+            Sync month
+          </Button>
+        </Stack>
+
+        {monzoStatusQuery.isError ? (
+          <Alert severity="warning" sx={{ mt: 1 }}>
+            Monzo status unavailable. Month sync is disabled.
+          </Alert>
+        ) : !monzoStatus?.connected ? (
+          <Alert severity="info" sx={{ mt: 1 }}>
+            Connect Monzo to sync transactions into this month.
+          </Alert>
+        ) : null}
+
+        {showSyncFeedback && syncMutation.isError ? (
+          <Alert severity="error" sx={{ mt: 1 }}>
+            {errorMessage(syncMutation.error)}
+          </Alert>
+        ) : null}
+
+        {showSyncFeedback && syncMutation.isSuccess ? (
+          <Alert severity="success" sx={{ mt: 1 }}>
+            Imported {syncMutation.data.imported}, updated {syncMutation.data.updated}, skipped{' '}
+            {syncMutation.data.skipped}.
+          </Alert>
+        ) : null}
 
         {isInitialLoading ? (
           <Stack alignItems="center" sx={{ py: 4 }}>

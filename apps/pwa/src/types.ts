@@ -132,6 +132,7 @@ export interface MonzoSyncSummary {
   status: string;
   message: string;
   imported: number;
+  updated: number;
   skipped: number;
   accountId: string;
   from: string;

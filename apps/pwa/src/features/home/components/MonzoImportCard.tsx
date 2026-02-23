@@ -6,15 +6,11 @@ import {
   CardContent,
   Chip,
   CircularProgress,
-  Divider,
   Stack,
   Typography,
 } from '@mui/material';
 
-import {
-  useMonzoConnectStartMutation,
-  useMonzoSyncNowMutation,
-} from '../hooks/useHomeMutations.js';
+import { useMonzoConnectStartMutation } from '../hooks/useHomeMutations.js';
 import { useHomeMonzoStatusQuery } from '../hooks/useHomeQueries.js';
 
 const errorMessage = (value: unknown): string =>
@@ -23,7 +19,6 @@ const errorMessage = (value: unknown): string =>
 export const MonzoImportCard = () => {
   const monzoStatusQuery = useHomeMonzoStatusQuery();
   const connectMutation = useMonzoConnectStartMutation();
-  const syncMutation = useMonzoSyncNowMutation();
   const monzoStatus = monzoStatusQuery.data;
 
   const isInitialLoading = monzoStatusQuery.isLoading && !monzoStatus;
@@ -103,35 +98,13 @@ export const MonzoImportCard = () => {
               </Alert>
             ) : null}
 
-            {syncMutation.isError ? (
-              <Alert severity="error" sx={{ mt: 1 }}>
-                {errorMessage(syncMutation.error)}
-              </Alert>
-            ) : null}
-
-            {syncMutation.isSuccess ? (
-              <Alert severity="success" sx={{ mt: 1 }}>
-                Imported {syncMutation.data.imported} transactions, skipped{' '}
-                {syncMutation.data.skipped}.
-              </Alert>
-            ) : null}
-
-            <Divider sx={{ my: 1.5 }} />
-
-            <Stack direction="row" spacing={1}>
+            <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
               <Button
                 variant="outlined"
                 onClick={() => void handleConnectClick()}
                 disabled={!monzoStatus.configured || connectMutation.isPending}
               >
                 Connect
-              </Button>
-              <Button
-                variant="contained"
-                onClick={() => syncMutation.mutate()}
-                disabled={!monzoStatus.connected || syncMutation.isPending}
-              >
-                Sync now
               </Button>
             </Stack>
           </>

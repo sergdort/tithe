@@ -135,9 +135,15 @@ export const api = {
       request<MonzoConnectStart>('/integrations/monzo/connect/start', {
         method: 'POST',
       }),
+    sync: (body?: { from?: string; to?: string; overrideExisting?: boolean }) =>
+      request<MonzoSyncSummary>('/integrations/monzo/sync', {
+        method: 'POST',
+        body: JSON.stringify(body ?? {}),
+      }),
     syncNow: () =>
       request<MonzoSyncSummary>('/integrations/monzo/sync', {
         method: 'POST',
+        body: JSON.stringify({}),
       }),
     status: () => request<MonzoStatus>('/integrations/monzo/status'),
   },

@@ -51,11 +51,18 @@ export interface MonzoSyncSummary {
   status: string;
   message: string;
   imported: number;
+  updated: number;
   skipped: number;
   accountId: string;
   from: string;
   to: string;
   cursor: string | null;
+}
+
+export interface MonzoSyncInput {
+  from?: string;
+  to?: string;
+  overrideExisting?: boolean;
 }
 
 export interface MonzoStatusSummary {
@@ -89,6 +96,7 @@ export interface MonzoService {
     from: string;
     to: string;
   }>;
+  sync: (input?: MonzoSyncInput, context?: ActorContext) => Promise<MonzoSyncSummary>;
   syncNow: (context?: ActorContext) => Promise<MonzoSyncSummary>;
   status: () => Promise<MonzoStatusSummary>;
 }
@@ -105,7 +113,8 @@ interface SyncWindow {
 
 interface SyncInternalInput {
   context: ActorContext;
-  forceSince?: string;
+  forceWindow?: SyncWindow;
+  overrideExisting: boolean;
   preloadedConnection?: MonzoConnectionDto;
 }
 
@@ -314,15 +323,12 @@ const mergeConnection = (
 const resolveWindow = (
   connection: MonzoConnectionDto,
   now: Date,
-  forceSince?: string,
+  forceWindow?: SyncWindow,
 ): SyncWindow => {
   const ninetyDaysAgoIso = new Date(now.getTime() - INITIAL_BACKFILL_DAYS * DAY_MS).toISOString();
 
-  if (forceSince) {
-    return {
-      from: forceSince,
-      to: now.toISOString(),
-    };
+  if (forceWindow) {
+    return forceWindow;
   }
 
   if (!connection.lastCursor) {
@@ -342,6 +348,28 @@ const resolveWindow = (
     from,
     to: now.toISOString(),
   };
+};
+
+const resolveRequestedSyncWindow = (input: MonzoSyncInput | undefined): SyncWindow | undefined => {
+  if (!input?.from && !input?.to) {
+    return undefined;
+  }
+
+  if (!input?.from || !input?.to) {
+    throw new AppError('VALIDATION_ERROR', 'Pass both from and to for Monzo sync range', 400);
+  }
+
+  const from = assertDate(input.from, 'from');
+  const to = assertDate(input.to, 'to');
+
+  if (new Date(from).getTime() >= new Date(to).getTime()) {
+    throw new AppError('VALIDATION_ERROR', 'Monzo sync range requires from < to', 400, {
+      from,
+      to,
+    });
+  }
+
+  return { from, to };
 };
 
 const collectTransactions = async ({
@@ -442,7 +470,8 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
 
   const syncInternal = async ({
     context,
-    forceSince,
+    forceWindow,
+    overrideExisting,
     preloadedConnection,
   }: SyncInternalInput): Promise<MonzoSyncSummary> => {
     const startedAt = toIso(new Date());
@@ -450,6 +479,7 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
     let connection: MonzoConnectionDto | null = preloadedConnection ?? null;
     let createdSyncRun = false;
     let imported = 0;
+    let updated = 0;
 
     try {
       const env = requireMonzoEnv();
@@ -542,7 +572,7 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
         }
       }
 
-      const window = resolveWindow(currentConnection, new Date(), forceSince);
+      const window = resolveWindow(currentConnection, new Date(), forceWindow);
       const allTransactions = await collectTransactions({
         listTransactions: (input) => client.listTransactions(input),
         accountId: currentConnection.accountId,
@@ -665,11 +695,49 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
             const postedAt = transaction.settled
               ? assertDate(transaction.settled, 'transaction.settled')
               : null;
+            const occurredAt = assertDate(transaction.created, 'transaction.created');
+            const merchantLogoUrl =
+              typeof transaction.merchant === 'object' && transaction.merchant !== null
+                ? (transaction.merchant.logo ?? null)
+                : null;
+            const merchantEmoji =
+              typeof transaction.merchant === 'object' && transaction.merchant !== null
+                ? (transaction.merchant.emoji ?? null)
+                : null;
+            const merchantName = resolveImportedMerchantName(transaction, potNameById);
+
+            if (overrideExisting) {
+              const existingImported = expensesTxRepo.findBySourceExternalRef({
+                source: 'monzo_import',
+                externalRef: transaction.id,
+              }).expense;
+
+              if (existingImported) {
+                expensesTxRepo.update({
+                  id: existingImported.id,
+                  occurredAt,
+                  postedAt,
+                  amountMinor: Math.abs(transaction.amount),
+                  currency: normalizeCurrency(transaction.currency),
+                  amountBaseMinor: null,
+                  fxRate: null,
+                  categoryId: mapping.categoryId,
+                  transferDirection: null,
+                  merchantName,
+                  merchantLogoUrl,
+                  merchantEmoji,
+                  note: existingImported.note,
+                  updatedAt: nowIso,
+                });
+                updated += 1;
+                continue;
+              }
+            }
 
             try {
               expensesTxRepo.create({
                 id: crypto.randomUUID(),
-                occurredAt: assertDate(transaction.created, 'transaction.created'),
+                occurredAt,
                 postedAt,
                 amountMinor: Math.abs(transaction.amount),
                 currency: normalizeCurrency(transaction.currency),
@@ -678,15 +746,9 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
                 categoryId: mapping.categoryId,
                 source: 'monzo_import',
                 transferDirection: null,
-                merchantName: resolveImportedMerchantName(transaction, potNameById),
-                merchantLogoUrl:
-                  typeof transaction.merchant === 'object' && transaction.merchant !== null
-                    ? (transaction.merchant.logo ?? null)
-                    : null,
-                merchantEmoji:
-                  typeof transaction.merchant === 'object' && transaction.merchant !== null
-                    ? (transaction.merchant.emoji ?? null)
-                    : null,
+                merchantName,
+                merchantLogoUrl,
+                merchantEmoji,
                 note: null,
                 externalRef: transaction.id,
                 commitmentInstanceId: null,
@@ -735,6 +797,7 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
         status: 'ok',
         message: 'Monzo sync completed',
         imported,
+        updated,
         skipped,
         accountId: currentConnection.accountId,
         from: window.from,
@@ -746,6 +809,7 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
         'monzo.sync',
         {
           imported,
+          updated,
           skipped,
           accountId: summary.accountId,
           from: summary.from,
@@ -904,7 +968,7 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
         return {
           status: 'connected',
           message:
-            'Monzo OAuth callback completed. No sync was run automatically; approve permissions in Monzo (if prompted), then use Sync now.',
+            'Monzo OAuth callback completed. No sync was run automatically; approve permissions in Monzo (if prompted), then run a Monzo sync from the Monthly Ledger or CLI.',
           accountId: updatedConnection.accountId,
           imported: 0,
           skipped: 0,
@@ -916,8 +980,17 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
       }
     },
 
+    async sync(input: MonzoSyncInput = {}, context: ActorContext = DEFAULT_ACTOR) {
+      const forceWindow = resolveRequestedSyncWindow(input);
+      return syncInternal({
+        context,
+        forceWindow,
+        overrideExisting: input.overrideExisting === true,
+      });
+    },
+
     async syncNow(context: ActorContext = DEFAULT_ACTOR) {
-      return syncInternal({ context });
+      return syncInternal({ context, overrideExisting: false });
     },
 
     async status() {
