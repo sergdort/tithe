@@ -22,7 +22,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { api } from '../api.js';
 
@@ -36,9 +36,67 @@ const pounds = (amountMinor: number, currency: string): string => {
   }).format(value);
 };
 
-const merchantInitial = (merchantName?: string | null): string => {
+const merchantInitials = (merchantName?: string | null): string => {
   const trimmed = merchantName?.trim();
-  return trimmed && trimmed.length > 0 ? trimmed[0].toUpperCase() : '•';
+  if (!trimmed) {
+    return '•';
+  }
+
+  const tokens = trimmed.match(/[A-Za-z0-9]+/g) ?? [];
+  if (tokens.length >= 2) {
+    return `${tokens[0]?.[0] ?? ''}${tokens[1]?.[0] ?? ''}`.toUpperCase() || '•';
+  }
+
+  const singleToken = tokens[0] ?? '';
+  const initials = singleToken.slice(0, 2).toUpperCase();
+  return initials || '•';
+};
+
+interface ExpenseMerchantAvatarProps {
+  expenseId: string;
+  merchantName?: string | null;
+  merchantLogoUrl?: string | null;
+  merchantEmoji?: string | null;
+}
+
+const ExpenseMerchantAvatar = ({
+  expenseId,
+  merchantName,
+  merchantLogoUrl,
+  merchantEmoji,
+}: ExpenseMerchantAvatarProps) => {
+  const [logoFailed, setLogoFailed] = useState(false);
+
+  useEffect(() => {
+    setLogoFailed(false);
+  }, [merchantLogoUrl]);
+
+  const merchantLabel = merchantName?.trim() || 'Merchant';
+  const logoUrl = merchantLogoUrl?.trim() || '';
+  const emoji = merchantEmoji?.trim() || '';
+  const canShowLogo = logoUrl.length > 0 && !logoFailed;
+  const fallbackText = emoji || merchantInitials(merchantName);
+  const avatarKind = canShowLogo ? 'logo' : emoji ? 'emoji' : 'initials';
+
+  return (
+    <Avatar
+      data-testid={`expense-avatar-${expenseId}`}
+      data-avatar-kind={avatarKind}
+      sx={{ width: 40, height: 40, bgcolor: '#DDEAF8', color: '#0E2A47' }}
+    >
+      {canShowLogo ? (
+        <Box
+          component="img"
+          src={logoUrl}
+          alt={`${merchantLabel} logo`}
+          onError={() => setLogoFailed(true)}
+          sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      ) : (
+        fallbackText
+      )}
+    </Avatar>
+  );
 };
 
 const dayLabel = (isoDate: string): string => {
@@ -174,12 +232,16 @@ export const ExpensesPage = () => {
                           <ListItem
                             key={expense.id}
                             disableGutters
+                            data-expense-id={expense.id}
                             sx={{ py: 1.1, alignItems: 'center', gap: 1.25 }}
                           >
                             <ListItemAvatar sx={{ minWidth: 48 }}>
-                              <Avatar sx={{ width: 40, height: 40, bgcolor: '#DDEAF8', color: '#0E2A47' }}>
-                                {merchantInitial(expense.merchantName)}
-                              </Avatar>
+                              <ExpenseMerchantAvatar
+                                expenseId={expense.id}
+                                merchantName={expense.merchantName}
+                                merchantLogoUrl={expense.merchantLogoUrl}
+                                merchantEmoji={expense.merchantEmoji}
+                              />
                             </ListItemAvatar>
 
                             <Box sx={{ flex: 1, minWidth: 0 }}>

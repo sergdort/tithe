@@ -133,6 +133,10 @@ describe('API routes', () => {
 
       expect(expenseResponse.statusCode).toBe(200);
       expect(expenseBody.ok).toBe(true);
+      expect(expenseBody.data).toMatchObject({
+        merchantLogoUrl: null,
+        merchantEmoji: null,
+      });
 
       const listResponse = await app.inject({
         method: 'GET',
@@ -141,6 +145,10 @@ describe('API routes', () => {
       const listBody = listResponse.json();
       expect(listResponse.statusCode).toBe(200);
       expect(listBody.data.length).toBe(1);
+      expect(listBody.data[0]).toMatchObject({
+        merchantLogoUrl: null,
+        merchantEmoji: null,
+      });
     } finally {
       await app.close();
       fs.rmSync(dir, { recursive: true, force: true });

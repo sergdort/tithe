@@ -21,6 +21,16 @@ const monzoAccountsResponseSchema = z.object({
   ),
 });
 
+const monzoPotsResponseSchema = z.object({
+  pots: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      deleted: z.boolean().optional(),
+    }),
+  ),
+});
+
 const monzoTransactionsResponseSchema = z.object({
   transactions: z.array(
     z.object({
@@ -36,6 +46,8 @@ const monzoTransactionsResponseSchema = z.object({
         .union([
           z.object({
             name: z.string().optional(),
+            logo: z.string().optional(),
+            emoji: z.string().optional(),
           }),
           z.string(),
         ])
@@ -47,6 +59,7 @@ const monzoTransactionsResponseSchema = z.object({
 
 export type MonzoTokenResponse = z.infer<typeof monzoTokenResponseSchema>;
 export type MonzoAccount = z.infer<typeof monzoAccountsResponseSchema.shape.accounts.element>;
+export type MonzoPot = z.infer<typeof monzoPotsResponseSchema.shape.pots.element>;
 export type MonzoTransaction = z.infer<
   typeof monzoTransactionsResponseSchema.shape.transactions.element
 >;
@@ -240,6 +253,20 @@ export const createMonzoClient = (config: MonzoClientConfig) => {
       });
 
       return payload.accounts;
+    },
+
+    async listPots(input: { accessToken: string; currentAccountId: string }): Promise<MonzoPot[]> {
+      const payload = await getJson({
+        path: '/pots',
+        accessToken: input.accessToken,
+        searchParams: new URLSearchParams({
+          current_account_id: input.currentAccountId,
+        }),
+        schema: monzoPotsResponseSchema,
+        context: 'pots_list',
+      });
+
+      return payload.pots;
     },
 
     async listTransactions(input: {

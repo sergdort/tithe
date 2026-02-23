@@ -76,6 +76,8 @@ export const createExpensesService = ({
       categoryId: input.categoryId,
       source: input.source ?? 'manual',
       merchantName: input.merchantName ?? null,
+      merchantLogoUrl: null,
+      merchantEmoji: null,
       note: input.note ?? null,
       externalRef: input.externalRef ?? null,
       commitmentInstanceId: input.commitmentInstanceId ?? null,
@@ -149,6 +151,8 @@ export const createExpensesService = ({
       fxRate: input.fxRate ?? existing.money.fxRate,
       categoryId: input.categoryId ?? existing.categoryId,
       merchantName: input.merchantName ?? existing.merchantName,
+      merchantLogoUrl: existing.merchantLogoUrl,
+      merchantEmoji: existing.merchantEmoji,
       note: input.note ?? existing.note,
       updatedAt: toIso(new Date()),
     };

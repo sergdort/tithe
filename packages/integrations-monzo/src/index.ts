@@ -39,6 +39,8 @@ export const monzoTransactionSchema = z.object({
     .union([
       z.object({
         name: z.string().optional(),
+        logo: z.string().optional(),
+        emoji: z.string().optional(),
       }),
       z.string(),
     ])

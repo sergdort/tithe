@@ -17,6 +17,8 @@ export interface ExpenseDto {
   categoryId: string;
   source: 'manual' | 'monzo_import' | 'commitment';
   merchantName: string | null;
+  merchantLogoUrl: string | null;
+  merchantEmoji: string | null;
   note: string | null;
   externalRef: string | null;
   commitmentInstanceId: string | null;
@@ -39,6 +41,8 @@ const mapExpense = (row: typeof expenses.$inferSelect): ExpenseDto => ({
   categoryId: row.categoryId,
   source: row.source as 'manual' | 'monzo_import' | 'commitment',
   merchantName: row.merchantName,
+  merchantLogoUrl: row.merchantLogoUrl,
+  merchantEmoji: row.merchantEmoji,
   note: row.note,
   externalRef: row.externalRef,
   commitmentInstanceId: row.commitmentInstanceId,
@@ -76,6 +80,8 @@ export interface CreateExpenseInput {
   categoryId: string;
   source: 'manual' | 'monzo_import' | 'commitment';
   merchantName: string | null;
+  merchantLogoUrl: string | null;
+  merchantEmoji: string | null;
   note: string | null;
   externalRef: string | null;
   commitmentInstanceId: string | null;
@@ -97,6 +103,8 @@ export interface UpdateExpenseInput {
   fxRate?: number | null;
   categoryId: string;
   merchantName: string | null;
+  merchantLogoUrl: string | null;
+  merchantEmoji: string | null;
   note: string | null;
   updatedAt: string;
 }

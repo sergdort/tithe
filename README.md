@@ -296,6 +296,10 @@ Current status in this implementation:
 - Initial import window is last 90 days; subsequent sync uses cursor overlap.
 - Import policy is expenses-only (`amount < 0`) and settled-only (pending skipped).
 - Imported expenses use `source=monzo_import` and `externalRef=<transaction_id>` for dedupe.
+- Expense API responses include optional Monzo merchant display metadata (`merchantLogoUrl`, `merchantEmoji`) used by the PWA expenses list avatar.
+- PWA expenses list merchant avatars use `logo -> emoji -> initials` fallback for imported Monzo merchants.
+- Monzo sync best-effort resolves pot-transfer descriptions that are raw Monzo pot IDs (`pot_...`) into display labels like `Pot: Savings` for new imports; if pot lookup fails or the pot is missing, the raw description is kept.
+- Merchant logo/emoji metadata is stored for new Monzo imports only (no historical backfill for older imported rows).
 - Monzo category mappings auto-create `expense` categories named `Monzo: <Category>`.
 - If Monzo denies permissions during sync/account access (`forbidden.insufficient_permissions`), Tithe surfaces a sync error and preserves the message in Monzo status `lastError` until a later successful sync clears it.
 

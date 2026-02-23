@@ -101,9 +101,9 @@ export const HomePage = () => {
             </Typography>
           </Stack>
           <Typography variant="h4" fontWeight={700}>
-            {(latestTrend?.spendBaseMinor ?? 0) / 100}
+            {(latestTrend?.spendBaseMinor ?? 0) / 100} £
           </Typography>
-          <Typography color="text.secondary">Base-currency spend this month</Typography>
+          <Typography color="text.secondary">Spend this month</Typography>
         </CardContent>
       </Card>
 

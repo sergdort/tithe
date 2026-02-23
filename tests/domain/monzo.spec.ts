@@ -156,7 +156,11 @@ describe('Monzo integration domain service', () => {
                 category: 'groceries',
                 created: '2026-02-01T10:00:00.000Z',
                 settled: '2026-02-02T10:00:00.000Z',
-                merchant: { name: 'Local Shop' },
+                merchant: {
+                  name: 'Local Shop',
+                  logo: 'https://img.test/local-shop.png',
+                  emoji: '🛍️',
+                },
               },
               {
                 id: 'tx_pending',
@@ -192,14 +196,11 @@ describe('Monzo integration domain service', () => {
         { actor: 'test', channel: 'system' },
       );
 
-      expect(callbackResult.imported).toBe(1);
-      expect(callbackResult.skipped).toBe(2);
+      expect(callbackResult.imported).toBe(0);
+      expect(callbackResult.skipped).toBe(0);
 
       const expensesAfterCallback = await services.expenses.list();
-      expect(expensesAfterCallback.length).toBe(1);
-      expect(expensesAfterCallback[0]?.source).toBe('monzo_import');
-      expect(expensesAfterCallback[0]?.externalRef).toBe('tx_debit_settled');
-      expect(expensesAfterCallback[0]?.money.amountMinor).toBe(1234);
+      expect(expensesAfterCallback.length).toBe(0);
 
       fetchMock.mockResolvedValueOnce(
         jsonResponse({
@@ -213,18 +214,29 @@ describe('Monzo integration domain service', () => {
               category: 'groceries',
               created: '2026-02-01T10:00:00.000Z',
               settled: '2026-02-02T10:00:00.000Z',
-              merchant: { name: 'Local Shop' },
+              merchant: {
+                name: 'Local Shop',
+                logo: 'https://img.test/local-shop.png',
+                emoji: '🛍️',
+              },
             },
           ],
         }),
       );
 
       const syncResult = await services.monzo.syncNow({ actor: 'test', channel: 'system' });
-      expect(syncResult.imported).toBe(0);
-      expect(syncResult.skipped).toBe(1);
+      expect(syncResult.imported).toBe(1);
+      expect(syncResult.skipped).toBe(2);
+      expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/pots'))).toBe(false);
 
       const expensesAfterResync = await services.expenses.list();
       expect(expensesAfterResync.length).toBe(1);
+      expect(expensesAfterResync[0]?.source).toBe('monzo_import');
+      expect(expensesAfterResync[0]?.externalRef).toBe('tx_debit_settled');
+      expect(expensesAfterResync[0]?.money.amountMinor).toBe(1234);
+      expect(expensesAfterResync[0]?.merchantName).toBe('Local Shop');
+      expect(expensesAfterResync[0]?.merchantLogoUrl).toBe('https://img.test/local-shop.png');
+      expect(expensesAfterResync[0]?.merchantEmoji).toBe('🛍️');
 
       const status = await services.monzo.status();
       expect(status.status).toBe('connected');
@@ -241,6 +253,161 @@ describe('Monzo integration domain service', () => {
       } finally {
         sqlite.close();
       }
+    } finally {
+      closeServices(services);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('maps pot transfer IDs to pot names during Monzo sync', async () => {
+    const { services, dir } = setupService();
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const started = await services.monzo.connectStart({ actor: 'test', channel: 'system' });
+      const state = new URL(started.authUrl).searchParams.get('state');
+      expect(state).toBeTruthy();
+
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({
+          access_token: 'token-1',
+          refresh_token: 'refresh-1',
+          expires_in: 3600,
+        }),
+      );
+
+      const callbackResult = await services.monzo.callback(
+        {
+          code: 'auth-code',
+          state: state ?? undefined,
+        },
+        { actor: 'test', channel: 'system' },
+      );
+      expect(callbackResult.status).toBe('connected');
+
+      const potId = 'pot_0000778xxfgh4iu8z83nWb';
+      fetchMock
+        .mockResolvedValueOnce(
+          jsonResponse({
+            accounts: [{ id: 'acc_main', closed: false }],
+          }),
+        )
+        .mockResolvedValueOnce(
+          jsonResponse({
+            transactions: [
+              {
+                id: 'tx_pot_transfer',
+                account_id: 'acc_main',
+                amount: -51,
+                currency: 'GBP',
+                description: potId,
+                category: 'savings',
+                created: '2026-01-17T18:33:47.633Z',
+                settled: '2026-01-17T18:33:47.633Z',
+                merchant: null,
+              },
+            ],
+          }),
+        )
+        .mockResolvedValueOnce(
+          jsonResponse({
+            pots: [
+              {
+                id: potId,
+                name: 'Savings',
+                deleted: false,
+              },
+            ],
+          }),
+        );
+
+      const syncResult = await services.monzo.syncNow({ actor: 'test', channel: 'system' });
+      expect(syncResult.imported).toBe(1);
+      expect(syncResult.skipped).toBe(0);
+
+      const expenses = await services.expenses.list();
+      expect(expenses.length).toBe(1);
+      expect(expenses[0]?.merchantName).toBe('Pot: Savings');
+
+      const potsCallUrl = fetchMock.mock.calls
+        .map(([url]) => String(url))
+        .find((url) => url.includes('/pots?'));
+      expect(potsCallUrl).toBeTruthy();
+      expect(potsCallUrl).toContain('current_account_id=acc_main');
+    } finally {
+      closeServices(services);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('falls back to raw pot ID when Monzo pots lookup fails', async () => {
+    const { services, dir } = setupService();
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const started = await services.monzo.connectStart({ actor: 'test', channel: 'system' });
+      const state = new URL(started.authUrl).searchParams.get('state');
+      expect(state).toBeTruthy();
+
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({
+          access_token: 'token-1',
+          refresh_token: 'refresh-1',
+          expires_in: 3600,
+        }),
+      );
+
+      await services.monzo.callback(
+        {
+          code: 'auth-code',
+          state: state ?? undefined,
+        },
+        { actor: 'test', channel: 'system' },
+      );
+
+      const potId = 'pot_0000AkFa5tdxsLJA4cnqef';
+      fetchMock
+        .mockResolvedValueOnce(
+          jsonResponse({
+            accounts: [{ id: 'acc_main', closed: false }],
+          }),
+        )
+        .mockResolvedValueOnce(
+          jsonResponse({
+            transactions: [
+              {
+                id: 'tx_pot_transfer_fallback',
+                account_id: 'acc_main',
+                amount: -51,
+                currency: 'GBP',
+                description: potId,
+                category: 'savings',
+                created: '2026-01-17T18:33:47.633Z',
+                settled: '2026-01-17T18:33:47.633Z',
+                merchant: null,
+              },
+            ],
+          }),
+        )
+        .mockResolvedValueOnce(
+          jsonResponse(
+            {
+              code: 'forbidden.insufficient_permissions',
+              message: 'Access forbidden due to insufficient permissions',
+            },
+            403,
+          ),
+        );
+
+      const syncResult = await services.monzo.syncNow({ actor: 'test', channel: 'system' });
+      expect(syncResult.imported).toBe(1);
+      expect(syncResult.skipped).toBe(0);
+
+      const expenses = await services.expenses.list();
+      expect(expenses.length).toBe(1);
+      expect(expenses[0]?.merchantName).toBe(potId);
     } finally {
       closeServices(services);
       fs.rmSync(dir, { recursive: true, force: true });
@@ -275,15 +442,16 @@ describe('Monzo integration domain service', () => {
           ),
         );
 
-      await expect(
-        services.monzo.callback(
-          {
-            code: 'auth-code',
-            state: state ?? undefined,
-          },
-          { actor: 'test', channel: 'system' },
-        ),
-      ).rejects.toMatchObject({
+      const callbackResult = await services.monzo.callback(
+        {
+          code: 'auth-code',
+          state: state ?? undefined,
+        },
+        { actor: 'test', channel: 'system' },
+      );
+      expect(callbackResult.status).toBe('connected');
+
+      await expect(services.monzo.syncNow({ actor: 'test', channel: 'system' })).rejects.toMatchObject({
         code: 'MONZO_REAUTH_REQUIRED',
         statusCode: 403,
       });

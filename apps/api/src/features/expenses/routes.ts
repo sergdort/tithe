@@ -58,6 +58,60 @@ export const registerExpenseRoutes = (app: FastifyInstance): void => {
     successEnvelopeSchema,
     uuidSchema,
   } = docs;
+  const nullableStringSchema = {
+    oneOf: [{ type: 'string' }, { type: 'null' }],
+  } as const;
+  const moneyResponseSchema = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['amountMinor', 'currency'],
+    properties: {
+      amountMinor: { type: 'integer' },
+      currency: { type: 'string', minLength: 3, maxLength: 3 },
+      amountBaseMinor: { type: 'integer' },
+      fxRate: { type: 'number', exclusiveMinimum: 0 },
+    },
+  } as const;
+  const expenseResponseSchema = {
+    type: 'object',
+    additionalProperties: false,
+    required: [
+      'id',
+      'occurredAt',
+      'postedAt',
+      'money',
+      'categoryId',
+      'source',
+      'merchantName',
+      'merchantLogoUrl',
+      'merchantEmoji',
+      'note',
+      'externalRef',
+      'commitmentInstanceId',
+      'createdAt',
+      'updatedAt',
+    ],
+    properties: {
+      id: uuidSchema,
+      occurredAt: isoDateTimeSchema,
+      postedAt: {
+        oneOf: [isoDateTimeSchema, { type: 'null' }],
+      },
+      money: moneyResponseSchema,
+      categoryId: uuidSchema,
+      source: { type: 'string', enum: ['manual', 'monzo_import', 'commitment'] },
+      merchantName: nullableStringSchema,
+      merchantLogoUrl: nullableStringSchema,
+      merchantEmoji: nullableStringSchema,
+      note: nullableStringSchema,
+      externalRef: nullableStringSchema,
+      commitmentInstanceId: {
+        oneOf: [uuidSchema, { type: 'null' }],
+      },
+      createdAt: isoDateTimeSchema,
+      updatedAt: isoDateTimeSchema,
+    },
+  } as const;
 
   app.get<{ Querystring: ExpenseListQuery }>(
     '',
@@ -82,7 +136,7 @@ export const registerExpenseRoutes = (app: FastifyInstance): void => {
         response: {
           200: successEnvelopeSchema({
             type: 'array',
-            items: genericObjectSchema,
+            items: expenseResponseSchema,
           }),
           ...defaultErrorResponses,
         },
@@ -99,7 +153,7 @@ export const registerExpenseRoutes = (app: FastifyInstance): void => {
         summary: 'Get expense by ID',
         params: idParamsSchema,
         response: {
-          200: successEnvelopeSchema(genericObjectSchema),
+          200: successEnvelopeSchema(expenseResponseSchema),
           ...defaultErrorResponses,
         },
       },
@@ -143,7 +197,7 @@ export const registerExpenseRoutes = (app: FastifyInstance): void => {
           },
         },
         response: {
-          200: successEnvelopeSchema(genericObjectSchema),
+          200: successEnvelopeSchema(expenseResponseSchema),
           ...defaultErrorResponses,
         },
       },
@@ -180,7 +234,7 @@ export const registerExpenseRoutes = (app: FastifyInstance): void => {
           },
         },
         response: {
-          200: successEnvelopeSchema(genericObjectSchema),
+          200: successEnvelopeSchema(expenseResponseSchema),
           ...defaultErrorResponses,
         },
       },

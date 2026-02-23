@@ -33,6 +33,8 @@ export const expenseSchema = z.object({
   categoryId: z.string().uuid(),
   source: expenseSourceSchema,
   merchantName: z.string().nullable(),
+  merchantLogoUrl: z.string().nullable(),
+  merchantEmoji: z.string().nullable(),
   note: z.string().nullable(),
   externalRef: z.string().nullable(),
   commitmentInstanceId: z.string().uuid().nullable(),

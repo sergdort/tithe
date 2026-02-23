@@ -27,7 +27,7 @@ describe('Domain services', () => {
         { actor: 'test', channel: 'system' },
       );
 
-      await services.expenses.create(
+      const expense = await services.expenses.create(
         {
           occurredAt: new Date('2026-02-01T10:00:00.000Z').toISOString(),
           amountMinor: 1234,
@@ -36,6 +36,9 @@ describe('Domain services', () => {
         },
         { actor: 'test', channel: 'system' },
       );
+
+      expect(expense.merchantLogoUrl).toBeNull();
+      expect(expense.merchantEmoji).toBeNull();
 
       const trends = await services.reports.monthlyTrends(6);
       expect(trends.length).toBeGreaterThan(0);

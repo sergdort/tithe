@@ -98,6 +98,7 @@ Failure:
 - `tithe --json monzo status`
 - PWA Home exposes Monzo controls (`Connect`, `Sync now`) and shows last sync/error state.
 - PWA `Connect` opens Monzo OAuth in a separate browser window/tab (popup opened synchronously on click to reduce popup blocking).
+- PWA Expenses list merchant avatar fallback is `logo -> emoji -> initials` for Monzo-imported expenses when display metadata is available.
 
 ### CLI invocation notes
 
@@ -116,6 +117,9 @@ Failure:
 - Monzo OAuth callback stores/refreshes tokens only and does not auto-run sync; first import happens on manual `monzo sync` / PWA `Sync now`.
 - `tithe --json monzo sync` imports settled debit Monzo transactions only (`amount < 0`, pending skipped).
 - Monzo import dedupe key is `source='monzo_import' + externalRef=transaction.id`.
+- Expense API responses include optional Monzo merchant display metadata (`merchantLogoUrl`, `merchantEmoji`) for UI avatar rendering.
+- Monzo sync best-effort resolves pot-transfer descriptions that contain a Monzo pot ID (`pot_...`) to a display label `Pot: <Pot Name>` for new imports; if pot lookup fails or no pot matches, the raw description is kept.
+- Monzo merchant logo/emoji metadata is persisted for new imports only; historical imports are not backfilled automatically.
 - Initial Monzo sync backfills 90 days; subsequent syncs use a 3-day overlap from `lastCursor`.
 - Monzo category mappings auto-create categories named `Monzo: <Category>` when missing.
 - Optional `MONZO_SCOPE` can be set when building Monzo auth URL; if unset, no explicit scope is requested.

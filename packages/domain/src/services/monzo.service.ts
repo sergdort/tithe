@@ -29,6 +29,7 @@ const INITIAL_BACKFILL_DAYS = 90;
 const CURSOR_OVERLAP_DAYS = 3;
 const TOKEN_REFRESH_GRACE_MS = 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const MONZO_POT_ID_PREFIX = 'pot_';
 
 interface MonzoEnv {
   clientId: string;
@@ -128,6 +129,45 @@ const normalizeMonzoCategory = (value: string | undefined): string => {
 const isPendingTransaction = (transaction: MonzoTransaction): boolean =>
   transaction.settled === null || transaction.settled === undefined || transaction.settled === '';
 
+const tryGetMonzoPotId = (description: string): string | null => {
+  const trimmed = description.trim();
+  if (!trimmed.startsWith(MONZO_POT_ID_PREFIX)) {
+    return null;
+  }
+
+  return trimmed;
+};
+
+const formatMonzoPotMerchantName = (potName: string): string => `Pot: ${potName}`;
+
+const resolveImportedMerchantName = (
+  transaction: MonzoTransaction,
+  potNameById: ReadonlyMap<string, string>,
+): string => {
+  if (typeof transaction.merchant === 'string' && transaction.merchant.trim().length > 0) {
+    return transaction.merchant;
+  }
+
+  if (
+    typeof transaction.merchant === 'object' &&
+    transaction.merchant !== null &&
+    typeof transaction.merchant.name === 'string' &&
+    transaction.merchant.name.trim().length > 0
+  ) {
+    return transaction.merchant.name;
+  }
+
+  const potId = tryGetMonzoPotId(transaction.description);
+  if (potId) {
+    const potName = potNameById.get(potId)?.trim();
+    if (potName) {
+      return formatMonzoPotMerchantName(potName);
+    }
+  }
+
+  return transaction.description;
+};
+
 const shouldRefresh = (tokenExpiresAt: string | null): boolean => {
   if (!tokenExpiresAt) {
     return false;
@@ -159,6 +199,18 @@ const toAppError = (error: unknown): AppError => {
       payload && typeof payload.message === 'string' ? payload.message : null;
 
     if (payloadCode || payloadMessage) {
+      if (payloadCode === 'forbidden.insufficient_permissions') {
+        return new AppError(
+          'MONZO_REAUTH_REQUIRED',
+          payloadMessage ?? error.message,
+          error.statusCode,
+          {
+            ...error.details,
+            monzoCode: payloadCode,
+          },
+        );
+      }
+
       return new AppError(
         payloadCode ?? error.code,
         payloadMessage ?? error.message,
@@ -504,6 +556,34 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
       );
       const skippedNonEligible = allTransactions.length - eligible.length;
       let skippedDuplicates = 0;
+      const potCandidateIds = new Set<string>();
+
+      for (const transaction of eligible) {
+        const potId = tryGetMonzoPotId(transaction.description);
+        if (potId) {
+          potCandidateIds.add(potId);
+        }
+      }
+
+      let potNameById = new Map<string, string>();
+      if (potCandidateIds.size > 0) {
+        try {
+          const pots = await client.listPots({
+            accessToken: currentConnection.accessToken ?? '',
+            currentAccountId: currentConnection.accountId,
+          });
+
+          potNameById = new Map(
+            pots
+              .filter((pot) => potCandidateIds.has(pot.id))
+              .map((pot) => [pot.id, pot.name.trim()] as const)
+              .filter(([, name]) => name.length > 0),
+          );
+        } catch {
+          // Pot name resolution is optional UX enrichment; sync should continue without it.
+          potNameById = new Map();
+        }
+      }
 
       let newestEligibleCursor: string | null = null;
       for (const transaction of eligible) {
@@ -597,10 +677,15 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
                 fxRate: null,
                 categoryId: mapping.categoryId,
                 source: 'monzo_import',
-                merchantName:
-                  (typeof transaction.merchant === 'string'
-                    ? transaction.merchant
-                    : transaction.merchant?.name) ?? transaction.description,
+                merchantName: resolveImportedMerchantName(transaction, potNameById),
+                merchantLogoUrl:
+                  typeof transaction.merchant === 'object' && transaction.merchant !== null
+                    ? (transaction.merchant.logo ?? null)
+                    : null,
+                merchantEmoji:
+                  typeof transaction.merchant === 'object' && transaction.merchant !== null
+                    ? (transaction.merchant.emoji ?? null)
+                    : null,
                 note: null,
                 externalRef: transaction.id,
                 commitmentInstanceId: null,
@@ -674,13 +759,16 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
       const appError = toAppError(error);
 
       if (createdSyncRun) {
+        const monzoCode =
+          typeof appError.details?.monzoCode === 'string' ? appError.details.monzoCode : null;
         const latest = monzoRepo().findLatestConnection().connection;
           if (latest) {
             monzoRepo().upsertConnection(
               mergeConnection(latest, {
                 id: latest.id,
                 status:
-                  appError.code === 'forbidden.insufficient_permissions'
+                  appError.code === 'MONZO_REAUTH_REQUIRED' ||
+                  monzoCode === 'forbidden.insufficient_permissions'
                     ? 'connected'
                     : 'sync_error',
                 lastErrorText: appError.message,

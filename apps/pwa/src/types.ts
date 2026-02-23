@@ -44,6 +44,8 @@ export interface Expense {
   categoryId: string;
   source: 'manual' | 'monzo_import' | 'commitment';
   merchantName: string | null;
+  merchantLogoUrl: string | null;
+  merchantEmoji: string | null;
   note: string | null;
   externalRef: string | null;
   commitmentInstanceId: string | null;
