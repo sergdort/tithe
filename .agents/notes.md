@@ -15,7 +15,7 @@
 [0] In this workspace, downstream package typechecks may read dependency declarations from built `dist` outputs; after API-surface changes, build producer packages (`@tithe/domain`, `@tithe/api`) before consumer typechecks, and avoid parallelizing those steps.
 [0] In restricted/offline sessions, `pnpm install` can fail with registry DNS errors; avoid introducing new dependency links that require install, and prefer local source wiring plus package builds.
 [0] `pnpm install --offline` may recreate/remove `node_modules` before failing if the local pnpm store is incomplete (for example missing tarballs); avoid running it mid-task unless cache completeness is confirmed.
-[0] `biome format --write` may not resolve `organizeImports` lint issues; reorder imports manually (or run an imports-aware fix step) when lint still fails after formatting.
+[1] `biome format --write` may not resolve `organizeImports` lint issues; reorder imports manually (or run an imports-aware fix step) when lint still fails after formatting.
 [0] `pnpm --filter <pkg> ...` scripts may run with package-local CWD, so `.env` autoload must resolve workspace-root path explicitly instead of relying on default `process.loadEnvFile()` behavior.
 [0] `dotenv@17` can print an injection banner by default; set `quiet: true` in `dotenv.config(...)` to preserve deterministic `--json` CLI output.
 [0] Fastify rejects requests with `FST_ERR_CTP_EMPTY_JSON_BODY` when `Content-Type: application/json` is sent on empty-body POSTs; frontend should only set JSON content-type when a body exists.
@@ -30,3 +30,5 @@
 [0] Monzo `/transactions` paging code must not assume descending order by `created`; if results come back ascending, `before=oldest-1` fetches only the oldest page in the window (symptom: first sync tops out around early-window dates like Dec 2 instead of today).
 [1] In `@tithe/tests`, `pnpm --filter @tithe/tests test -- <files>` may still execute the full Vitest suite via the package script; use `pnpm --filter @tithe/tests exec vitest run ...` for targeted files, and pass paths relative to the `tests/` package root (for example `domain/monzo.spec.ts`).
 [0] Monzo sync behavior in `packages/domain/src/services/monzo.service.ts` uses the local domain client (`packages/domain/src/services/monzo-client.ts`), not `packages/integrations-monzo`, so API-field additions for sync must be implemented in the domain client too.
+[0] In `apps/pwa/src/features/<feature>`, files at the feature root import shared `src/*` modules with `../../...`, while nested `components/`/`dialogs/`/`hooks/` files need `../../../...`; it's easy to overshoot by one level when splitting a large page.
+[0] `biome check src` currently reports a `useExhaustiveDependencies` warning in `apps/pwa/src/pages/ExpensesPage.tsx` for the avatar `useEffect` dependency on `merchantLogoUrl`; this appears pre-existing and can block full PWA lint even when the Home refactor files are clean.

@@ -129,6 +129,8 @@ Failure:
 - PWA Home embeds a full monthly cashflow ledger (month navigation, income/expense/transfer totals, category breakdown lists) and replaces the previous spend-only snapshot card.
 - PWA Home `Add Transaction` is a single manual entry flow for `income|expense|transfer`; `transfer` requires a direction (`Money in` / `Money out`).
 - PWA Home pending commitments support a quick `Mark paid` action that creates a linked actual transaction (`source='commitment'`) and updates the ledger.
+- PWA large pages should use thin route entrypoints in `apps/pwa/src/pages` and feature-scoped UI/data modules under `apps/pwa/src/features/<feature>`; shared domain-neutral helpers belong in `apps/pwa/src/lib`.
+- PWA Home dashboard widgets (ledger, Monzo, commitments) should manage loading/error states independently to avoid page-wide blocking when one widget fails.
 
 ### API dev runtime notes
 

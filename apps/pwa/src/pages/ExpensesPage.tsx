@@ -25,16 +25,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 
 import { api } from '../api.js';
-
-const pounds = (amountMinor: number, currency: string): string => {
-  const value = Math.abs(amountMinor) / 100;
-  return new Intl.NumberFormat('en-GB', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
-};
+import { pounds } from '../lib/format/money.js';
 
 const merchantInitials = (merchantName?: string | null): string => {
   const trimmed = merchantName?.trim();
@@ -104,7 +95,9 @@ const dayLabel = (isoDate: string): string => {
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const startOfInput = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const diffDays = Math.round((startOfToday.getTime() - startOfInput.getTime()) / (24 * 60 * 60 * 1000));
+  const diffDays = Math.round(
+    (startOfToday.getTime() - startOfInput.getTime()) / (24 * 60 * 60 * 1000),
+  );
 
   if (diffDays === 0) return 'Today';
   if (diffDays === 1) return 'Yesterday';
@@ -218,7 +211,10 @@ export const ExpensesPage = () => {
               <Stack spacing={1.5} sx={{ mt: 1 }}>
                 {groupedExpenses.map(([label, items]) => (
                   <Box key={label}>
-                    <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', px: 0.5 }}>
+                    <Typography
+                      variant="caption"
+                      sx={{ fontWeight: 700, color: 'text.secondary', px: 0.5 }}
+                    >
                       {label}
                     </Typography>
                     <List disablePadding>
