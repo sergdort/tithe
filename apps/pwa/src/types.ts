@@ -33,6 +33,11 @@ export interface Category {
   icon: string;
   color: string;
   isSystem: boolean;
+  reimbursementMode?: 'none' | 'optional' | 'always';
+  defaultCounterpartyType?: 'self' | 'partner' | 'team' | 'other' | null;
+  defaultRecoveryWindowDays?: number | null;
+  defaultMyShareMode?: 'fixed' | 'percent' | null;
+  defaultMyShareValue?: number | null;
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -45,7 +50,18 @@ export interface Expense {
   money: Money;
   categoryId: string;
   source: 'local' | 'monzo' | 'commitment';
+  kind?: 'expense' | 'income' | 'transfer_internal' | 'transfer_external';
   transferDirection: TransferDirection | null;
+  reimbursementStatus?: 'none' | 'expected' | 'partial' | 'settled' | 'written_off';
+  myShareMinor?: number | null;
+  closedOutstandingMinor?: number | null;
+  counterpartyType?: 'self' | 'partner' | 'team' | 'other' | null;
+  reimbursementGroupId?: string | null;
+  reimbursementClosedAt?: string | null;
+  reimbursementClosedReason?: string | null;
+  recoverableMinor?: number;
+  recoveredMinor?: number;
+  outstandingMinor?: number;
   merchantName: string | null;
   merchantLogoUrl: string | null;
   merchantEmoji: string | null;
@@ -114,11 +130,54 @@ export interface MonthlyLedger {
     netCashMovementMinor: number;
     txCount: number;
   };
+  cashFlow?: {
+    cashInMinor: number;
+    cashOutMinor: number;
+    internalTransferInMinor: number;
+    internalTransferOutMinor: number;
+    externalTransferInMinor: number;
+    externalTransferOutMinor: number;
+    netFlowMinor: number;
+  };
+  spending?: {
+    grossSpendMinor: number;
+    recoveredMinor: number;
+    writtenOffMinor: number;
+    netPersonalSpendMinor: number;
+  };
+  reimbursements?: {
+    recoverableMinor: number;
+    recoveredMinor: number;
+    outstandingMinor: number;
+    partialCount: number;
+    settledCount: number;
+  };
   sections: {
     income: MonthlyLedgerCategoryRow[];
     expense: MonthlyLedgerCategoryRow[];
     transfer: MonthlyLedgerTransferRow[];
+    transferInternal?: MonthlyLedgerTransferRow[];
+    transferExternal?: MonthlyLedgerTransferRow[];
   };
+}
+
+export interface ReimbursementLink {
+  id: string;
+  expenseOutId: string;
+  expenseInId: string;
+  amountMinor: number;
+  idempotencyKey: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReimbursementCategoryRule {
+  id: string;
+  expenseCategoryId: string;
+  inboundCategoryId: string;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface MonzoConnectStart {

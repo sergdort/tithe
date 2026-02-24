@@ -23,6 +23,7 @@ export interface MonzoConnectionDto {
 
 export interface MonzoCategoryMappingDto {
   monzoCategory: string;
+  flow: 'in' | 'out';
   categoryId: string;
   createdAt: string;
   updatedAt: string;
@@ -49,6 +50,7 @@ const mapCategoryMapping = (
   row: typeof monzoCategoryMappings.$inferSelect,
 ): MonzoCategoryMappingDto => ({
   monzoCategory: row.monzoCategory,
+  flow: row.flow === 'in' ? 'in' : 'out',
   categoryId: row.categoryId,
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
@@ -81,6 +83,7 @@ export interface UpsertMonzoConnectionOutput {
 
 export interface FindMonzoCategoryMappingInput {
   monzoCategory: string;
+  flow: 'in' | 'out';
 }
 
 export interface FindMonzoCategoryMappingOutput {
@@ -89,6 +92,7 @@ export interface FindMonzoCategoryMappingOutput {
 
 export interface UpsertMonzoCategoryMappingInput {
   monzoCategory: string;
+  flow: 'in' | 'out';
   categoryId: string;
   createdAt: string;
   updatedAt: string;
@@ -206,11 +210,14 @@ export class SqliteMonzoRepository implements MonzoRepository {
 
   findCategoryMapping({
     monzoCategory,
+    flow,
   }: FindMonzoCategoryMappingInput): FindMonzoCategoryMappingOutput {
     const row = this.db
       .select()
       .from(monzoCategoryMappings)
-      .where(eq(monzoCategoryMappings.monzoCategory, monzoCategory))
+      .where(
+        sql`${monzoCategoryMappings.monzoCategory} = ${monzoCategory} AND ${monzoCategoryMappings.flow} = ${flow}`,
+      )
       .get();
 
     return {
@@ -220,6 +227,7 @@ export class SqliteMonzoRepository implements MonzoRepository {
 
   upsertCategoryMapping({
     monzoCategory,
+    flow,
     categoryId,
     createdAt,
     updatedAt,
@@ -228,12 +236,13 @@ export class SqliteMonzoRepository implements MonzoRepository {
       .insert(monzoCategoryMappings)
       .values({
         monzoCategory,
+        flow,
         categoryId,
         createdAt,
         updatedAt,
       })
       .onConflictDoUpdate({
-        target: monzoCategoryMappings.monzoCategory,
+        target: [monzoCategoryMappings.monzoCategory, monzoCategoryMappings.flow],
         set: {
           categoryId,
           updatedAt,
@@ -244,11 +253,13 @@ export class SqliteMonzoRepository implements MonzoRepository {
     const row = this.db
       .select()
       .from(monzoCategoryMappings)
-      .where(eq(monzoCategoryMappings.monzoCategory, monzoCategory))
+      .where(
+        sql`${monzoCategoryMappings.monzoCategory} = ${monzoCategory} AND ${monzoCategoryMappings.flow} = ${flow}`,
+      )
       .get();
 
     if (!row) {
-      throw new Error(`Failed to fetch saved monzo category mapping ${monzoCategory}`);
+      throw new Error(`Failed to fetch saved monzo category mapping ${monzoCategory}:${flow}`);
     }
 
     return {

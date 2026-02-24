@@ -8,6 +8,8 @@ import { createMonzoService } from './monzo.service.js';
 import type { MonzoService } from './monzo.service.js';
 import { createQueryService } from './query.service.js';
 import type { QueryService } from './query.service.js';
+import { createReimbursementsService } from './reimbursements.service.js';
+import type { ReimbursementsService } from './reimbursements.service.js';
 import { createReportsService } from './reports.service.js';
 import type { ReportsService } from './reports.service.js';
 import { createApprovalService } from './shared/approval-service.js';
@@ -22,6 +24,7 @@ export interface DomainServices {
   reports: ReportsService;
   query: QueryService;
   monzo: MonzoService;
+  reimbursements: ReimbursementsService;
 }
 
 export interface ClosableDomainServices extends DomainServices {
@@ -41,6 +44,7 @@ export const createDomainServices = (
     reports: createReportsService({ runtime }),
     query: createQueryService({ runtime }),
     monzo: createMonzoService({ runtime, audit }),
+    reimbursements: createReimbursementsService({ runtime, approvals, audit }),
     close: () => runtime.close(),
   };
 

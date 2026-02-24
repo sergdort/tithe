@@ -583,7 +583,7 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
       });
 
       const eligible = allTransactions.filter(
-        (transaction) => !isPendingTransaction(transaction) && transaction.amount < 0,
+        (transaction) => !isPendingTransaction(transaction) && transaction.amount !== 0,
       );
       const skippedNonEligible = allTransactions.length - eligible.length;
       let skippedDuplicates = 0;
@@ -634,56 +634,122 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
 
           for (const transaction of eligible) {
             const nowIso = toIso(new Date());
-            const monzoCategory = normalizeMonzoCategory(transaction.category);
-            let mapping = monzoTxRepo.findCategoryMapping({ monzoCategory }).mapping;
+            const isPotTransfer = tryGetMonzoPotId(transaction.description) !== null;
+            const flow: 'in' | 'out' = transaction.amount < 0 ? 'out' : 'in';
+            const semanticKind = isPotTransfer
+              ? 'transfer_internal'
+              : flow === 'out'
+                ? 'expense'
+                : 'income';
+            const transferDirection = isPotTransfer ? flow : null;
+            let resolvedCategoryId: string | null = null;
 
-            if (!mapping) {
-              const categoryName = titleCaseCategory(monzoCategory);
-              const legacyCategoryName = `Monzo: ${categoryName}`;
-              let category = categoriesTxRepo
+            if (isPotTransfer) {
+              const transferCategoryName = 'Monzo Pot Transfers';
+              let transferCategory = categoriesTxRepo
                 .list({})
                 .categories.find(
-                  (item) =>
-                    item.kind === 'expense' &&
-                    (item.name === categoryName || item.name === legacyCategoryName),
+                  (item) => item.kind === 'transfer' && item.name === transferCategoryName,
                 );
 
-              if (!category) {
+              if (!transferCategory) {
                 try {
-                  category = categoriesTxRepo.create({
+                  transferCategory = categoriesTxRepo.create({
                     id: crypto.randomUUID(),
-                    name: categoryName,
-                    kind: 'expense',
+                    name: transferCategoryName,
+                    kind: 'transfer',
                     icon: 'savings',
                     color: '#1976D2',
                     isSystem: false,
+                    reimbursementMode: 'none',
+                    defaultCounterpartyType: null,
+                    defaultRecoveryWindowDays: null,
+                    defaultMyShareMode: null,
+                    defaultMyShareValue: null,
                     archivedAt: null,
                     createdAt: nowIso,
                     updatedAt: nowIso,
                   }).category;
                 } catch {
-                  category = categoriesTxRepo
+                  transferCategory = categoriesTxRepo
                     .list({})
                     .categories.find(
-                      (item) => item.kind === 'expense' && item.name === categoryName,
+                      (item) => item.kind === 'transfer' && item.name === transferCategoryName,
                     );
                 }
               }
 
-              if (!category) {
+              if (!transferCategory) {
                 throw new AppError(
                   'MONZO_CATEGORY_CREATE_FAILED',
-                  `Could not resolve category for Monzo category ${monzoCategory}`,
+                  'Could not resolve Monzo pot transfer category',
                   500,
                 );
               }
 
-              mapping = monzoTxRepo.upsertCategoryMapping({
-                monzoCategory,
-                categoryId: category.id,
-                createdAt: nowIso,
-                updatedAt: nowIso,
-              }).mapping;
+              resolvedCategoryId = transferCategory.id;
+            } else {
+              const monzoCategory = normalizeMonzoCategory(transaction.category);
+              let mapping = monzoTxRepo.findCategoryMapping({ monzoCategory, flow }).mapping;
+
+              if (!mapping) {
+                const categoryName = titleCaseCategory(monzoCategory);
+                const legacyCategoryName = `Monzo: ${categoryName}`;
+                const categoryKind = flow === 'out' ? 'expense' : 'income';
+                let category = categoriesTxRepo
+                  .list({})
+                  .categories.find(
+                    (item) =>
+                      item.kind === categoryKind &&
+                      (item.name === categoryName ||
+                        (categoryKind === 'expense' && item.name === legacyCategoryName)),
+                  );
+
+                if (!category) {
+                  try {
+                    category = categoriesTxRepo.create({
+                      id: crypto.randomUUID(),
+                      name: categoryName,
+                      kind: categoryKind,
+                      icon: 'savings',
+                      color: '#1976D2',
+                      isSystem: false,
+                      reimbursementMode: 'none',
+                      defaultCounterpartyType: null,
+                      defaultRecoveryWindowDays: null,
+                      defaultMyShareMode: null,
+                      defaultMyShareValue: null,
+                      archivedAt: null,
+                      createdAt: nowIso,
+                      updatedAt: nowIso,
+                    }).category;
+                  } catch {
+                    category = categoriesTxRepo
+                      .list({})
+                      .categories.find(
+                        (item) => item.kind === categoryKind && item.name === categoryName,
+                      );
+                  }
+                }
+
+                if (!category) {
+                  throw new AppError(
+                    'MONZO_CATEGORY_CREATE_FAILED',
+                    `Could not resolve category for Monzo category ${monzoCategory}:${flow}`,
+                    500,
+                  );
+                }
+
+                mapping = monzoTxRepo.upsertCategoryMapping({
+                  monzoCategory,
+                  flow,
+                  categoryId: category.id,
+                  createdAt: nowIso,
+                  updatedAt: nowIso,
+                }).mapping;
+              }
+
+              resolvedCategoryId = mapping.categoryId;
             }
 
             monzoTxRepo.upsertRawTransaction({
@@ -719,8 +785,16 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
                 currency: normalizeCurrency(transaction.currency),
                 amountBaseMinor: null,
                 fxRate: null,
-                categoryId: mapping.categoryId,
-                transferDirection: null,
+                categoryId: resolvedCategoryId,
+                transferDirection,
+                kind: semanticKind,
+                reimbursementStatus: existingImported.reimbursementStatus,
+                myShareMinor: existingImported.myShareMinor,
+                closedOutstandingMinor: existingImported.closedOutstandingMinor,
+                counterpartyType: existingImported.counterpartyType,
+                reimbursementGroupId: existingImported.reimbursementGroupId,
+                reimbursementClosedAt: existingImported.reimbursementClosedAt,
+                reimbursementClosedReason: existingImported.reimbursementClosedReason,
                 merchantName,
                 merchantLogoUrl,
                 merchantEmoji,
@@ -740,9 +814,17 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
                 currency: normalizeCurrency(transaction.currency),
                 amountBaseMinor: null,
                 fxRate: null,
-                categoryId: mapping.categoryId,
+                categoryId: resolvedCategoryId,
                 source: 'monzo',
-                transferDirection: null,
+                transferDirection,
+                kind: semanticKind,
+                reimbursementStatus: 'none',
+                myShareMinor: null,
+                closedOutstandingMinor: null,
+                counterpartyType: null,
+                reimbursementGroupId: null,
+                reimbursementClosedAt: null,
+                reimbursementClosedReason: null,
                 merchantName,
                 merchantLogoUrl,
                 merchantEmoji,

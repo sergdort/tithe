@@ -161,6 +161,211 @@ describe('Domain services', () => {
     }
   });
 
+  it('tracks reimbursable expenses with links, idempotency, close, and reopen', async () => {
+    const { services, dir } = setupService();
+
+    try {
+      const sports = await services.categories.create(
+        { name: 'Sports', kind: 'expense', reimbursementMode: 'optional' },
+        { actor: 'test', channel: 'system' },
+      );
+      const reimbursementsIncome = await services.categories.create(
+        { name: 'Reimbursements', kind: 'income' },
+        { actor: 'test', channel: 'system' },
+      );
+
+      const out = await services.expenses.create(
+        {
+          occurredAt: '2026-02-01T10:00:00.000Z',
+          amountMinor: 10000,
+          currency: 'GBP',
+          categoryId: sports.id,
+          reimbursable: true,
+          myShareMinor: 2000,
+          merchantName: 'Pitch booking',
+        },
+        { actor: 'test', channel: 'system' },
+      );
+
+      expect(out.kind).toBe('expense');
+      expect(out.recoverableMinor).toBe(8000);
+      expect(out.recoveredMinor).toBe(0);
+      expect(out.outstandingMinor).toBe(8000);
+      expect(out.reimbursementStatus).toBe('expected');
+
+      const inbound = await services.expenses.create(
+        {
+          occurredAt: '2026-02-05T10:00:00.000Z',
+          amountMinor: 5000,
+          currency: 'GBP',
+          categoryId: reimbursementsIncome.id,
+          merchantName: 'Teammate repayment',
+        },
+        { actor: 'test', channel: 'system' },
+      );
+
+      const idempotencyKey = '11111111-1111-1111-1111-111111111111';
+      const firstLink = await services.reimbursements.link(
+        {
+          expenseOutId: out.id,
+          expenseInId: inbound.id,
+          amountMinor: 3000,
+          idempotencyKey,
+        },
+        { actor: 'test', channel: 'system' },
+      );
+      const retriedLink = await services.reimbursements.link(
+        {
+          expenseOutId: out.id,
+          expenseInId: inbound.id,
+          amountMinor: 3000,
+          idempotencyKey,
+        },
+        { actor: 'test', channel: 'system' },
+      );
+
+      expect(retriedLink.id).toBe(firstLink.id);
+
+      const afterLink = await services.expenses.get(out.id);
+      expect(afterLink.recoveredMinor).toBe(3000);
+      expect(afterLink.outstandingMinor).toBe(5000);
+      expect(afterLink.reimbursementStatus).toBe('partial');
+
+      const afterClose = await services.reimbursements.close(
+        out.id,
+        { closeOutstandingMinor: 2000, reason: 'Uncollectible' },
+        { actor: 'test', channel: 'system' },
+      );
+      expect(afterClose.closedOutstandingMinor).toBe(2000);
+      expect(afterClose.reimbursementStatus).toBe('written_off');
+      expect(afterClose.outstandingMinor).toBe(3000);
+
+      const afterReopen = await services.reimbursements.reopen(out.id, {
+        actor: 'test',
+        channel: 'system',
+      });
+      expect(afterReopen.closedOutstandingMinor).toBeNull();
+      expect(afterReopen.reimbursementStatus).toBe('partial');
+      expect(afterReopen.outstandingMinor).toBe(5000);
+    } finally {
+      closeServices(services);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('auto-matches reimbursements using explicit category rules across different categories', async () => {
+    const { services, dir } = setupService();
+
+    try {
+      const sportsExpense = await services.categories.create(
+        { name: 'Sunday League', kind: 'expense', reimbursementMode: 'always', defaultRecoveryWindowDays: 14 },
+        { actor: 'test', channel: 'system' },
+      );
+      const sportsIncome = await services.categories.create(
+        { name: 'Sunday League Repayments', kind: 'income' },
+        { actor: 'test', channel: 'system' },
+      );
+      const transferCategory = await services.categories.create(
+        { name: 'Bank Transfer', kind: 'transfer' },
+        { actor: 'test', channel: 'system' },
+      );
+
+      await expect(
+        services.reimbursements.createCategoryRule(
+          {
+            expenseCategoryId: sportsIncome.id,
+            inboundCategoryId: sportsExpense.id,
+          },
+          { actor: 'test', channel: 'system' },
+        ),
+      ).rejects.toMatchObject({
+        code: 'REIMBURSEMENT_CATEGORY_RULE_INVALID_EXPENSE_CATEGORY',
+      });
+
+      const rule = await services.reimbursements.createCategoryRule(
+        {
+          expenseCategoryId: sportsExpense.id,
+          inboundCategoryId: sportsIncome.id,
+        },
+        { actor: 'test', channel: 'system' },
+      );
+      expect(rule.enabled).toBe(true);
+
+      const duplicate = await services.reimbursements.createCategoryRule(
+        {
+          expenseCategoryId: sportsExpense.id,
+          inboundCategoryId: sportsIncome.id,
+        },
+        { actor: 'test', channel: 'system' },
+      );
+      expect(duplicate.id).toBe(rule.id);
+
+      await services.reimbursements.createCategoryRule(
+        {
+          expenseCategoryId: sportsExpense.id,
+          inboundCategoryId: transferCategory.id,
+        },
+        { actor: 'test', channel: 'system' },
+      );
+
+      const out = await services.expenses.create(
+        {
+          occurredAt: '2026-02-01T10:00:00.000Z',
+          amountMinor: 9000,
+          currency: 'GBP',
+          categoryId: sportsExpense.id,
+          myShareMinor: 3000,
+        },
+        { actor: 'test', channel: 'system' },
+      );
+      expect(out.reimbursementStatus).toBe('expected');
+      expect(out.outstandingMinor).toBe(6000);
+
+      await services.expenses.create(
+        {
+          occurredAt: '2026-02-02T10:00:00.000Z',
+          amountMinor: 6000,
+          currency: 'GBP',
+          categoryId: sportsIncome.id,
+        },
+        { actor: 'test', channel: 'system' },
+      );
+
+      const autoMatchSummary = await services.reimbursements.autoMatch(
+        {
+          from: '2026-02-01T00:00:00.000Z',
+          to: '2026-02-28T23:59:59.000Z',
+        },
+        { actor: 'test', channel: 'system' },
+      );
+      expect(autoMatchSummary.linksCreated).toBe(1);
+
+      const afterAutoMatch = await services.expenses.get(out.id);
+      expect(afterAutoMatch.recoveredMinor).toBe(6000);
+      expect(afterAutoMatch.outstandingMinor).toBe(0);
+      expect(afterAutoMatch.reimbursementStatus).toBe('settled');
+
+      const renamedIncome = await services.categories.update(
+        sportsIncome.id,
+        { name: 'League repayments (renamed)' },
+        { actor: 'test', channel: 'system' },
+      );
+      expect(renamedIncome.name).toBe('League repayments (renamed)');
+
+      const deleteApproval = await services.reimbursements.createDeleteCategoryRuleApproval(rule.id);
+      await services.reimbursements.deleteCategoryRule(rule.id, deleteApproval.operationId, {
+        actor: 'test',
+        channel: 'system',
+      });
+
+      const rules = await services.reimbursements.listCategoryRules();
+      expect(rules.find((item) => item.id === rule.id)).toBeUndefined();
+    } finally {
+      closeServices(services);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('requires approval token for destructive deletes', async () => {
     const { services, dir } = setupService();
 

@@ -5,6 +5,7 @@ import { registerCommitmentRoutes } from '../features/commitments/routes.js';
 import { registerExpenseRoutes } from '../features/expenses/routes.js';
 import { registerMonzoRoutes } from '../features/monzo/routes.js';
 import { registerQueryRoutes } from '../features/query/routes.js';
+import { registerReimbursementRoutes } from '../features/reimbursements/routes.js';
 import { registerReportRoutes } from '../features/reports/routes.js';
 import { registerSystemRoutes } from '../features/system/routes.js';
 
@@ -20,6 +21,7 @@ export const featureRouteRegistrations: readonly FeatureRouteRegistration[] = [
   { name: 'system', registrar: registerSystemRoutes },
   { name: 'categories', prefix: '/v1/categories', registrar: registerCategoryRoutes },
   { name: 'expenses', prefix: '/v1/expenses', registrar: registerExpenseRoutes },
+  { name: 'reimbursements', prefix: '/v1/reimbursements', registrar: registerReimbursementRoutes },
   { name: 'commitments', prefix: '/v1', registrar: registerCommitmentRoutes },
   { name: 'reports', prefix: '/v1/reports', registrar: registerReportRoutes },
   { name: 'query', prefix: '/v1/query', registrar: registerQueryRoutes },

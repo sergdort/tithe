@@ -92,7 +92,7 @@ export const registerReportRoutes = (app: FastifyInstance): void => {
   const monthlyLedgerResponseSchema = {
     type: 'object',
     additionalProperties: false,
-    required: ['month', 'range', 'totals', 'sections'],
+    required: ['month', 'range', 'totals', 'cashFlow', 'spending', 'reimbursements', 'sections'],
     properties: {
       month: { type: 'string', pattern: '^\\d{4}-\\d{2}$' },
       range: {
@@ -126,10 +126,61 @@ export const registerReportRoutes = (app: FastifyInstance): void => {
           txCount: { type: 'integer', minimum: 0 },
         },
       },
+      cashFlow: {
+        type: 'object',
+        additionalProperties: false,
+        required: [
+          'cashInMinor',
+          'cashOutMinor',
+          'internalTransferInMinor',
+          'internalTransferOutMinor',
+          'externalTransferInMinor',
+          'externalTransferOutMinor',
+          'netFlowMinor',
+        ],
+        properties: {
+          cashInMinor: { type: 'integer' },
+          cashOutMinor: { type: 'integer' },
+          internalTransferInMinor: { type: 'integer' },
+          internalTransferOutMinor: { type: 'integer' },
+          externalTransferInMinor: { type: 'integer' },
+          externalTransferOutMinor: { type: 'integer' },
+          netFlowMinor: { type: 'integer' },
+        },
+      },
+      spending: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['grossSpendMinor', 'recoveredMinor', 'writtenOffMinor', 'netPersonalSpendMinor'],
+        properties: {
+          grossSpendMinor: { type: 'integer' },
+          recoveredMinor: { type: 'integer' },
+          writtenOffMinor: { type: 'integer' },
+          netPersonalSpendMinor: { type: 'integer' },
+        },
+      },
+      reimbursements: {
+        type: 'object',
+        additionalProperties: false,
+        required: [
+          'recoverableMinor',
+          'recoveredMinor',
+          'outstandingMinor',
+          'partialCount',
+          'settledCount',
+        ],
+        properties: {
+          recoverableMinor: { type: 'integer' },
+          recoveredMinor: { type: 'integer' },
+          outstandingMinor: { type: 'integer' },
+          partialCount: { type: 'integer', minimum: 0 },
+          settledCount: { type: 'integer', minimum: 0 },
+        },
+      },
       sections: {
         type: 'object',
         additionalProperties: false,
-        required: ['income', 'expense', 'transfer'],
+        required: ['income', 'expense', 'transfer', 'transferInternal', 'transferExternal'],
         properties: {
           income: {
             type: 'array',
@@ -140,6 +191,14 @@ export const registerReportRoutes = (app: FastifyInstance): void => {
             items: monthlyLedgerCategoryRowSchema,
           },
           transfer: {
+            type: 'array',
+            items: monthlyLedgerTransferRowSchema,
+          },
+          transferInternal: {
+            type: 'array',
+            items: monthlyLedgerTransferRowSchema,
+          },
+          transferExternal: {
             type: 'array',
             items: monthlyLedgerTransferRowSchema,
           },

@@ -7,6 +7,7 @@ import type {
 
 export type TransactionKind = 'income' | 'expense' | 'transfer';
 export type HomeTransferDirection = TransferDirection;
+export type TransferSemanticKind = 'transfer_internal' | 'transfer_external';
 
 export interface CategoriesByKind {
   expense: Category[];

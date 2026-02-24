@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import crypto from 'node:crypto';
 import { Command } from 'commander';
 
 import { fail, ok } from '@tithe/contracts';
@@ -26,6 +27,26 @@ const asBoolean = (value?: string | boolean): boolean => {
     return false;
   }
   return ['1', 'true', 'yes', 'y'].includes(String(value).toLowerCase());
+};
+
+const parseOptionalInteger = (value: string | undefined): number | undefined =>
+  value === undefined ? undefined : Number(value);
+
+const parseNullableIntegerOption = (value: string | undefined): number | null | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value.toLowerCase() === 'null') {
+    return null;
+  }
+  return Number(value);
+};
+
+const parseNullableStringOption = (value: string | undefined): string | null | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+  return value.toLowerCase() === 'null' ? null : value;
 };
 
 const monthPattern = /^\d{4}-\d{2}$/;
@@ -113,6 +134,11 @@ category
   .requiredOption('--kind <kind>', 'expense|income|transfer')
   .option('--icon <icon>', 'MUI icon name')
   .option('--color <color>', 'hex color')
+  .option('--reimbursement-mode <mode>', 'none|optional|always')
+  .option('--default-counterparty-type <type>', 'self|partner|team|other|null')
+  .option('--default-recovery-window-days <days>', 'default auto-match window days or null')
+  .option('--default-my-share-mode <mode>', 'fixed|percent|null')
+  .option('--default-my-share-value <value>', 'default my share value or null')
   .action(async (options) => {
     const opts = program.opts<{ json: boolean }>();
     await run(opts.json, () =>
@@ -122,6 +148,21 @@ category
           kind: options.kind,
           icon: options.icon,
           color: options.color,
+          reimbursementMode: options.reimbursementMode,
+          defaultCounterpartyType: parseNullableStringOption(options.defaultCounterpartyType) as
+            | 'self'
+            | 'partner'
+            | 'team'
+            | 'other'
+            | null
+            | undefined,
+          defaultRecoveryWindowDays: parseNullableIntegerOption(options.defaultRecoveryWindowDays),
+          defaultMyShareMode: parseNullableStringOption(options.defaultMyShareMode) as
+            | 'fixed'
+            | 'percent'
+            | null
+            | undefined,
+          defaultMyShareValue: parseNullableIntegerOption(options.defaultMyShareValue),
         },
         { actor: 'cli', channel: 'cli' },
       ),
@@ -137,6 +178,11 @@ category
   .option('--color <color>', 'hex color')
   .option('--archived-at <isoDate>', 'archive timestamp')
   .option('--unarchive', 'clear archivedAt flag', false)
+  .option('--reimbursement-mode <mode>', 'none|optional|always')
+  .option('--default-counterparty-type <type>', 'self|partner|team|other|null')
+  .option('--default-recovery-window-days <days>', 'default auto-match window days or null')
+  .option('--default-my-share-mode <mode>', 'fixed|percent|null')
+  .option('--default-my-share-value <value>', 'default my share value or null')
   .action(async (options) => {
     const opts = program.opts<{ json: boolean }>();
 
@@ -149,6 +195,21 @@ category
           icon: options.icon,
           color: options.color,
           archivedAt: options.unarchive ? null : options.archivedAt,
+          reimbursementMode: options.reimbursementMode,
+          defaultCounterpartyType: parseNullableStringOption(options.defaultCounterpartyType) as
+            | 'self'
+            | 'partner'
+            | 'team'
+            | 'other'
+            | null
+            | undefined,
+          defaultRecoveryWindowDays: parseNullableIntegerOption(options.defaultRecoveryWindowDays),
+          defaultMyShareMode: parseNullableStringOption(options.defaultMyShareMode) as
+            | 'fixed'
+            | 'percent'
+            | null
+            | undefined,
+          defaultMyShareValue: parseNullableIntegerOption(options.defaultMyShareValue),
         },
         { actor: 'cli', channel: 'cli' },
       ),
@@ -220,12 +281,24 @@ expense
   .option('--fx-rate <fxRate>', 'fx rate')
   .option('--source <source>', 'local|monzo|commitment', 'local')
   .option('--transfer-direction <direction>', 'in|out')
+  .option('--kind <kind>', 'expense|income|transfer_internal|transfer_external')
+  .option('--reimbursable', 'mark expense as reimbursable')
+  .option('--not-reimbursable', 'disable reimbursement tracking for this row')
+  .option('--my-share-minor <amountMinor|null>', 'my share in minor units or null')
+  .option('--counterparty-type <type|null>', 'self|partner|team|other|null')
+  .option('--reimbursement-group-id <id|null>', 'optional reimbursement grouping key or null')
   .option('--merchant-name <merchantName>', 'merchant name')
   .option('--note <note>', 'note')
   .option('--provider-transaction-id <providerTransactionId>', 'provider transaction id for idempotency')
   .option('--commitment-instance-id <id>', 'link expense to commitment instance')
   .action(async (options) => {
     const opts = program.opts<{ json: boolean }>();
+    const reimbursable =
+      options.reimbursable === true
+        ? true
+        : options.notReimbursable === true
+          ? false
+          : undefined;
 
     await run(opts.json, () =>
       getServices().expenses.create(
@@ -239,6 +312,17 @@ expense
           categoryId: options.categoryId,
           source: options.source,
           transferDirection: options.transferDirection,
+          kind: options.kind,
+          reimbursable,
+          myShareMinor: parseNullableIntegerOption(options.myShareMinor),
+          counterpartyType: parseNullableStringOption(options.counterpartyType) as
+            | 'self'
+            | 'partner'
+            | 'team'
+            | 'other'
+            | null
+            | undefined,
+          reimbursementGroupId: parseNullableStringOption(options.reimbursementGroupId),
           merchantName: options.merchantName,
           note: options.note,
           providerTransactionId: options.providerTransactionId,
@@ -260,10 +344,22 @@ expense
   .option('--fx-rate <fxRate>', 'fx rate')
   .option('--category-id <id>', 'category id')
   .option('--transfer-direction <direction>', 'in|out')
+  .option('--kind <kind>', 'expense|income|transfer_internal|transfer_external')
+  .option('--reimbursable', 'mark expense as reimbursable')
+  .option('--not-reimbursable', 'disable reimbursement tracking for this row')
+  .option('--my-share-minor <amountMinor|null>', 'my share in minor units or null')
+  .option('--counterparty-type <type|null>', 'self|partner|team|other|null')
+  .option('--reimbursement-group-id <id|null>', 'optional reimbursement grouping key or null')
   .option('--merchant-name <merchantName>', 'merchant name')
   .option('--note <note>', 'note')
   .action(async (options) => {
     const opts = program.opts<{ json: boolean }>();
+    const reimbursable =
+      options.reimbursable === true
+        ? true
+        : options.notReimbursable === true
+          ? false
+          : undefined;
 
     await run(opts.json, () =>
       getServices().expenses.update(
@@ -277,6 +373,17 @@ expense
           fxRate: options.fxRate ? Number(options.fxRate) : undefined,
           categoryId: options.categoryId,
           transferDirection: options.transferDirection,
+          kind: options.kind,
+          reimbursable,
+          myShareMinor: parseNullableIntegerOption(options.myShareMinor),
+          counterpartyType: parseNullableStringOption(options.counterpartyType) as
+            | 'self'
+            | 'partner'
+            | 'team'
+            | 'other'
+            | null
+            | undefined,
+          reimbursementGroupId: parseNullableStringOption(options.reimbursementGroupId),
           merchantName: options.merchantName,
           note: options.note,
         },
@@ -311,6 +418,164 @@ expense
       await getServices().expenses.delete(options.id, options.approve, { actor: 'cli', channel: 'cli' });
       return { deleted: true, id: options.id };
     });
+  });
+
+const reimbursement = program.command('reimbursement').description('Reimbursement workflow operations');
+const reimbursementRule = reimbursement
+  .command('rule')
+  .description('Reimbursement auto-match category rule operations');
+
+reimbursementRule.command('list').action(async () => {
+  const opts = program.opts<{ json: boolean }>();
+  await run(opts.json, () => getServices().reimbursements.listCategoryRules());
+});
+
+reimbursementRule
+  .command('add')
+  .requiredOption('--expense-category-id <id>', 'expense category id')
+  .requiredOption('--inbound-category-id <id>', 'income/transfer category id')
+  .action(async (options) => {
+    const opts = program.opts<{ json: boolean }>();
+    await run(opts.json, () =>
+      getServices().reimbursements.createCategoryRule(
+        {
+          expenseCategoryId: options.expenseCategoryId,
+          inboundCategoryId: options.inboundCategoryId,
+        },
+        { actor: 'cli', channel: 'cli' },
+      ),
+    );
+  });
+
+reimbursementRule
+  .command('delete')
+  .requiredOption('--id <id>', 'reimbursement category rule id')
+  .option('--dry-run', 'return approval token only', false)
+  .option('--approve <operationId>', 'approval token id')
+  .action(async (options) => {
+    const opts = program.opts<{ json: boolean }>();
+
+    if (options.dryRun) {
+      await run(opts.json, () => getServices().reimbursements.createDeleteCategoryRuleApproval(options.id));
+      return;
+    }
+
+    if (!options.approve) {
+      emit(
+        fail('APPROVAL_REQUIRED', 'Pass --dry-run first, then --approve <operationId> for delete.'),
+        true,
+      );
+      process.exitCode = 1;
+      return;
+    }
+
+    await run(opts.json, async () => {
+      await getServices().reimbursements.deleteCategoryRule(options.id, options.approve, {
+        actor: 'cli',
+        channel: 'cli',
+      });
+      return { deleted: true, id: options.id };
+    });
+  });
+
+reimbursement
+  .command('link')
+  .requiredOption('--expense-out-id <id>', 'reimbursable outbound expense id')
+  .requiredOption('--expense-in-id <id>', 'inbound reimbursement transaction id')
+  .requiredOption('--amount-minor <amountMinor>', 'allocation amount in minor units')
+  .option('--idempotency-key <key>', 'idempotency key (UUID recommended)')
+  .action(async (options) => {
+    const opts = program.opts<{ json: boolean }>();
+    const idempotencyKey = options.idempotencyKey ?? crypto.randomUUID();
+
+    await run(opts.json, () =>
+      getServices().reimbursements.link(
+        {
+          expenseOutId: options.expenseOutId,
+          expenseInId: options.expenseInId,
+          amountMinor: Number(options.amountMinor),
+          idempotencyKey,
+        },
+        { actor: 'cli', channel: 'cli' },
+      ),
+    );
+  });
+
+reimbursement
+  .command('unlink')
+  .requiredOption('--id <id>', 'reimbursement link id')
+  .option('--dry-run', 'return approval token only', false)
+  .option('--approve <operationId>', 'approval token id')
+  .action(async (options) => {
+    const opts = program.opts<{ json: boolean }>();
+
+    if (options.dryRun) {
+      await run(opts.json, () => getServices().reimbursements.createUnlinkApproval(options.id));
+      return;
+    }
+
+    if (!options.approve) {
+      emit(
+        fail('APPROVAL_REQUIRED', 'Pass --dry-run first, then --approve <operationId> for delete.'),
+        true,
+      );
+      process.exitCode = 1;
+      return;
+    }
+
+    await run(opts.json, async () => {
+      await getServices().reimbursements.unlink(options.id, options.approve, {
+        actor: 'cli',
+        channel: 'cli',
+      });
+      return { deleted: true, id: options.id };
+    });
+  });
+
+reimbursement
+  .command('close')
+  .requiredOption('--expense-out-id <id>', 'reimbursable outbound expense id')
+  .option('--close-outstanding-minor <amountMinor>', 'write-off amount in minor units')
+  .option('--reason <text>', 'optional write-off reason')
+  .action(async (options) => {
+    const opts = program.opts<{ json: boolean }>();
+    await run(opts.json, () =>
+      getServices().reimbursements.close(
+        options.expenseOutId,
+        {
+          closeOutstandingMinor: parseOptionalInteger(options.closeOutstandingMinor),
+          reason: options.reason,
+        },
+        { actor: 'cli', channel: 'cli' },
+      ),
+    );
+  });
+
+reimbursement
+  .command('reopen')
+  .requiredOption('--expense-out-id <id>', 'reimbursable outbound expense id')
+  .action(async (options) => {
+    const opts = program.opts<{ json: boolean }>();
+    await run(opts.json, () =>
+      getServices().reimbursements.reopen(options.expenseOutId, { actor: 'cli', channel: 'cli' }),
+    );
+  });
+
+reimbursement
+  .command('auto-match')
+  .option('--from <isoDate>', 'from date (inclusive)')
+  .option('--to <isoDate>', 'to date (exclusive)')
+  .action(async (options) => {
+    const opts = program.opts<{ json: boolean }>();
+    await run(opts.json, () =>
+      getServices().reimbursements.autoMatch(
+        {
+          from: options.from,
+          to: options.to,
+        },
+        { actor: 'cli', channel: 'cli' },
+      ),
+    );
   });
 
 const commitment = program.command('commitment').description('Recurring commitment operations');

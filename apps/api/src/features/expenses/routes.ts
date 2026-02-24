@@ -4,6 +4,8 @@ import type { FastifyInstance } from 'fastify';
 
 type ExpenseSource = 'local' | 'monzo' | 'commitment';
 type TransferDirection = 'in' | 'out';
+type ExpenseKind = 'expense' | 'income' | 'transfer_internal' | 'transfer_external';
+type CounterpartyType = 'self' | 'partner' | 'team' | 'other';
 
 interface ExpenseParams {
   id: string;
@@ -26,6 +28,11 @@ interface CreateExpenseBody {
   categoryId: string;
   source?: ExpenseSource;
   transferDirection?: TransferDirection | null;
+  kind?: ExpenseKind;
+  reimbursable?: boolean;
+  myShareMinor?: number | null;
+  counterpartyType?: CounterpartyType | null;
+  reimbursementGroupId?: string | null;
   merchantName?: string | null;
   note?: string | null;
   providerTransactionId?: string | null;
@@ -41,6 +48,11 @@ interface UpdateExpenseBody {
   fxRate?: number;
   categoryId?: string;
   transferDirection?: TransferDirection | null;
+  kind?: ExpenseKind;
+  reimbursable?: boolean;
+  myShareMinor?: number | null;
+  counterpartyType?: CounterpartyType | null;
+  reimbursementGroupId?: string | null;
   merchantName?: string | null;
   note?: string | null;
 }
@@ -71,6 +83,9 @@ export const registerExpenseRoutes = (app: FastifyInstance): void => {
   const nullableStringSchema = {
     oneOf: [{ type: 'string' }, { type: 'null' }],
   } as const;
+  const nullableIntegerSchema = {
+    oneOf: [{ type: 'integer' }, { type: 'null' }],
+  } as const;
   const moneyResponseSchema = {
     type: 'object',
     additionalProperties: false,
@@ -92,7 +107,18 @@ export const registerExpenseRoutes = (app: FastifyInstance): void => {
       'money',
       'categoryId',
       'source',
+      'kind',
       'transferDirection',
+      'reimbursementStatus',
+      'myShareMinor',
+      'closedOutstandingMinor',
+      'counterpartyType',
+      'reimbursementGroupId',
+      'reimbursementClosedAt',
+      'reimbursementClosedReason',
+      'recoverableMinor',
+      'recoveredMinor',
+      'outstandingMinor',
       'merchantName',
       'merchantLogoUrl',
       'merchantEmoji',
@@ -111,9 +137,33 @@ export const registerExpenseRoutes = (app: FastifyInstance): void => {
       money: moneyResponseSchema,
       categoryId: uuidSchema,
       source: { type: 'string', enum: ['local', 'monzo', 'commitment'] },
+      kind: {
+        type: 'string',
+        enum: ['expense', 'income', 'transfer_internal', 'transfer_external'],
+      },
       transferDirection: {
         oneOf: [{ type: 'string', enum: ['in', 'out'] }, { type: 'null' }],
       },
+      reimbursementStatus: {
+        type: 'string',
+        enum: ['none', 'expected', 'partial', 'settled', 'written_off'],
+      },
+      myShareMinor: nullableIntegerSchema,
+      closedOutstandingMinor: nullableIntegerSchema,
+      counterpartyType: {
+        oneOf: [
+          { type: 'string', enum: ['self', 'partner', 'team', 'other'] },
+          { type: 'null' },
+        ],
+      },
+      reimbursementGroupId: nullableStringSchema,
+      reimbursementClosedAt: {
+        oneOf: [isoDateTimeSchema, { type: 'null' }],
+      },
+      reimbursementClosedReason: nullableStringSchema,
+      recoverableMinor: { type: 'integer', minimum: 0 },
+      recoveredMinor: { type: 'integer', minimum: 0 },
+      outstandingMinor: { type: 'integer', minimum: 0 },
       merchantName: nullableStringSchema,
       merchantLogoUrl: nullableStringSchema,
       merchantEmoji: nullableStringSchema,
@@ -196,8 +246,25 @@ export const registerExpenseRoutes = (app: FastifyInstance): void => {
             fxRate: { type: 'number', exclusiveMinimum: 0 },
             categoryId: uuidSchema,
             source: { type: 'string', enum: ['local', 'monzo', 'commitment'] },
+            kind: {
+              type: 'string',
+              enum: ['expense', 'income', 'transfer_internal', 'transfer_external'],
+            },
             transferDirection: {
               oneOf: [{ type: 'string', enum: ['in', 'out'] }, { type: 'null' }],
+            },
+            reimbursable: { type: 'boolean' },
+            myShareMinor: {
+              oneOf: [{ type: 'integer', minimum: 0 }, { type: 'null' }],
+            },
+            counterpartyType: {
+              oneOf: [
+                { type: 'string', enum: ['self', 'partner', 'team', 'other'] },
+                { type: 'null' },
+              ],
+            },
+            reimbursementGroupId: {
+              oneOf: [{ type: 'string' }, { type: 'null' }],
             },
             merchantName: {
               oneOf: [{ type: 'string' }, { type: 'null' }],
@@ -244,6 +311,23 @@ export const registerExpenseRoutes = (app: FastifyInstance): void => {
             categoryId: uuidSchema,
             transferDirection: {
               oneOf: [{ type: 'string', enum: ['in', 'out'] }, { type: 'null' }],
+            },
+            kind: {
+              type: 'string',
+              enum: ['expense', 'income', 'transfer_internal', 'transfer_external'],
+            },
+            reimbursable: { type: 'boolean' },
+            myShareMinor: {
+              oneOf: [{ type: 'integer', minimum: 0 }, { type: 'null' }],
+            },
+            counterpartyType: {
+              oneOf: [
+                { type: 'string', enum: ['self', 'partner', 'team', 'other'] },
+                { type: 'null' },
+              ],
+            },
+            reimbursementGroupId: {
+              oneOf: [{ type: 'string' }, { type: 'null' }],
             },
             merchantName: {
               oneOf: [{ type: 'string' }, { type: 'null' }],

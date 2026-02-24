@@ -225,32 +225,44 @@ describe('Monzo integration domain service', () => {
       );
 
       const syncResult = await services.monzo.syncNow({ actor: 'test', channel: 'system' });
-      expect(syncResult.imported).toBe(1);
+      expect(syncResult.imported).toBe(2);
       expect(syncResult.updated).toBe(0);
-      expect(syncResult.skipped).toBe(2);
+      expect(syncResult.skipped).toBe(1);
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/pots'))).toBe(false);
 
       const expensesAfterResync = await services.expenses.list();
-      expect(expensesAfterResync.length).toBe(1);
-      expect(expensesAfterResync[0]?.source).toBe('monzo');
-      expect(expensesAfterResync[0]?.providerTransactionId).toBe('tx_debit_settled');
-      expect(expensesAfterResync[0]?.money.amountMinor).toBe(1234);
-      expect(expensesAfterResync[0]?.merchantName).toBe('Local Shop');
-      expect(expensesAfterResync[0]?.merchantLogoUrl).toBe('https://img.test/local-shop.png');
-      expect(expensesAfterResync[0]?.merchantEmoji).toBe('🛍️');
+      expect(expensesAfterResync.length).toBe(2);
+      const debit = expensesAfterResync.find(
+        (item) => item.providerTransactionId === 'tx_debit_settled',
+      );
+      const income = expensesAfterResync.find((item) => item.providerTransactionId === 'tx_income');
+      expect(debit).toBeDefined();
+      expect(debit?.source).toBe('monzo');
+      expect(debit?.money.amountMinor).toBe(1234);
+      expect(debit?.kind).toBe('expense');
+      expect(debit?.merchantName).toBe('Local Shop');
+      expect(debit?.merchantLogoUrl).toBe('https://img.test/local-shop.png');
+      expect(debit?.merchantEmoji).toBe('🛍️');
+      expect(income?.kind).toBe('income');
+      expect(income?.money.amountMinor).toBe(2200);
 
       const status = await services.monzo.status();
       expect(status.status).toBe('connected');
       expect(status.connected).toBe(true);
       expect(status.accountId).toBe('acc_main');
       expect(status.lastSyncAt).toBeTruthy();
-      expect(status.mappingCount).toBe(1);
+      expect(status.mappingCount).toBe(2);
 
       const { db, sqlite } = createDb({ dbPath });
       try {
         const mappingRows = db.select().from(monzoCategoryMappings).all();
-        expect(mappingRows.length).toBe(1);
-        expect(mappingRows[0]?.monzoCategory).toBe('groceries');
+        expect(mappingRows.length).toBe(2);
+        expect(mappingRows).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ monzoCategory: 'groceries', flow: 'out' }),
+            expect.objectContaining({ monzoCategory: 'income', flow: 'in' }),
+          ]),
+        );
       } finally {
         sqlite.close();
       }

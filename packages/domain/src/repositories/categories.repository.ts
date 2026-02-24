@@ -11,6 +11,11 @@ export interface CategoryDto {
   icon: string;
   color: string;
   isSystem: boolean;
+  reimbursementMode: 'none' | 'optional' | 'always';
+  defaultCounterpartyType: 'self' | 'partner' | 'team' | 'other' | null;
+  defaultRecoveryWindowDays: number | null;
+  defaultMyShareMode: 'fixed' | 'percent' | null;
+  defaultMyShareValue: number | null;
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -23,6 +28,23 @@ const mapCategory = (row: typeof categories.$inferSelect): CategoryDto => ({
   icon: row.icon,
   color: row.color,
   isSystem: row.isSystem,
+  reimbursementMode:
+    row.reimbursementMode === 'optional' || row.reimbursementMode === 'always'
+      ? row.reimbursementMode
+      : 'none',
+  defaultCounterpartyType:
+    row.defaultCounterpartyType === 'self' ||
+    row.defaultCounterpartyType === 'partner' ||
+    row.defaultCounterpartyType === 'team' ||
+    row.defaultCounterpartyType === 'other'
+      ? row.defaultCounterpartyType
+      : null,
+  defaultRecoveryWindowDays: row.defaultRecoveryWindowDays ?? null,
+  defaultMyShareMode:
+    row.defaultMyShareMode === 'fixed' || row.defaultMyShareMode === 'percent'
+      ? row.defaultMyShareMode
+      : null,
+  defaultMyShareValue: row.defaultMyShareValue ?? null,
   archivedAt: row.archivedAt,
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
@@ -49,6 +71,11 @@ export interface CreateCategoryInput {
   icon: string;
   color: string;
   isSystem: boolean;
+  reimbursementMode: 'none' | 'optional' | 'always';
+  defaultCounterpartyType: 'self' | 'partner' | 'team' | 'other' | null;
+  defaultRecoveryWindowDays: number | null;
+  defaultMyShareMode: 'fixed' | 'percent' | null;
+  defaultMyShareValue: number | null;
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -64,6 +91,11 @@ export interface UpdateCategoryInput {
   kind: 'expense' | 'income' | 'transfer';
   icon: string;
   color: string;
+  reimbursementMode: 'none' | 'optional' | 'always';
+  defaultCounterpartyType: 'self' | 'partner' | 'team' | 'other' | null;
+  defaultRecoveryWindowDays: number | null;
+  defaultMyShareMode: 'fixed' | 'percent' | null;
+  defaultMyShareValue: number | null;
   archivedAt: string | null;
   updatedAt: string;
 }

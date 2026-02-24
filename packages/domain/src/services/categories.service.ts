@@ -51,6 +51,11 @@ export const createCategoriesService = ({
       icon: input.icon ?? 'receipt_long',
       color: input.color ?? '#2E7D32',
       isSystem: false,
+      reimbursementMode: input.reimbursementMode ?? 'none',
+      defaultCounterpartyType: input.defaultCounterpartyType ?? null,
+      defaultRecoveryWindowDays: input.defaultRecoveryWindowDays ?? null,
+      defaultMyShareMode: input.defaultMyShareMode ?? null,
+      defaultMyShareValue: input.defaultMyShareValue ?? null,
       archivedAt: null,
       createdAt: now,
       updatedAt: now,
@@ -80,6 +85,23 @@ export const createCategoriesService = ({
       kind: input.kind ?? existing.kind,
       icon: input.icon ?? existing.icon,
       color: input.color ?? existing.color,
+      reimbursementMode: input.reimbursementMode ?? existing.reimbursementMode,
+      defaultCounterpartyType:
+        input.defaultCounterpartyType === undefined
+          ? existing.defaultCounterpartyType
+          : input.defaultCounterpartyType,
+      defaultRecoveryWindowDays:
+        input.defaultRecoveryWindowDays === undefined
+          ? existing.defaultRecoveryWindowDays
+          : input.defaultRecoveryWindowDays,
+      defaultMyShareMode:
+        input.defaultMyShareMode === undefined
+          ? existing.defaultMyShareMode
+          : input.defaultMyShareMode,
+      defaultMyShareValue:
+        input.defaultMyShareValue === undefined
+          ? existing.defaultMyShareValue
+          : input.defaultMyShareValue,
       archivedAt:
         input.archivedAt === undefined
           ? existing.archivedAt

@@ -109,6 +109,25 @@ const dayLabel = (isoDate: string): string => {
   });
 };
 
+const semanticKindLabel = (kind?: string, transferDirection?: 'in' | 'out' | null): string | null => {
+  if (kind === 'transfer_internal') {
+    return `Internal transfer (${transferDirection === 'in' ? 'in' : 'out'})`;
+  }
+  if (kind === 'transfer_external') {
+    return `External transfer (${transferDirection === 'in' ? 'in' : 'out'})`;
+  }
+  return null;
+};
+
+const reimbursementChipLabel = (status?: string): string | null => {
+  if (!status || status === 'none') return null;
+  if (status === 'expected') return 'Reimbursable';
+  if (status === 'partial') return 'Partial';
+  if (status === 'settled') return 'Settled';
+  if (status === 'written_off') return 'Written off';
+  return null;
+};
+
 export const ExpensesPage = () => {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -156,13 +175,53 @@ export const ExpensesPage = () => {
     },
   });
 
+  const linkReimbursement = useMutation({
+    mutationFn: (payload: { expenseOutId: string; expenseInId: string; amountMinor: number }) =>
+      api.reimbursements.link({
+        ...payload,
+        idempotencyKey: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`,
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['expenses'] }),
+        queryClient.invalidateQueries({ queryKey: ['report', 'monthlyLedger'] }),
+      ]);
+    },
+  });
+
+  const closeReimbursement = useMutation({
+    mutationFn: (payload: { expenseOutId: string; closeOutstandingMinor?: number; reason?: string | null }) =>
+      api.reimbursements.close(payload.expenseOutId, {
+        closeOutstandingMinor: payload.closeOutstandingMinor,
+        reason: payload.reason ?? undefined,
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['expenses'] }),
+        queryClient.invalidateQueries({ queryKey: ['report', 'monthlyLedger'] }),
+      ]);
+    },
+  });
+
+  const reopenReimbursement = useMutation({
+    mutationFn: (expenseOutId: string) => api.reimbursements.reopen(expenseOutId),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['expenses'] }),
+        queryClient.invalidateQueries({ queryKey: ['report', 'monthlyLedger'] }),
+      ]);
+    },
+  });
+
   const categoryById = useMemo(() => {
-    const map = new Map<string, { name: string; color: string; icon: string }>();
+    const map = new Map<string, { name: string; color: string; icon: string; kind: string; reimbursementMode?: string }>();
     for (const category of categoriesQuery.data ?? []) {
       map.set(category.id, {
         name: category.name,
         color: category.color,
         icon: category.icon,
+        kind: category.kind,
+        reimbursementMode: category.reimbursementMode,
       });
     }
     return map;
@@ -223,6 +282,44 @@ export const ExpensesPage = () => {
                         const categoryMeta = categoryById.get(expense.categoryId);
                         const categoryName = categoryMeta?.name ?? expense.categoryId;
                         const categoryColor = categoryMeta?.color ?? '#607D8B';
+                        const kindChip = semanticKindLabel(expense.kind, expense.transferDirection);
+                        const reimbursementLabel = reimbursementChipLabel(expense.reimbursementStatus);
+                        const canShowReimbursement =
+                          expense.kind === 'expense' &&
+                          (expense.reimbursementStatus && expense.reimbursementStatus !== 'none');
+                        const recoverableMinor = expense.recoverableMinor ?? 0;
+                        const recoveredMinor = expense.recoveredMinor ?? 0;
+                        const outstandingMinor = expense.outstandingMinor ?? 0;
+
+                        const handleLinkRepayment = () => {
+                          const expenseInId = window.prompt('Inbound transaction ID to link as reimbursement');
+                          if (!expenseInId) return;
+                          const amountText = window.prompt('Allocation amount (GBP)', (outstandingMinor / 100).toFixed(2));
+                          if (!amountText) return;
+                          const parsed = Number(amountText);
+                          if (!Number.isFinite(parsed) || parsed <= 0) return;
+                          linkReimbursement.mutate({
+                            expenseOutId: expense.id,
+                            expenseInId: expenseInId.trim(),
+                            amountMinor: Math.round(parsed * 100),
+                          });
+                        };
+
+                        const handleCloseRemainder = () => {
+                          const amountText = window.prompt(
+                            'Write-off outstanding amount (GBP)',
+                            (outstandingMinor / 100).toFixed(2),
+                          );
+                          if (!amountText) return;
+                          const parsed = Number(amountText);
+                          if (!Number.isFinite(parsed) || parsed < 0) return;
+                          const reason = window.prompt('Reason (optional)') ?? undefined;
+                          closeReimbursement.mutate({
+                            expenseOutId: expense.id,
+                            closeOutstandingMinor: Math.round(parsed * 100),
+                            reason,
+                          });
+                        };
 
                         return (
                           <ListItem
@@ -255,7 +352,66 @@ export const ExpensesPage = () => {
                                     fontWeight: 600,
                                   }}
                                 />
+                                {kindChip ? (
+                                  <Chip size="small" label={kindChip} sx={{ height: 22 }} />
+                                ) : null}
+                                {reimbursementLabel ? (
+                                  <Chip
+                                    size="small"
+                                    label={reimbursementLabel}
+                                    color={
+                                      expense.reimbursementStatus === 'settled'
+                                        ? 'success'
+                                        : expense.reimbursementStatus === 'partial'
+                                          ? 'warning'
+                                          : expense.reimbursementStatus === 'written_off'
+                                            ? 'default'
+                                            : 'info'
+                                    }
+                                    sx={{ height: 22 }}
+                                  />
+                                ) : null}
                               </Stack>
+                              {canShowReimbursement ? (
+                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                                  Recoverable {pounds(recoverableMinor, expense.money.currency)} • Recovered{' '}
+                                  {pounds(recoveredMinor, expense.money.currency)} • Outstanding{' '}
+                                  {pounds(outstandingMinor, expense.money.currency)}
+                                </Typography>
+                              ) : null}
+                              {canShowReimbursement ? (
+                                <Stack direction="row" spacing={1} sx={{ mt: 0.75 }}>
+                                  {outstandingMinor > 0 ? (
+                                    <>
+                                      <Button
+                                        size="small"
+                                        variant="outlined"
+                                        onClick={handleLinkRepayment}
+                                        disabled={linkReimbursement.isPending}
+                                      >
+                                        Link repayment
+                                      </Button>
+                                      <Button
+                                        size="small"
+                                        variant="text"
+                                        onClick={handleCloseRemainder}
+                                        disabled={closeReimbursement.isPending}
+                                      >
+                                        Mark written off
+                                      </Button>
+                                    </>
+                                  ) : expense.reimbursementStatus === 'written_off' ? (
+                                    <Button
+                                      size="small"
+                                      variant="text"
+                                      onClick={() => reopenReimbursement.mutate(expense.id)}
+                                      disabled={reopenReimbursement.isPending}
+                                    >
+                                      Reopen
+                                    </Button>
+                                  ) : null}
+                                </Stack>
+                              ) : null}
                             </Box>
 
                             <Box sx={{ textAlign: 'right', minWidth: 112 }}>

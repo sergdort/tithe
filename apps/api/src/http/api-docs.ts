@@ -7,6 +7,7 @@ export const openApiTags: OpenApiTag[] = [
   { name: 'System', description: 'Runtime health and status endpoints.' },
   { name: 'Categories', description: 'Category management endpoints.' },
   { name: 'Expenses', description: 'Expense CRUD endpoints.' },
+  { name: 'Reimbursements', description: 'Reimbursement linking, close, and auto-match endpoints.' },
   { name: 'Commitments', description: 'Recurring commitment endpoints.' },
   { name: 'Reports', description: 'Aggregated reporting endpoints.' },
   { name: 'Query', description: 'Ad-hoc filtered query endpoint.' },

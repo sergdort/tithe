@@ -3,6 +3,11 @@ export interface ActorContext {
   channel: 'api' | 'cli' | 'system';
 }
 
+export type ExpenseKind = 'expense' | 'income' | 'transfer_internal' | 'transfer_external';
+export type ReimbursementStatus = 'none' | 'expected' | 'partial' | 'settled' | 'written_off';
+export type CounterpartyType = 'self' | 'partner' | 'team' | 'other';
+export type ReimbursementMode = 'none' | 'optional' | 'always';
+
 export interface ListExpensesInput {
   from?: string;
   to?: string;
@@ -20,6 +25,11 @@ export interface CreateExpenseInput {
   categoryId: string;
   source?: 'local' | 'monzo' | 'commitment';
   transferDirection?: 'in' | 'out' | null;
+  kind?: ExpenseKind;
+  reimbursable?: boolean;
+  myShareMinor?: number | null;
+  counterpartyType?: CounterpartyType | null;
+  reimbursementGroupId?: string | null;
   merchantName?: string | null;
   note?: string | null;
   providerTransactionId?: string | null;
@@ -35,6 +45,11 @@ export interface UpdateExpenseInput {
   fxRate?: number;
   categoryId?: string;
   transferDirection?: 'in' | 'out' | null;
+  kind?: ExpenseKind;
+  reimbursable?: boolean;
+  myShareMinor?: number | null;
+  counterpartyType?: CounterpartyType | null;
+  reimbursementGroupId?: string | null;
   merchantName?: string | null;
   note?: string | null;
 }
@@ -44,6 +59,11 @@ export interface CreateCategoryInput {
   kind: 'expense' | 'income' | 'transfer';
   icon?: string;
   color?: string;
+  reimbursementMode?: ReimbursementMode;
+  defaultCounterpartyType?: CounterpartyType | null;
+  defaultRecoveryWindowDays?: number | null;
+  defaultMyShareMode?: 'fixed' | 'percent' | null;
+  defaultMyShareValue?: number | null;
 }
 
 export interface UpdateCategoryInput {
@@ -52,6 +72,11 @@ export interface UpdateCategoryInput {
   icon?: string;
   color?: string;
   archivedAt?: string | null;
+  reimbursementMode?: ReimbursementMode;
+  defaultCounterpartyType?: CounterpartyType | null;
+  defaultRecoveryWindowDays?: number | null;
+  defaultMyShareMode?: 'fixed' | 'percent' | null;
+  defaultMyShareValue?: number | null;
 }
 
 export interface CreateCommitmentInput {

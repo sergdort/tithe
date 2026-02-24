@@ -6,10 +6,12 @@ import {
   CardContent,
   CircularProgress,
   Divider,
+  FormControlLabel,
   List,
   ListItem,
   ListItemText,
   Stack,
+  Switch,
   Typography,
 } from '@mui/material';
 import { useEffect, useState } from 'react';
@@ -139,6 +141,8 @@ export const MonthlyLedgerCard = ({
   const monthKey = `${monthWindow.from}|${monthWindow.to}`;
   const resetSyncMutation = syncMutation.reset;
   const [visibleSyncFeedbackMonthKey, setVisibleSyncFeedbackMonthKey] = useState<string | null>(null);
+  const [spendMode, setSpendMode] = useState<'gross' | 'net'>('net');
+  const [excludeInternalTransfers, setExcludeInternalTransfers] = useState(true);
 
   const isInitialLoading = ledgerQuery.isLoading && !ledger;
   const hasBlockingError = ledgerQuery.isError && !ledger;
@@ -158,6 +162,35 @@ export const MonthlyLedgerCard = ({
       overrideExisting: true,
     });
   };
+
+  const cashFlow = ledger?.cashFlow;
+  const spending = ledger?.spending;
+  const reimbursements = ledger?.reimbursements;
+
+  const displayCashInMinor = ledger
+    ? excludeInternalTransfers
+      ? (cashFlow?.cashInMinor ?? ledger.totals.incomeMinor)
+      : (cashFlow?.cashInMinor ?? ledger.totals.incomeMinor) + (cashFlow?.internalTransferInMinor ?? 0)
+    : 0;
+  const displayCashOutMinor = ledger
+    ? excludeInternalTransfers
+      ? (cashFlow?.cashOutMinor ?? ledger.totals.expenseMinor)
+      : (cashFlow?.cashOutMinor ?? ledger.totals.expenseMinor) +
+        (cashFlow?.internalTransferOutMinor ?? 0)
+    : 0;
+  const displayNetFlowMinor = ledger
+    ? excludeInternalTransfers
+      ? (cashFlow?.netFlowMinor ?? ledger.totals.netCashMovementMinor)
+      : (cashFlow?.netFlowMinor ?? ledger.totals.netCashMovementMinor) +
+        (cashFlow?.internalTransferInMinor ?? 0) -
+        (cashFlow?.internalTransferOutMinor ?? 0)
+    : 0;
+  const displayTrueSpendMinor = ledger
+    ? spendMode === 'gross'
+      ? (spending?.grossSpendMinor ?? ledger.totals.expenseMinor)
+      : (spending?.netPersonalSpendMinor ?? ledger.totals.expenseMinor)
+    : 0;
+  const reimbursementOutstandingMinor = reimbursements?.outstandingMinor ?? 0;
 
   return (
     <Card>
@@ -225,6 +258,80 @@ export const MonthlyLedgerCard = ({
         ) : (
           <>
             <Stack spacing={0.75} sx={{ mt: 1.5 }}>
+              <Stack direction="row" justifyContent="space-between" alignItems="center" gap={1}>
+                <Typography variant="caption" color="text.secondary">
+                  Spend mode
+                </Typography>
+                <Stack direction="row" spacing={1}>
+                  <Button
+                    size="small"
+                    variant={spendMode === 'net' ? 'contained' : 'outlined'}
+                    onClick={() => setSpendMode('net')}
+                  >
+                    Net
+                  </Button>
+                  <Button
+                    size="small"
+                    variant={spendMode === 'gross' ? 'contained' : 'outlined'}
+                    onClick={() => setSpendMode('gross')}
+                  >
+                    Gross
+                  </Button>
+                </Stack>
+              </Stack>
+              <FormControlLabel
+                sx={{ my: 0 }}
+                control={
+                  <Switch
+                    size="small"
+                    checked={excludeInternalTransfers}
+                    onChange={(event) => setExcludeInternalTransfers(event.target.checked)}
+                  />
+                }
+                label="Exclude internal transfers"
+              />
+            </Stack>
+
+            <Divider sx={{ my: 1.5 }} />
+
+            <Stack spacing={0.75}>
+              <Stack direction="row" justifyContent="space-between">
+                <Typography>Cash In</Typography>
+                <Typography sx={{ fontWeight: 700, color: 'success.main' }}>
+                  {pounds(displayCashInMinor)}
+                </Typography>
+              </Stack>
+              <Stack direction="row" justifyContent="space-between">
+                <Typography>Cash Out</Typography>
+                <Typography sx={{ fontWeight: 700, color: 'error.main' }}>
+                  {pounds(displayCashOutMinor)}
+                </Typography>
+              </Stack>
+              <Stack direction="row" justifyContent="space-between">
+                <Typography>Net Flow</Typography>
+                <Typography
+                  sx={{ fontWeight: 700, color: displayNetFlowMinor >= 0 ? 'info.main' : 'error.main' }}
+                >
+                  {signedPounds(displayNetFlowMinor)}
+                </Typography>
+              </Stack>
+              <Stack direction="row" justifyContent="space-between">
+                <Typography>True Spend</Typography>
+                <Typography sx={{ fontWeight: 700, color: 'error.main' }}>
+                  {pounds(displayTrueSpendMinor)}
+                </Typography>
+              </Stack>
+              <Stack direction="row" justifyContent="space-between">
+                <Typography>Reimbursement Outstanding</Typography>
+                <Typography sx={{ fontWeight: 700, color: 'warning.main' }}>
+                  {pounds(reimbursementOutstandingMinor)}
+                </Typography>
+              </Stack>
+            </Stack>
+
+            <Divider sx={{ my: 1.5 }} />
+
+            <Stack spacing={0.75}>
               <Stack direction="row" justifyContent="space-between">
                 <Typography>Income</Typography>
                 <Typography sx={{ fontWeight: 700, color: 'success.main' }}>

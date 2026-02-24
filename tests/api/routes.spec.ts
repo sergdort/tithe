@@ -26,6 +26,13 @@ describe('API routes', () => {
         '/v1/categories/{id}',
         '/v1/expenses',
         '/v1/expenses/{id}',
+        '/v1/reimbursements/link',
+        '/v1/reimbursements/link/{id}',
+        '/v1/reimbursements/category-rules',
+        '/v1/reimbursements/category-rules/{id}',
+        '/v1/reimbursements/{expenseOutId}/close',
+        '/v1/reimbursements/{expenseOutId}/reopen',
+        '/v1/reimbursements/auto-match',
         '/v1/commitments',
         '/v1/commitments/{id}',
         '/v1/commitments/run-due',
@@ -49,6 +56,7 @@ describe('API routes', () => {
         'System',
         'Categories',
         'Expenses',
+        'Reimbursements',
         'Commitments',
         'Reports',
         'Query',
@@ -178,6 +186,94 @@ describe('API routes', () => {
       expect(invalidLedgerBody.error.code).toBe('VALIDATION_ERROR');
     } finally {
       await app.close();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('manages reimbursement category rules through HTTP with approval-token delete', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tithe-api-rules-test-'));
+    const dbPath = path.join(dir, 'api.sqlite');
+    const previousDbPath = process.env.DB_PATH;
+    process.env.DB_PATH = dbPath;
+    runMigrations(dbPath);
+
+    const app = buildServer();
+
+    try {
+      const expenseCategoryResponse = await app.inject({
+        method: 'POST',
+        url: '/v1/categories',
+        payload: { name: 'Sports', kind: 'expense', reimbursementMode: 'optional' },
+      });
+      const incomeCategoryResponse = await app.inject({
+        method: 'POST',
+        url: '/v1/categories',
+        payload: { name: 'Repayments', kind: 'income' },
+      });
+
+      expect(expenseCategoryResponse.statusCode).toBe(200);
+      expect(incomeCategoryResponse.statusCode).toBe(200);
+
+      const expenseCategoryId = expenseCategoryResponse.json().data.id as string;
+      const incomeCategoryId = incomeCategoryResponse.json().data.id as string;
+
+      const createRuleResponse = await app.inject({
+        method: 'POST',
+        url: '/v1/reimbursements/category-rules',
+        payload: { expenseCategoryId, inboundCategoryId: incomeCategoryId },
+      });
+      const createRuleBody = createRuleResponse.json();
+      expect(createRuleResponse.statusCode).toBe(200);
+      expect(createRuleBody.ok).toBe(true);
+      expect(createRuleBody.data).toMatchObject({
+        expenseCategoryId,
+        inboundCategoryId: incomeCategoryId,
+        enabled: true,
+      });
+
+      const listRulesResponse = await app.inject({
+        method: 'GET',
+        url: '/v1/reimbursements/category-rules',
+      });
+      const listRulesBody = listRulesResponse.json();
+      expect(listRulesResponse.statusCode).toBe(200);
+      expect(listRulesBody.ok).toBe(true);
+      expect(listRulesBody.data).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            expenseCategoryId,
+            inboundCategoryId: incomeCategoryId,
+          }),
+        ]),
+      );
+
+      const ruleId = createRuleBody.data.id as string;
+      const dryRunDeleteResponse = await app.inject({
+        method: 'DELETE',
+        url: `/v1/reimbursements/category-rules/${encodeURIComponent(ruleId)}?dryRun=true`,
+      });
+      const dryRunDeleteBody = dryRunDeleteResponse.json();
+      expect(dryRunDeleteResponse.statusCode).toBe(200);
+      expect(dryRunDeleteBody.ok).toBe(true);
+      expect(typeof dryRunDeleteBody.data.operationId).toBe('string');
+
+      const deleteResponse = await app.inject({
+        method: 'DELETE',
+        url: `/v1/reimbursements/category-rules/${encodeURIComponent(ruleId)}?approveOperationId=${encodeURIComponent(
+          dryRunDeleteBody.data.operationId as string,
+        )}`,
+      });
+      const deleteBody = deleteResponse.json();
+      expect(deleteResponse.statusCode).toBe(200);
+      expect(deleteBody.ok).toBe(true);
+      expect(deleteBody.data).toMatchObject({ deleted: true, id: ruleId });
+    } finally {
+      await app.close();
+      if (previousDbPath === undefined) {
+        process.env.DB_PATH = undefined;
+      } else {
+        process.env.DB_PATH = previousDbPath;
+      }
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });

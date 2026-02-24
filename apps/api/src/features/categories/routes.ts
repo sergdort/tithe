@@ -13,6 +13,11 @@ interface CreateCategoryBody {
   kind: CategoryKind;
   icon?: string;
   color?: string;
+  reimbursementMode?: 'none' | 'optional' | 'always';
+  defaultCounterpartyType?: 'self' | 'partner' | 'team' | 'other' | null;
+  defaultRecoveryWindowDays?: number | null;
+  defaultMyShareMode?: 'fixed' | 'percent' | null;
+  defaultMyShareValue?: number | null;
 }
 
 interface UpdateCategoryBody {
@@ -21,6 +26,11 @@ interface UpdateCategoryBody {
   icon?: string;
   color?: string;
   archivedAt?: string | null;
+  reimbursementMode?: 'none' | 'optional' | 'always';
+  defaultCounterpartyType?: 'self' | 'partner' | 'team' | 'other' | null;
+  defaultRecoveryWindowDays?: number | null;
+  defaultMyShareMode?: 'fixed' | 'percent' | null;
+  defaultMyShareValue?: number | null;
 }
 
 interface DeleteCategoryQuery {
@@ -74,6 +84,22 @@ export const registerCategoryRoutes = (app: FastifyInstance): void => {
             kind: { type: 'string', enum: ['expense', 'income', 'transfer'] },
             icon: { type: 'string' },
             color: { type: 'string' },
+            reimbursementMode: { type: 'string', enum: ['none', 'optional', 'always'] },
+            defaultCounterpartyType: {
+              oneOf: [
+                { type: 'string', enum: ['self', 'partner', 'team', 'other'] },
+                { type: 'null' },
+              ],
+            },
+            defaultRecoveryWindowDays: {
+              oneOf: [{ type: 'integer', minimum: 0 }, { type: 'null' }],
+            },
+            defaultMyShareMode: {
+              oneOf: [{ type: 'string', enum: ['fixed', 'percent'] }, { type: 'null' }],
+            },
+            defaultMyShareValue: {
+              oneOf: [{ type: 'integer', minimum: 0 }, { type: 'null' }],
+            },
           },
         },
         response: {
@@ -105,6 +131,22 @@ export const registerCategoryRoutes = (app: FastifyInstance): void => {
             color: { type: 'string' },
             archivedAt: {
               oneOf: [isoDateTimeSchema, { type: 'null' }],
+            },
+            reimbursementMode: { type: 'string', enum: ['none', 'optional', 'always'] },
+            defaultCounterpartyType: {
+              oneOf: [
+                { type: 'string', enum: ['self', 'partner', 'team', 'other'] },
+                { type: 'null' },
+              ],
+            },
+            defaultRecoveryWindowDays: {
+              oneOf: [{ type: 'integer', minimum: 0 }, { type: 'null' }],
+            },
+            defaultMyShareMode: {
+              oneOf: [{ type: 'string', enum: ['fixed', 'percent'] }, { type: 'null' }],
+            },
+            defaultMyShareValue: {
+              oneOf: [{ type: 'integer', minimum: 0 }, { type: 'null' }],
             },
           },
         },

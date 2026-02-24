@@ -1,6 +1,12 @@
 import { and, eq, gte, inArray, lt, lte, sql } from 'drizzle-orm';
 
-import { categories, commitmentInstances, expenses, recurringCommitments } from '@tithe/db';
+import {
+  categories,
+  commitmentInstances,
+  expenses,
+  reimbursementLinks,
+  recurringCommitments,
+} from '@tithe/db';
 
 import type { RepositoryDb } from './shared.js';
 
@@ -54,10 +60,34 @@ export interface MonthlyLedgerDto {
     netCashMovementMinor: number;
     txCount: number;
   };
+  cashFlow: {
+    cashInMinor: number;
+    cashOutMinor: number;
+    internalTransferInMinor: number;
+    internalTransferOutMinor: number;
+    externalTransferInMinor: number;
+    externalTransferOutMinor: number;
+    netFlowMinor: number;
+  };
+  spending: {
+    grossSpendMinor: number;
+    recoveredMinor: number;
+    writtenOffMinor: number;
+    netPersonalSpendMinor: number;
+  };
+  reimbursements: {
+    recoverableMinor: number;
+    recoveredMinor: number;
+    outstandingMinor: number;
+    partialCount: number;
+    settledCount: number;
+  };
   sections: {
     income: MonthlyLedgerCategoryRowDto[];
     expense: MonthlyLedgerCategoryRowDto[];
     transfer: MonthlyLedgerTransferRowDto[];
+    transferInternal: MonthlyLedgerTransferRowDto[];
+    transferExternal: MonthlyLedgerTransferRowDto[];
   };
 }
 
@@ -115,6 +145,7 @@ export class SqliteReportsRepository implements ReportsRepository {
         txCount: sql<number>`COUNT(*)`,
       })
       .from(expenses)
+      .where(eq(expenses.kind, 'expense'))
       .groupBy(sql`substr(${expenses.occurredAt}, 1, 7)`)
       .orderBy(sql`substr(${expenses.occurredAt}, 1, 7) DESC`)
       .limit(months)
@@ -151,7 +182,10 @@ export class SqliteReportsRepository implements ReportsRepository {
       .groupBy(expenses.categoryId, categories.name)
       .orderBy(sql`SUM(${expenses.amountMinor}) DESC`);
 
-    const rows = filters.length > 0 ? query.where(and(...filters)).all() : query.all();
+    const rows =
+      filters.length > 0
+        ? query.where(and(eq(expenses.kind, 'expense'), ...filters)).all()
+        : query.where(eq(expenses.kind, 'expense')).all();
 
     return {
       rows: rows.map((row) => ({
@@ -193,87 +227,196 @@ export class SqliteReportsRepository implements ReportsRepository {
   }
 
   monthlyLedger({ from, to }: MonthlyLedgerInput): MonthlyLedgerOutput {
-    const groupedRows = this.db
+    const rows = this.db
       .select({
-        kind: categories.kind,
+        id: expenses.id,
+        kind: expenses.kind,
         categoryId: expenses.categoryId,
         categoryName: categories.name,
         transferDirection: expenses.transferDirection,
-        totalMinor: sql<number>`SUM(${expenses.amountMinor})`,
-        txCount: sql<number>`COUNT(*)`,
+        amountMinor: expenses.amountMinor,
+        reimbursementStatus: expenses.reimbursementStatus,
+        myShareMinor: expenses.myShareMinor,
+        closedOutstandingMinor: expenses.closedOutstandingMinor,
       })
       .from(expenses)
       .innerJoin(categories, eq(expenses.categoryId, categories.id))
       .where(and(gte(expenses.occurredAt, from), lt(expenses.occurredAt, to)))
-      .groupBy(categories.kind, expenses.categoryId, categories.name, expenses.transferDirection)
       .all();
 
-    const income: MonthlyLedgerCategoryRowDto[] = [];
-    const expense: MonthlyLedgerCategoryRowDto[] = [];
-    const transfer: MonthlyLedgerTransferRowDto[] = [];
+    const expenseIds = rows.map((row) => row.id);
+    const recoveredByOutId = new Map(
+      (expenseIds.length === 0
+        ? []
+        : this.db
+            .select({
+              expenseOutId: reimbursementLinks.expenseOutId,
+              totalMinor: sql<number>`SUM(${reimbursementLinks.amountMinor})`,
+            })
+            .from(reimbursementLinks)
+            .where(inArray(reimbursementLinks.expenseOutId, expenseIds))
+            .groupBy(reimbursementLinks.expenseOutId)
+            .all()
+      ).map((row) => [row.expenseOutId, Number(row.totalMinor ?? 0)] as const),
+    );
+
+    const incomeMap = new Map<string, MonthlyLedgerCategoryRowDto>();
+    const expenseMap = new Map<string, MonthlyLedgerCategoryRowDto>();
+    const transferMap = new Map<string, MonthlyLedgerTransferRowDto>();
+    const transferInternalMap = new Map<string, MonthlyLedgerTransferRowDto>();
+    const transferExternalMap = new Map<string, MonthlyLedgerTransferRowDto>();
 
     let incomeMinor = 0;
     let expenseMinor = 0;
     let transferInMinor = 0;
     let transferOutMinor = 0;
-    let totalTxCount = 0;
+    let internalTransferInMinor = 0;
+    let internalTransferOutMinor = 0;
+    let externalTransferInMinor = 0;
+    let externalTransferOutMinor = 0;
+    let recoverableMinorTotal = 0;
+    let recoveredMinorTotal = 0;
+    let outstandingMinorTotal = 0;
+    let writtenOffMinorTotal = 0;
+    let partialCount = 0;
+    let settledCount = 0;
 
-    for (const row of groupedRows) {
-      const totalMinor = Number(row.totalMinor ?? 0);
-      const txCount = Number(row.txCount ?? 0);
-      totalTxCount += txCount;
+    const pushCategory = (
+      map: Map<string, MonthlyLedgerCategoryRowDto>,
+      categoryId: string,
+      categoryName: string,
+      amountMinor: number,
+    ) => {
+      const key = categoryId;
+      const existing = map.get(key);
+      if (existing) {
+        existing.totalMinor += amountMinor;
+        existing.txCount += 1;
+        return;
+      }
+      map.set(key, {
+        categoryId,
+        categoryName,
+        totalMinor: amountMinor,
+        txCount: 1,
+      });
+    };
 
-      if (row.kind === 'income') {
-        income.push({
-          categoryId: row.categoryId,
-          categoryName: row.categoryName,
-          totalMinor,
-          txCount,
-        });
-        incomeMinor += totalMinor;
+    const pushTransfer = (
+      map: Map<string, MonthlyLedgerTransferRowDto>,
+      categoryId: string,
+      categoryName: string,
+      direction: 'in' | 'out',
+      amountMinor: number,
+    ) => {
+      const key = `${categoryId}:${direction}`;
+      const existing = map.get(key);
+      if (existing) {
+        existing.totalMinor += amountMinor;
+        existing.txCount += 1;
+        return;
+      }
+      map.set(key, {
+        categoryId,
+        categoryName,
+        direction,
+        totalMinor: amountMinor,
+        txCount: 1,
+      });
+    };
+
+    for (const row of rows) {
+      const amountMinor = Number(row.amountMinor ?? 0);
+      const semanticKind =
+        row.kind === 'income' ||
+        row.kind === 'transfer_internal' ||
+        row.kind === 'transfer_external'
+          ? row.kind
+          : 'expense';
+
+      if (semanticKind === 'income') {
+        pushCategory(incomeMap, row.categoryId, row.categoryName, amountMinor);
+        incomeMinor += amountMinor;
         continue;
       }
 
-      if (row.kind === 'expense') {
-        expense.push({
-          categoryId: row.categoryId,
-          categoryName: row.categoryName,
-          totalMinor,
-          txCount,
-        });
-        expenseMinor += totalMinor;
+      if (semanticKind === 'expense') {
+        pushCategory(expenseMap, row.categoryId, row.categoryName, amountMinor);
+        expenseMinor += amountMinor;
+
+        const isReimbursable =
+          row.reimbursementStatus !== 'none' || row.myShareMinor !== null;
+        if (isReimbursable) {
+          const myShareMinor = Math.max(Number(row.myShareMinor ?? 0), 0);
+          const recoverableMinor = Math.max(amountMinor - myShareMinor, 0);
+          const recoveredMinor = recoveredByOutId.get(row.id) ?? 0;
+          const writtenOffMinor = Math.max(Number(row.closedOutstandingMinor ?? 0), 0);
+          const outstandingMinor = Math.max(recoverableMinor - recoveredMinor - writtenOffMinor, 0);
+
+          recoverableMinorTotal += recoverableMinor;
+          recoveredMinorTotal += recoveredMinor;
+          outstandingMinorTotal += outstandingMinor;
+          writtenOffMinorTotal += writtenOffMinor;
+
+          if (writtenOffMinor > 0) {
+            // written_off is tracked separately from settled count
+          } else if (outstandingMinor === 0) {
+            settledCount += 1;
+          } else if (recoveredMinor > 0) {
+            partialCount += 1;
+          }
+        }
+
         continue;
       }
 
       const direction = row.transferDirection === 'in' ? 'in' : 'out';
-      transfer.push({
-        categoryId: row.categoryId,
-        categoryName: row.categoryName,
-        direction,
-        totalMinor,
-        txCount,
-      });
+      pushTransfer(transferMap, row.categoryId, row.categoryName, direction, amountMinor);
+
       if (direction === 'in') {
-        transferInMinor += totalMinor;
+        transferInMinor += amountMinor;
       } else {
-        transferOutMinor += totalMinor;
+        transferOutMinor += amountMinor;
+      }
+
+      if (semanticKind === 'transfer_internal') {
+        pushTransfer(transferInternalMap, row.categoryId, row.categoryName, direction, amountMinor);
+        if (direction === 'in') {
+          internalTransferInMinor += amountMinor;
+        } else {
+          internalTransferOutMinor += amountMinor;
+        }
+      } else {
+        pushTransfer(transferExternalMap, row.categoryId, row.categoryName, direction, amountMinor);
+        if (direction === 'in') {
+          externalTransferInMinor += amountMinor;
+        } else {
+          externalTransferOutMinor += amountMinor;
+        }
       }
     }
 
     const byTotalDesc = <T extends { totalMinor: number; categoryName: string }>(a: T, b: T): number =>
       b.totalMinor - a.totalMinor || a.categoryName.localeCompare(b.categoryName);
 
-    income.sort(byTotalDesc);
-    expense.sort(byTotalDesc);
-    transfer.sort(
-      (a, b) =>
-        (a.direction === b.direction ? 0 : a.direction === 'out' ? -1 : 1) ||
-        b.totalMinor - a.totalMinor ||
-        a.categoryName.localeCompare(b.categoryName),
-    );
+    const sortTransfer = (a: MonthlyLedgerTransferRowDto, b: MonthlyLedgerTransferRowDto): number =>
+      (a.direction === b.direction ? 0 : a.direction === 'out' ? -1 : 1) ||
+      b.totalMinor - a.totalMinor ||
+      a.categoryName.localeCompare(b.categoryName);
+
+    const income = [...incomeMap.values()].sort(byTotalDesc);
+    const expense = [...expenseMap.values()].sort(byTotalDesc);
+    const transfer = [...transferMap.values()].sort(sortTransfer);
+    const transferInternal = [...transferInternalMap.values()].sort(sortTransfer);
+    const transferExternal = [...transferExternalMap.values()].sort(sortTransfer);
 
     const operatingSurplusMinor = incomeMinor - expenseMinor;
     const netCashMovementMinor = operatingSurplusMinor + transferInMinor - transferOutMinor;
+    const cashInMinor = incomeMinor + externalTransferInMinor;
+    const cashOutMinor = expenseMinor + externalTransferOutMinor;
+    const netFlowMinor = cashInMinor - cashOutMinor;
+    const grossSpendMinor = expenseMinor;
+    const netPersonalSpendMinor = grossSpendMinor - recoveredMinorTotal + writtenOffMinorTotal;
 
     return {
       ledger: {
@@ -286,12 +429,36 @@ export class SqliteReportsRepository implements ReportsRepository {
           transferOutMinor,
           operatingSurplusMinor,
           netCashMovementMinor,
-          txCount: totalTxCount,
+          txCount: rows.length,
+        },
+        cashFlow: {
+          cashInMinor,
+          cashOutMinor,
+          internalTransferInMinor,
+          internalTransferOutMinor,
+          externalTransferInMinor,
+          externalTransferOutMinor,
+          netFlowMinor,
+        },
+        spending: {
+          grossSpendMinor,
+          recoveredMinor: recoveredMinorTotal,
+          writtenOffMinor: writtenOffMinorTotal,
+          netPersonalSpendMinor,
+        },
+        reimbursements: {
+          recoverableMinor: recoverableMinorTotal,
+          recoveredMinor: recoveredMinorTotal,
+          outstandingMinor: outstandingMinorTotal,
+          partialCount,
+          settledCount,
         },
         sections: {
           income,
           expense,
           transfer,
+          transferInternal,
+          transferExternal,
         },
       },
     };

@@ -12,14 +12,26 @@ const parsePositiveAmountMinor = (amountText: string): number => {
   return Math.round(parsed * 100);
 };
 
+const parseNonNegativeAmountMinor = (amountText: string): number => {
+  const parsed = Number(amountText);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error('Amount must be zero or greater');
+  }
+
+  return Math.round(parsed * 100);
+};
+
 export const buildAddTransactionPayload = (input: {
   kind: TransactionKind;
+  transferSemanticKind: 'transfer_internal' | 'transfer_external';
   categoryId: string;
   amountText: string;
   dateInput: string;
   description: string;
   note: string;
   transferDirection: 'in' | 'out';
+  reimbursable: boolean;
+  myShareText: string;
 }): CreateExpenseInput => {
   if (!input.categoryId) {
     throw new Error('Please select a category');
@@ -31,7 +43,13 @@ export const buildAddTransactionPayload = (input: {
     currency: 'GBP',
     categoryId: input.categoryId,
     source: 'local',
+    kind: input.kind === 'transfer' ? input.transferSemanticKind : input.kind,
     transferDirection: input.kind === 'transfer' ? input.transferDirection : null,
+    reimbursable: input.kind === 'expense' ? input.reimbursable : undefined,
+    myShareMinor:
+      input.kind === 'expense' && input.reimbursable
+        ? parseNonNegativeAmountMinor(input.myShareText || '0')
+        : undefined,
     merchantName: input.description.trim() || undefined,
     note: input.note.trim() || undefined,
   };

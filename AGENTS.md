@@ -56,18 +56,31 @@ Failure:
 ### Categories
 
 - `tithe --json category list`
-- `tithe --json category add --name "Groceries" --kind expense`
-- `tithe --json category update --id <id> --name "Food"`
+- `tithe --json category add --name "Groceries" --kind expense [--reimbursement-mode none|optional|always] [--default-counterparty-type self|partner|team|other] [--default-recovery-window-days <days>]`
+- `tithe --json category update --id <id> [--name "Food"] [--reimbursement-mode none|optional|always] [--default-counterparty-type <type|null>] [--default-recovery-window-days <days|null>]`
 - `tithe --json category delete --id <id> --dry-run`
 - `tithe --json category delete --id <id> --approve <operationId> [--reassign <id>]`
 
 ### Expenses
 
 - `tithe --json expense list [--from <iso>] [--to <iso>] [--category-id <id>] [--limit <n>]`
-- `tithe --json expense add --occurred-at <iso> --amount-minor <int> --currency GBP --category-id <id> [--transfer-direction in|out]`
-- `tithe --json expense update --id <id> [fields...]`
+- `tithe --json expense add --occurred-at <iso> --amount-minor <int> --currency GBP --category-id <id> [--kind expense|income|transfer_internal|transfer_external] [--transfer-direction in|out] [--reimbursable|--not-reimbursable] [--my-share-minor <int>]`
+- `tithe --json expense update --id <id> [fields...] [--kind ...] [--reimbursable|--not-reimbursable] [--my-share-minor <int>] [--counterparty-type <type>] [--reimbursement-group-id <id>]`
 - `tithe --json expense delete --id <id> --dry-run`
 - `tithe --json expense delete --id <id> --approve <operationId>`
+
+### Reimbursements
+
+- `tithe --json reimbursement rule list`
+- `tithe --json reimbursement rule add --expense-category-id <id> --inbound-category-id <id>`
+- `tithe --json reimbursement rule delete --id <id> --dry-run`
+- `tithe --json reimbursement rule delete --id <id> --approve <operationId>`
+- `tithe --json reimbursement link --expense-out-id <id> --expense-in-id <id> --amount-minor <int> [--idempotency-key <uuid>]`
+- `tithe --json reimbursement unlink --id <id> --dry-run`
+- `tithe --json reimbursement unlink --id <id> --approve <operationId>`
+- `tithe --json reimbursement close --expense-out-id <id> [--close-outstanding-minor <int>] [--reason <text>]`
+- `tithe --json reimbursement reopen --expense-out-id <id>`
+- `tithe --json reimbursement auto-match [--from <iso>] [--to <iso>]`
 
 ### Recurring commitments
 
@@ -116,22 +129,30 @@ Failure:
 - `tithe --json monzo connect` stores short-lived OAuth `state` and returns `authUrl`.
 - `GET /v1/integrations/monzo/connect/callback` requires query `code+state` or `error`.
 - Monzo OAuth callback stores/refreshes tokens only and does not auto-run sync; first import happens on manual `monzo sync` / PWA Monthly Ledger `Sync month`.
-- `tithe --json monzo sync` imports settled debit Monzo transactions only (`amount < 0`, pending skipped); optional `--month`/`--from --to` scopes the sync window and `--override` overwrites existing imported Monzo expenses in that window.
-- Monzo import dedupe key is `source='monzo_import' + externalRef=transaction.id`.
-- Monzo month sync overwrite updates existing imported rows in place (same `id`/`externalRef`) and refreshes Monzo-derived fields including category, amount/date, and merchant metadata while preserving local notes.
+- `tithe --json monzo sync` imports settled Monzo debits and credits (`amount != 0`, pending/zero skipped); optional `--month`/`--from --to` scopes the sync window and `--override` overwrites existing imported Monzo rows in that window.
+- Monzo import dedupe key is `expenses.source='monzo' + expenses.provider_transaction_id=transaction.id`.
+- Monzo month sync overwrite updates existing imported rows in place (same `id`/provider transaction id) and refreshes Monzo-derived fields including category, amount/date, kind, and merchant metadata while preserving local notes and local reimbursement fields.
 - Expense API responses include optional Monzo merchant display metadata (`merchantLogoUrl`, `merchantEmoji`) for UI avatar rendering.
-- Expense API responses include `transferDirection` (`in|out|null`); it is required for `transfer` categories and `null` for non-transfer rows.
+- Expense API responses include semantic `kind` (`expense|income|transfer_internal|transfer_external`) and reimbursement fields (`reimbursementStatus`, `myShareMinor`, `recoverableMinor`, `recoveredMinor`, `outstandingMinor`).
+- Expense API responses include `transferDirection` (`in|out|null`); it is required for semantic transfer kinds and `null` for `expense|income`.
 - Monzo sync best-effort resolves pot-transfer descriptions that contain a Monzo pot ID (`pot_...`) to a display label `Pot: <Pot Name>` for new imports; if pot lookup fails or no pot matches, the raw description is kept.
 - Monzo merchant logo/emoji metadata is persisted for new imports only; historical imports are not backfilled automatically.
 - Initial Monzo sync backfills 90 days; subsequent syncs use a 3-day overlap from `lastCursor`.
-- Monzo category mappings auto-create categories named `Monzo: <Category>` when missing.
+- Monzo sync classifies pot transfers as `transfer_internal`; non-pot debits as `expense`; non-pot credits as `income`.
+- Monzo category mappings are flow-aware (`in|out`) and auto-create categories named `Monzo: <Category>` with category kind inferred from flow (`expense` for debits, `income` for credits). Pot transfers use a dedicated transfer category (`Monzo Pot Transfers`).
 - Optional `MONZO_SCOPE` can be set when building Monzo auth URL; if unset, no explicit scope is requested.
-- `GET /v1/reports/monthly-ledger` returns a month-range cashflow ledger with separate `income`, `expense`, and `transfer` sections plus totals for `operatingSurplusMinor` and `netCashMovementMinor`.
+- `GET /v1/reports/monthly-ledger` returns a month-range ledger with legacy `income`/`expense`/`transfer` sections plus additive v2 `cashFlow`, `spending`, and `reimbursements` blocks and split `transferInternal`/`transferExternal` sections.
+- Reimbursement auto-match in v2 uses explicit category-link rules (`expense category -> income/transfer category`), not hidden grouping keys.
+- `reimbursement_group_id` may still exist on expense rows as a reserved/deferred field, but v2 auto-match does not use it.
 - PWA Home embeds a full monthly cashflow ledger (month navigation, income/expense/transfer totals, category breakdown lists) and replaces the previous spend-only snapshot card.
 - PWA Home Monthly Ledger widget includes a month-scoped Monzo `Sync month` action that syncs the selected month window and overwrites existing imported Monzo expenses for that month.
 - Monthly Ledger Monzo sync success/error feedback is scoped to the selected month and clears when navigating to a different month.
-- PWA Home `Add Transaction` is a single manual entry flow for `income|expense|transfer`; `transfer` requires a direction (`Money in` / `Money out`).
+- PWA Home Monthly Ledger widget also surfaces v2 summary metrics (`Cash In`, `Cash Out`, `Net Flow`, `True Spend`, `Reimbursement Outstanding`) with `Gross/Net` and `Exclude internal transfers` toggles.
+- PWA Home `Add Transaction` is a single manual entry flow for `income|expense|transfer`; transfer entries require direction and support transfer subtype (`internal|external`) via semantic `kind`, and reimbursable expense categories can capture `Track reimbursement` + `My share`.
 - PWA Home pending commitments support a quick `Mark paid` action that creates a linked actual transaction (`source='commitment'`) and updates the ledger.
+- PWA Expenses page now surfaces semantic/reimbursement chips (`Internal transfer`, `External transfer`, `Reimbursable`, `Partial`, `Settled`, `Written off`) and basic reimbursement actions (`Link repayment`, `Mark written off`, `Reopen`).
+- PWA Categories page supports inline category rename/edit (including reimbursement settings on expense categories) and reimbursement auto-match rule management for expense categories.
+- Ledger v2 development rollout requires a fresh local DB reset (no backfill); reset `DB_PATH` (default `~/.tithe/tithe.db`) before running v2 migrations/commands.
 - PWA large pages should use thin route entrypoints in `apps/pwa/src/pages` and feature-scoped UI/data modules under `apps/pwa/src/features/<feature>`; shared domain-neutral helpers belong in `apps/pwa/src/lib`.
 - PWA Home dashboard widgets (ledger, Monzo, commitments) should manage loading/error states independently to avoid page-wide blocking when one widget fails.
 
@@ -149,7 +170,7 @@ Failure:
 
 - Domain business logic is feature-split and created via `createDomainServices()` in `packages/domain/src/services/create-domain-services.ts`.
 - Service registry shape is `DomainServices`:
-  - `categories`, `expenses`, `commitments`, `reports`, `query`, `monzo`.
+  - `categories`, `expenses`, `reimbursements`, `commitments`, `reports`, `query`, `monzo`.
 - `createDomainServices()` returns a closable service registry (`DomainServices` + `close()`), backed by a single long-lived SQLite connection for that runtime instance.
 - Shared infrastructure lives under `packages/domain/src/services/shared`:
   - `domain-db.ts`: long-lived DB runtime (`db`, `sqlite`, `close`) + `DomainServiceOptions`.
@@ -172,6 +193,7 @@ Failure:
 - Each feature route module owns only its feature service reference:
   - `categories/routes.ts` -> `services.categories`
   - `expenses/routes.ts` -> `services.expenses`
+  - `reimbursements/routes.ts` -> `services.reimbursements`
   - `commitments/routes.ts` -> `services.commitments`
   - `reports/routes.ts` -> `services.reports`
   - `query/routes.ts` -> `services.query`
@@ -222,15 +244,18 @@ For destructive actions:
 
 ## Idempotency and Dedupe Rules
 
-- Prefer `externalRef` on imported expenses.
-- Treat source + externalRef uniqueness as immutable dedupe key.
+- Prefer `providerTransactionId` on imported expenses.
+- Treat `source + providerTransactionId` uniqueness as immutable dedupe key.
 - For recurring, uniqueness is `(commitment_id, due_at)`.
+- Reimbursement link creation supports optional `idempotency_key`; same key + same payload must return the existing link, while same key + different payload must fail with `REIMBURSEMENT_IDEMPOTENCY_KEY_CONFLICT`.
+- Reimbursement auto-match category rules are explicit links between category IDs (`expense_category_id`, `inbound_category_id`) and are stable across category renames.
 
 ## Time and Money Conventions
 
 - Store timestamps in UTC ISO-8601.
 - Render local times in UI if needed.
 - Store amounts in integer minor units.
+- Ledger v2 invariant: `amountMinor` is absolute; direction is derived from semantic `expenses.kind` and `transferDirection` (transfer kinds only). Do not infer sign from `amountMinor`.
 - Preserve original currency and optional normalized base amount.
 
 ## Error Codes You Must Handle
@@ -258,6 +283,18 @@ For destructive actions:
 - `MONZO_API_ERROR`
 - `MONZO_RESPONSE_INVALID`
 - `MONZO_CATEGORY_CREATE_FAILED`
+- `REIMBURSEMENT_LINK_NOT_FOUND`
+- `REIMBURSEMENT_NOT_REIMBURSABLE`
+- `REIMBURSEMENT_INVALID_LINK_TARGET`
+- `REIMBURSEMENT_CURRENCY_MISMATCH`
+- `REIMBURSEMENT_ALLOCATION_EXCEEDS_OUTSTANDING`
+- `REIMBURSEMENT_ALLOCATION_EXCEEDS_INBOUND_AVAILABLE`
+- `REIMBURSEMENT_IDEMPOTENCY_KEY_CONFLICT`
+- `REIMBURSEMENT_CATEGORY_RULE_NOT_FOUND`
+- `REIMBURSEMENT_CATEGORY_RULE_INVALID_EXPENSE_CATEGORY`
+- `REIMBURSEMENT_CATEGORY_RULE_INVALID_INBOUND_CATEGORY`
+- `REIMBURSEMENT_CLOSE_INVALID`
+- `REIMBURSEMENT_REOPEN_INVALID`
 - `INTERNAL_ERROR`
 
 ## Recommended Agent Playbooks

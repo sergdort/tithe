@@ -17,7 +17,7 @@ import { buildAddTransactionPayload } from '../form-payloads.js';
 import { useCreateHomeTransactionMutation } from '../hooks/useHomeMutations.js';
 import { useHomeCategoriesQuery } from '../hooks/useHomeQueries.js';
 import { groupCategoriesByKind } from '../selectors.js';
-import type { HomeTransferDirection, TransactionKind } from '../types.js';
+import type { HomeTransferDirection, TransactionKind, TransferSemanticKind } from '../types.js';
 
 interface AddTransactionDialogProps {
   open: boolean;
@@ -38,6 +38,10 @@ export const AddTransactionDialog = ({ open, onClose }: AddTransactionDialogProp
   const [txDescription, setTxDescription] = useState('');
   const [txNote, setTxNote] = useState('');
   const [txTransferDirection, setTxTransferDirection] = useState<HomeTransferDirection>('out');
+  const [txTransferSemanticKind, setTxTransferSemanticKind] =
+    useState<TransferSemanticKind>('transfer_external');
+  const [txReimbursable, setTxReimbursable] = useState(false);
+  const [txMyShare, setTxMyShare] = useState('0');
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const categories = categoriesQuery.data ?? [];
@@ -61,12 +65,33 @@ export const AddTransactionDialog = ({ open, onClose }: AddTransactionDialogProp
     }
   }, [open]);
 
+  const selectedCategory = categories.find((category) => category.id === txCategoryId) ?? null;
+  const selectedCategoryReimbursementMode =
+    txKind === 'expense' ? (selectedCategory?.reimbursementMode ?? 'none') : 'none';
+
+  useEffect(() => {
+    if (selectedCategoryReimbursementMode === 'always') {
+      setTxReimbursable(true);
+      return;
+    }
+
+    if (selectedCategoryReimbursementMode === 'optional') {
+      setTxReimbursable(true);
+      return;
+    }
+
+    setTxReimbursable(false);
+  }, [selectedCategoryReimbursementMode, txKind, txCategoryId]);
+
   const resetAfterSuccess = () => {
     setTxAmount('');
     setTxDescription('');
     setTxNote('');
     setTxDate(toDateInputValue(new Date()));
     setTxTransferDirection('out');
+    setTxTransferSemanticKind('transfer_external');
+    setTxReimbursable(false);
+    setTxMyShare('0');
     setSubmitError(null);
   };
 
@@ -82,6 +107,9 @@ export const AddTransactionDialog = ({ open, onClose }: AddTransactionDialogProp
         description: txDescription,
         note: txNote,
         transferDirection: txTransferDirection,
+        transferSemanticKind: txTransferSemanticKind,
+        reimbursable: txReimbursable,
+        myShareText: txMyShare,
       });
 
       createTransactionMutation.mutate(payload, {
@@ -151,17 +179,54 @@ export const AddTransactionDialog = ({ open, onClose }: AddTransactionDialogProp
               ))}
             </TextField>
             {txKind === 'transfer' ? (
-              <TextField
-                select
-                label="Direction"
-                value={txTransferDirection}
-                onChange={(event) =>
-                  setTxTransferDirection(event.target.value as HomeTransferDirection)
-                }
-              >
-                <MenuItem value="out">Money out</MenuItem>
-                <MenuItem value="in">Money in</MenuItem>
-              </TextField>
+              <>
+                <TextField
+                  select
+                  label="Transfer type"
+                  value={txTransferSemanticKind}
+                  onChange={(event) =>
+                    setTxTransferSemanticKind(event.target.value as TransferSemanticKind)
+                  }
+                >
+                  <MenuItem value="transfer_external">External transfer</MenuItem>
+                  <MenuItem value="transfer_internal">Internal transfer</MenuItem>
+                </TextField>
+                <TextField
+                  select
+                  label="Direction"
+                  value={txTransferDirection}
+                  onChange={(event) =>
+                    setTxTransferDirection(event.target.value as HomeTransferDirection)
+                  }
+                >
+                  <MenuItem value="out">Money out</MenuItem>
+                  <MenuItem value="in">Money in</MenuItem>
+                </TextField>
+              </>
+            ) : null}
+            {txKind === 'expense' && selectedCategoryReimbursementMode !== 'none' ? (
+              <>
+                {selectedCategoryReimbursementMode === 'optional' ? (
+                  <TextField
+                    select
+                    label="Track reimbursement"
+                    value={txReimbursable ? 'yes' : 'no'}
+                    onChange={(event) => setTxReimbursable(event.target.value === 'yes')}
+                  >
+                    <MenuItem value="yes">Yes</MenuItem>
+                    <MenuItem value="no">No</MenuItem>
+                  </TextField>
+                ) : null}
+                {txReimbursable ? (
+                  <TextField
+                    label="My share (GBP)"
+                    value={txMyShare}
+                    onChange={(event) => setTxMyShare(event.target.value)}
+                    inputProps={{ inputMode: 'decimal', min: 0, step: 0.01 }}
+                    helperText="The portion that belongs to you (not expected back)."
+                  />
+                ) : null}
+              </>
             ) : null}
             <TextField
               label="Description / payee"
