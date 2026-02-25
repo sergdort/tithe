@@ -1,7 +1,6 @@
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import LinkIcon from '@mui/icons-material/Link';
-import SaveIcon from '@mui/icons-material/Save';
 import {
   Alert,
   Box,
@@ -11,6 +10,10 @@ import {
   Chip,
   CircularProgress,
   Collapse,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControlLabel,
   IconButton,
   List,
@@ -22,7 +25,9 @@ import {
   Switch,
   TextField,
   Typography,
+  useMediaQuery,
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 
@@ -63,6 +68,8 @@ const parseNullableNonNegativeInt = (value: string): number | null => {
 
 export const CategoriesPage = () => {
   const queryClient = useQueryClient();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const [name, setName] = useState('');
   const [kind, setKind] = useState<'expense' | 'income' | 'transfer'>('expense');
@@ -137,6 +144,9 @@ export const CategoriesPage = () => {
 
   const categories = categoriesQuery.data ?? [];
   const rules = rulesQuery.data ?? [];
+  const editingCategory = editingCategoryId
+    ? categories.find((category) => category.id === editingCategoryId) ?? null
+    : null;
 
   const rulesByExpenseCategoryId = useMemo(() => {
     const map = new Map<string, ReimbursementCategoryRule[]>();
@@ -152,6 +162,10 @@ export const CategoriesPage = () => {
     () => categories.filter((category) => category.kind === 'income' || category.kind === 'transfer'),
     [categories],
   );
+
+  const editingDraft = editingCategory
+    ? (draftsById[editingCategory.id] ?? buildDraftFromCategory(editingCategory))
+    : null;
 
   if (categoriesQuery.isLoading || rulesQuery.isLoading) {
     return (
@@ -290,8 +304,6 @@ export const CategoriesPage = () => {
           </Typography>
           <List disablePadding>
             {categories.map((category) => {
-              const isEditing = editingCategoryId === category.id;
-              const draft = draftsById[category.id] ?? buildDraftFromCategory(category);
               const expenseRules = rulesByExpenseCategoryId.get(category.id) ?? [];
               const linkedInboundIds = new Set(expenseRules.map((rule) => rule.inboundCategoryId));
               const showRulesEditor = rulesOpenCategoryId === category.id && category.kind === 'expense';
@@ -303,9 +315,7 @@ export const CategoriesPage = () => {
                     <ListItemText
                       primary={
                         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                          <Typography variant="body1">
-                            {isEditing ? category.name : normalizeCategoryLabel(category.name)}
-                          </Typography>
+                          <Typography variant="body1">{normalizeCategoryLabel(category.name)}</Typography>
                           {isPlaceholder ? <Chip size="small" color="warning" label="Monzo placeholder" /> : null}
                           {category.kind === 'expense' ? (
                             <Chip
@@ -338,103 +348,12 @@ export const CategoriesPage = () => {
                             <LinkIcon fontSize="small" />
                           </IconButton>
                         ) : null}
-                        {isEditing ? (
-                          <IconButton
-                            edge="end"
-                            aria-label="save category"
-                            onClick={() => void handleSaveCategory(category)}
-                            disabled={updateCategory.isPending || draft.name.trim().length === 0}
-                          >
-                            <SaveIcon fontSize="small" />
-                          </IconButton>
-                        ) : (
-                          <IconButton edge="end" aria-label="edit category" onClick={() => beginEdit(category)}>
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                        )}
+                        <IconButton edge="end" aria-label="edit category" onClick={() => beginEdit(category)}>
+                          <EditIcon fontSize="small" />
+                        </IconButton>
                       </Stack>
                     </ListItemSecondaryAction>
                   </ListItem>
-
-                  <Collapse in={isEditing} timeout="auto" unmountOnExit>
-                    <Box sx={{ px: 1, pb: 1.5 }}>
-                      <Stack spacing={1.5}>
-                        <TextField
-                          label="Name"
-                          value={draft.name}
-                          onChange={(event) => setDraft(category.id, { name: event.target.value })}
-                          size="small"
-                        />
-                        {category.kind === 'expense' ? (
-                          <>
-                            <TextField
-                              select
-                              label="Reimbursement Mode"
-                              value={draft.reimbursementMode}
-                              onChange={(event) =>
-                                setDraft(category.id, {
-                                  reimbursementMode: event.target.value as CategoryEditDraft['reimbursementMode'],
-                                })
-                              }
-                              size="small"
-                            >
-                              <MenuItem value="none">None</MenuItem>
-                              <MenuItem value="optional">Optional</MenuItem>
-                              <MenuItem value="always">Always</MenuItem>
-                            </TextField>
-                            <TextField
-                              select
-                              label="Default Counterparty"
-                              value={draft.defaultCounterpartyType ?? '__none'}
-                              onChange={(event) =>
-                                setDraft(category.id, {
-                                  defaultCounterpartyType:
-                                    event.target.value === '__none'
-                                      ? null
-                                      : (event.target.value as CategoryEditDraft['defaultCounterpartyType']),
-                                })
-                              }
-                              size="small"
-                            >
-                              <MenuItem value="__none">None</MenuItem>
-                              <MenuItem value="self">Self</MenuItem>
-                              <MenuItem value="partner">Partner</MenuItem>
-                              <MenuItem value="team">Team</MenuItem>
-                              <MenuItem value="other">Other</MenuItem>
-                            </TextField>
-                            <TextField
-                              label="Default Recovery Window (days)"
-                              type="number"
-                              size="small"
-                              value={draft.defaultRecoveryWindowDaysText}
-                              onChange={(event) =>
-                                setDraft(category.id, {
-                                  defaultRecoveryWindowDaysText: event.target.value,
-                                })
-                              }
-                              inputProps={{ min: 0 }}
-                            />
-                          </>
-                        ) : null}
-                        <Stack direction="row" spacing={1}>
-                          <Button
-                            size="small"
-                            variant="contained"
-                            onClick={() => void handleSaveCategory(category)}
-                            disabled={updateCategory.isPending || draft.name.trim().length === 0}
-                          >
-                            Save
-                          </Button>
-                          <Button size="small" variant="text" onClick={() => cancelEdit(category.id)}>
-                            Cancel
-                          </Button>
-                        </Stack>
-                        {rowErrorById[category.id] ? (
-                          <Alert severity="error">{rowErrorById[category.id]}</Alert>
-                        ) : null}
-                      </Stack>
-                    </Box>
-                  </Collapse>
 
                   {category.kind === 'expense' ? (
                     <Collapse in={showRulesEditor} timeout="auto" unmountOnExit>
@@ -483,6 +402,99 @@ export const CategoriesPage = () => {
           </List>
         </CardContent>
       </Card>
+
+      <Dialog
+        open={Boolean(editingCategory && editingDraft)}
+        onClose={() => {
+          if (editingCategory) {
+            cancelEdit(editingCategory.id);
+          }
+        }}
+        fullWidth
+        maxWidth="sm"
+        fullScreen={isMobile}
+      >
+        {editingCategory && editingDraft ? (
+          <>
+            <DialogTitle>Edit category</DialogTitle>
+            <DialogContent>
+              <Stack spacing={1.5} sx={{ pt: 1 }}>
+                <TextField
+                  label="Name"
+                  value={editingDraft.name}
+                  onChange={(event) => setDraft(editingCategory.id, { name: event.target.value })}
+                  size="small"
+                  autoFocus
+                />
+                {editingCategory.kind === 'expense' ? (
+                  <>
+                    <TextField
+                      select
+                      label="Reimbursement Mode"
+                      value={editingDraft.reimbursementMode}
+                      onChange={(event) =>
+                        setDraft(editingCategory.id, {
+                          reimbursementMode: event.target.value as CategoryEditDraft['reimbursementMode'],
+                        })
+                      }
+                      size="small"
+                    >
+                      <MenuItem value="none">None</MenuItem>
+                      <MenuItem value="optional">Optional</MenuItem>
+                      <MenuItem value="always">Always</MenuItem>
+                    </TextField>
+                    <TextField
+                      select
+                      label="Default Counterparty"
+                      value={editingDraft.defaultCounterpartyType ?? '__none'}
+                      onChange={(event) =>
+                        setDraft(editingCategory.id, {
+                          defaultCounterpartyType:
+                            event.target.value === '__none'
+                              ? null
+                              : (event.target.value as CategoryEditDraft['defaultCounterpartyType']),
+                        })
+                      }
+                      size="small"
+                    >
+                      <MenuItem value="__none">None</MenuItem>
+                      <MenuItem value="self">Self</MenuItem>
+                      <MenuItem value="partner">Partner</MenuItem>
+                      <MenuItem value="team">Team</MenuItem>
+                      <MenuItem value="other">Other</MenuItem>
+                    </TextField>
+                    <TextField
+                      label="Default Recovery Window (days)"
+                      type="number"
+                      size="small"
+                      value={editingDraft.defaultRecoveryWindowDaysText}
+                      onChange={(event) =>
+                        setDraft(editingCategory.id, {
+                          defaultRecoveryWindowDaysText: event.target.value,
+                        })
+                      }
+                      inputProps={{ min: 0 }}
+                    />
+                  </>
+                ) : null}
+                {rowErrorById[editingCategory.id] ? (
+                  <Alert severity="error">{rowErrorById[editingCategory.id]}</Alert>
+                ) : null}
+              </Stack>
+            </DialogContent>
+            <DialogActions sx={{ px: 3, pb: 2 }}>
+              <Button onClick={() => cancelEdit(editingCategory.id)}>Cancel</Button>
+              <Button
+                variant="contained"
+                onClick={() => void handleSaveCategory(editingCategory)}
+                disabled={updateCategory.isPending || editingDraft.name.trim().length === 0}
+              >
+                Save
+              </Button>
+            </DialogActions>
+          </>
+        ) : null}
+      </Dialog>
     </Stack>
   );
 };
