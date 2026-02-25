@@ -4,9 +4,6 @@ import {
   Avatar,
   Box,
   Button,
-  Card,
-  CardContent,
-  Chip,
   CircularProgress,
   Dialog,
   DialogActions,
@@ -126,6 +123,30 @@ const reimbursementChipLabel = (status?: string): string | null => {
   return null;
 };
 
+const expenseAmountPresentation = (expense: {
+  kind?: string;
+  transferDirection?: 'in' | 'out' | null;
+  money: { amountMinor: number; currency: string };
+}): { text: string; color: string } => {
+  const base = pounds(expense.money.amountMinor, expense.money.currency);
+  const isInflow =
+    expense.kind === 'income' ||
+    expense.kind === 'transfer_external' ||
+    expense.kind === 'transfer_internal'
+      ? expense.transferDirection === 'in' || expense.kind === 'income'
+      : false;
+
+  if (isInflow) {
+    return { text: `+${base}`, color: '#2E7D32' };
+  }
+
+  if (expense.kind === 'transfer_internal') {
+    return { text: base, color: '#5F6368' };
+  }
+
+  return { text: base, color: '#111827' };
+};
+
 export const ExpensesPage = () => {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -178,24 +199,6 @@ export const ExpensesPage = () => {
       api.reimbursements.link({
         ...payload,
         idempotencyKey: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`,
-      }),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['expenses'] }),
-        queryClient.invalidateQueries({ queryKey: ['report', 'monthlyLedger'] }),
-      ]);
-    },
-  });
-
-  const closeReimbursement = useMutation({
-    mutationFn: (payload: {
-      expenseOutId: string;
-      closeOutstandingMinor?: number;
-      reason?: string | null;
-    }) =>
-      api.reimbursements.close(payload.expenseOutId, {
-        closeOutstandingMinor: payload.closeOutstandingMinor,
-        reason: payload.reason ?? undefined,
       }),
     onSuccess: async () => {
       await Promise.all([
@@ -261,192 +264,151 @@ export const ExpensesPage = () => {
 
   return (
     <Box>
-      <Stack spacing={2}>
-        <Card>
-          <CardContent>
-            <Typography variant="subtitle1" fontWeight={700}>
-              Latest Expenses
-            </Typography>
-            {expenses.length === 0 ? (
-              <Typography color="text.secondary" sx={{ mt: 1 }}>
-                No expenses logged yet.
-              </Typography>
-            ) : (
-              <Stack spacing={1.5} sx={{ mt: 1 }}>
-                {groupedExpenses.map(([label, items]) => (
-                  <Box key={label}>
-                    <Typography
-                      variant="caption"
-                      sx={{ fontWeight: 700, color: 'text.secondary', px: 0.5 }}
-                    >
-                      {label}
-                    </Typography>
-                    <List disablePadding>
-                      {items.map((expense) => {
-                        const merchant = expense.merchantName?.trim() || 'Card payment';
-                        const categoryMeta = categoryById.get(expense.categoryId);
-                        const categoryName = categoryMeta?.name ?? expense.categoryId;
-                        const categoryColor = categoryMeta?.color ?? '#607D8B';
-                        const kindChip = semanticKindLabel(expense.kind, expense.transferDirection);
-                        const reimbursementLabel = reimbursementChipLabel(
-                          expense.reimbursementStatus,
-                        );
-                        const canShowReimbursement =
-                          expense.kind === 'expense' &&
-                          expense.reimbursementStatus &&
-                          expense.reimbursementStatus !== 'none';
-                        const recoverableMinor = expense.recoverableMinor ?? 0;
-                        const recoveredMinor = expense.recoveredMinor ?? 0;
-                        const outstandingMinor = expense.outstandingMinor ?? 0;
-
-                        const handleLinkRepayment = () => {
-                          const expenseInId = window.prompt(
-                            'Inbound transaction ID to link as reimbursement',
-                          );
-                          if (!expenseInId) return;
-                          const amountText = window.prompt(
-                            'Allocation amount (GBP)',
-                            (outstandingMinor / 100).toFixed(2),
-                          );
-                          if (!amountText) return;
-                          const parsed = Number(amountText);
-                          if (!Number.isFinite(parsed) || parsed <= 0) return;
-                          linkReimbursement.mutate({
-                            expenseOutId: expense.id,
-                            expenseInId: expenseInId.trim(),
-                            amountMinor: Math.round(parsed * 100),
-                          });
-                        };
-
-                        const handleCloseRemainder = () => {
-                          const amountText = window.prompt(
-                            'Write-off outstanding amount (GBP)',
-                            (outstandingMinor / 100).toFixed(2),
-                          );
-                          if (!amountText) return;
-                          const parsed = Number(amountText);
-                          if (!Number.isFinite(parsed) || parsed < 0) return;
-                          const reason = window.prompt('Reason (optional)') ?? undefined;
-                          closeReimbursement.mutate({
-                            expenseOutId: expense.id,
-                            closeOutstandingMinor: Math.round(parsed * 100),
-                            reason,
-                          });
-                        };
-
-                        return (
-                          <ListItem
-                            key={expense.id}
-                            disableGutters
-                            data-expense-id={expense.id}
-                            sx={{ py: 1.1, alignItems: 'center', gap: 1.25 }}
-                          >
-                            <ListItemAvatar sx={{ minWidth: 48 }}>
-                              <ExpenseMerchantAvatar
-                                expenseId={expense.id}
-                                merchantName={expense.merchantName}
-                                merchantLogoUrl={expense.merchantLogoUrl}
-                                merchantEmoji={expense.merchantEmoji}
-                              />
-                            </ListItemAvatar>
-
-                            <Box sx={{ flex: 1, minWidth: 0 }}>
-                              <Typography variant="body1" sx={{ fontWeight: 600 }} noWrap>
-                                {merchant}
-                              </Typography>
-                              <Stack direction="row" spacing={0.75} sx={{ mt: 0.4 }}>
-                                <Chip
-                                  size="small"
-                                  label={categoryName}
-                                  sx={{
-                                    height: 22,
-                                    bgcolor: `${categoryColor}22`,
-                                    color: categoryColor,
-                                    fontWeight: 600,
-                                  }}
-                                />
-                                {kindChip ? (
-                                  <Chip size="small" label={kindChip} sx={{ height: 22 }} />
-                                ) : null}
-                                {reimbursementLabel ? (
-                                  <Chip
-                                    size="small"
-                                    label={reimbursementLabel}
-                                    color={
-                                      expense.reimbursementStatus === 'settled'
-                                        ? 'success'
-                                        : expense.reimbursementStatus === 'partial'
-                                          ? 'warning'
-                                          : expense.reimbursementStatus === 'written_off'
-                                            ? 'default'
-                                            : 'info'
-                                    }
-                                    sx={{ height: 22 }}
-                                  />
-                                ) : null}
-                              </Stack>
-                              {canShowReimbursement ? (
-                                <Typography
-                                  variant="caption"
-                                  color="text.secondary"
-                                  sx={{ display: 'block', mt: 0.5 }}
-                                >
-                                  Recoverable {pounds(recoverableMinor, expense.money.currency)} •
-                                  Recovered {pounds(recoveredMinor, expense.money.currency)} •
-                                  Outstanding {pounds(outstandingMinor, expense.money.currency)}
-                                </Typography>
-                              ) : null}
-                              {canShowReimbursement ? (
-                                <Stack direction="row" spacing={1} sx={{ mt: 0.75 }}>
-                                  {outstandingMinor > 0 ? (
-                                    <>
-                                      <Button
-                                        size="small"
-                                        variant="outlined"
-                                        onClick={handleLinkRepayment}
-                                        disabled={linkReimbursement.isPending}
-                                      >
-                                        Link repayment
-                                      </Button>
-                                      <Button
-                                        size="small"
-                                        variant="text"
-                                        onClick={handleCloseRemainder}
-                                        disabled={closeReimbursement.isPending}
-                                      >
-                                        Mark written off
-                                      </Button>
-                                    </>
-                                  ) : expense.reimbursementStatus === 'written_off' ? (
-                                    <Button
-                                      size="small"
-                                      variant="text"
-                                      onClick={() => reopenReimbursement.mutate(expense.id)}
-                                      disabled={reopenReimbursement.isPending}
-                                    >
-                                      Reopen
-                                    </Button>
-                                  ) : null}
-                                </Stack>
-                              ) : null}
-                            </Box>
-
-                            <Box sx={{ textAlign: 'right', minWidth: 112 }}>
-                              <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.1 }}>
-                                {pounds(expense.money.amountMinor, expense.money.currency)}
-                              </Typography>
-                            </Box>
-                          </ListItem>
-                        );
-                      })}
-                    </List>
-                  </Box>
-                ))}
+      {expenses.length === 0 ? (
+        <Typography color="text.secondary" sx={{ mt: 1 }}>
+          No expenses logged yet.
+        </Typography>
+      ) : (
+        <Stack spacing={1} sx={{ mt: 0.5 }}>
+          {groupedExpenses.map(([label, items]) => (
+            <Box key={label}>
+              <Stack
+                direction="row"
+                justifyContent="space-between"
+                alignItems="center"
+                sx={{
+                  position: 'sticky',
+                  top: 'calc(56px + env(safe-area-inset-top, 0px))',
+                  zIndex: 2,
+                  px: 0.25,
+                  py: 0.5,
+                  mb: 0.25,
+                  bgcolor: 'background.default',
+                  borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
+                }}
+              >
+                <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                  {label}
+                </Typography>
+                <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                  {pounds(
+                    items.reduce((sum, expense) => {
+                      const isInflow =
+                        expense.kind === 'income' ||
+                        ((expense.kind === 'transfer_external' ||
+                          expense.kind === 'transfer_internal') &&
+                          expense.transferDirection === 'in');
+                      return sum + (isInflow ? expense.money.amountMinor : -expense.money.amountMinor);
+                    }, 0),
+                    'GBP',
+                  )}
+                </Typography>
               </Stack>
-            )}
-          </CardContent>
-        </Card>
-      </Stack>
+              <List disablePadding>
+                {items.map((expense) => {
+                  const merchant = expense.merchantName?.trim() || 'Card payment';
+                  const categoryMeta = categoryById.get(expense.categoryId);
+                  const categoryName = categoryMeta?.name ?? expense.categoryId;
+                  const kindLabel = semanticKindLabel(expense.kind, expense.transferDirection);
+                  const reimbursementLabel = reimbursementChipLabel(expense.reimbursementStatus);
+                  const canShowReimbursement =
+                    expense.kind === 'expense' &&
+                    expense.reimbursementStatus &&
+                    expense.reimbursementStatus !== 'none';
+                  const outstandingMinor = expense.outstandingMinor ?? 0;
+                  const amountView = expenseAmountPresentation(expense);
+
+                  const subtitle = canShowReimbursement
+                    ? `${reimbursementLabel ?? 'Reimbursable'} · Outstanding ${pounds(
+                        outstandingMinor,
+                        expense.money.currency,
+                      )}`
+                    : kindLabel || categoryName;
+
+                  const handleLinkRepayment = () => {
+                    const expenseInId = window.prompt(
+                      'Inbound transaction ID to link as reimbursement',
+                    );
+                    if (!expenseInId) return;
+                    const amountText = window.prompt(
+                      'Allocation amount (GBP)',
+                      (outstandingMinor / 100).toFixed(2),
+                    );
+                    if (!amountText) return;
+                    const parsed = Number(amountText);
+                    if (!Number.isFinite(parsed) || parsed <= 0) return;
+                    linkReimbursement.mutate({
+                      expenseOutId: expense.id,
+                      expenseInId: expenseInId.trim(),
+                      amountMinor: Math.round(parsed * 100),
+                    });
+                  };
+
+                  return (
+                    <ListItem
+                      key={expense.id}
+                      disableGutters
+                      data-expense-id={expense.id}
+                      sx={{ py: 0.9, alignItems: 'center', gap: 1 }}
+                    >
+                      <ListItemAvatar sx={{ minWidth: 44 }}>
+                        <ExpenseMerchantAvatar
+                          expenseId={expense.id}
+                          merchantName={expense.merchantName}
+                          merchantLogoUrl={expense.merchantLogoUrl}
+                          merchantEmoji={expense.merchantEmoji}
+                        />
+                      </ListItemAvatar>
+
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography variant="body1" sx={{ fontWeight: 600 }} noWrap>
+                          {merchant}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" noWrap>
+                          {subtitle}
+                        </Typography>
+                        {canShowReimbursement && outstandingMinor > 0 ? (
+                          <Button
+                            size="small"
+                            variant="text"
+                            onClick={handleLinkRepayment}
+                            disabled={linkReimbursement.isPending}
+                            sx={{ mt: 0.1, minHeight: 22, px: 0 }}
+                          >
+                            Link repayment
+                          </Button>
+                        ) : null}
+                        {canShowReimbursement &&
+                        outstandingMinor === 0 &&
+                        expense.reimbursementStatus === 'written_off' ? (
+                          <Button
+                            size="small"
+                            variant="text"
+                            onClick={() => reopenReimbursement.mutate(expense.id)}
+                            disabled={reopenReimbursement.isPending}
+                            sx={{ mt: 0.1, minHeight: 22, px: 0 }}
+                          >
+                            Reopen
+                          </Button>
+                        ) : null}
+                      </Box>
+
+                      <Box sx={{ textAlign: 'right', minWidth: 88, pr: 0.25 }}>
+                        <Typography
+                          variant="subtitle1"
+                          sx={{ fontWeight: 700, lineHeight: 1.1, color: amountView.color }}
+                        >
+                          {amountView.text}
+                        </Typography>
+                      </Box>
+                    </ListItem>
+                  );
+                })}
+              </List>
+            </Box>
+          ))}
+        </Stack>
+      )}
 
       <Fab
         color="primary"
