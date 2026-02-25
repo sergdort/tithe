@@ -13,7 +13,13 @@ loadWorkspaceEnv();
 const program = new Command();
 type CliServices = ReturnType<typeof createDomainServices> & { close?: () => void };
 let services: CliServices | null = null;
-const getServices = (): CliServices => (services ??= createDomainServices());
+const getServices = (): CliServices => {
+  if (!services) {
+    services = createDomainServices();
+  }
+
+  return services;
+};
 process.once('exit', () => {
   services?.close?.();
 });
@@ -62,7 +68,12 @@ const resolveLocalMonthRange = (month?: string): { from: string; to: string } =>
     const [yearText, monthText] = month.split('-');
     year = Number(yearText);
     monthIndex = Number(monthText) - 1;
-    if (!Number.isInteger(year) || !Number.isInteger(monthIndex) || monthIndex < 0 || monthIndex > 11) {
+    if (
+      !Number.isInteger(year) ||
+      !Number.isInteger(monthIndex) ||
+      monthIndex < 0 ||
+      monthIndex > 11
+    ) {
       throw new AppError('VALIDATION_ERROR', '--month must match YYYY-MM', 400, { month });
     }
   } else {
@@ -289,16 +300,15 @@ expense
   .option('--reimbursement-group-id <id|null>', 'optional reimbursement grouping key or null')
   .option('--merchant-name <merchantName>', 'merchant name')
   .option('--note <note>', 'note')
-  .option('--provider-transaction-id <providerTransactionId>', 'provider transaction id for idempotency')
+  .option(
+    '--provider-transaction-id <providerTransactionId>',
+    'provider transaction id for idempotency',
+  )
   .option('--commitment-instance-id <id>', 'link expense to commitment instance')
   .action(async (options) => {
     const opts = program.opts<{ json: boolean }>();
     const reimbursable =
-      options.reimbursable === true
-        ? true
-        : options.notReimbursable === true
-          ? false
-          : undefined;
+      options.reimbursable === true ? true : options.notReimbursable === true ? false : undefined;
 
     await run(opts.json, () =>
       getServices().expenses.create(
@@ -355,11 +365,7 @@ expense
   .action(async (options) => {
     const opts = program.opts<{ json: boolean }>();
     const reimbursable =
-      options.reimbursable === true
-        ? true
-        : options.notReimbursable === true
-          ? false
-          : undefined;
+      options.reimbursable === true ? true : options.notReimbursable === true ? false : undefined;
 
     await run(opts.json, () =>
       getServices().expenses.update(
@@ -415,12 +421,17 @@ expense
     }
 
     await run(opts.json, async () => {
-      await getServices().expenses.delete(options.id, options.approve, { actor: 'cli', channel: 'cli' });
+      await getServices().expenses.delete(options.id, options.approve, {
+        actor: 'cli',
+        channel: 'cli',
+      });
       return { deleted: true, id: options.id };
     });
   });
 
-const reimbursement = program.command('reimbursement').description('Reimbursement workflow operations');
+const reimbursement = program
+  .command('reimbursement')
+  .description('Reimbursement workflow operations');
 const reimbursementRule = reimbursement
   .command('rule')
   .description('Reimbursement auto-match category rule operations');
@@ -456,7 +467,9 @@ reimbursementRule
     const opts = program.opts<{ json: boolean }>();
 
     if (options.dryRun) {
-      await run(opts.json, () => getServices().reimbursements.createDeleteCategoryRuleApproval(options.id));
+      await run(opts.json, () =>
+        getServices().reimbursements.createDeleteCategoryRuleApproval(options.id),
+      );
       return;
     }
 

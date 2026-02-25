@@ -151,10 +151,7 @@ export const registerExpenseRoutes = (app: FastifyInstance): void => {
       myShareMinor: nullableIntegerSchema,
       closedOutstandingMinor: nullableIntegerSchema,
       counterpartyType: {
-        oneOf: [
-          { type: 'string', enum: ['self', 'partner', 'team', 'other'] },
-          { type: 'null' },
-        ],
+        oneOf: [{ type: 'string', enum: ['self', 'partner', 'team', 'other'] }, { type: 'null' }],
       },
       reimbursementGroupId: nullableStringSchema,
       reimbursementClosedAt: {

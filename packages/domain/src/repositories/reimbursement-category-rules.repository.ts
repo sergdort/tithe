@@ -1,4 +1,4 @@
-import { eq, inArray, and } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 
 import { reimbursementCategoryRules } from '@tithe/db';
 
@@ -96,13 +96,17 @@ export interface ReimbursementCategoryRulesRepository {
   listByExpenseCategoryIds: (
     input: ListReimbursementCategoryRulesByExpenseCategoryIdsInput,
   ) => ListReimbursementCategoryRulesByExpenseCategoryIdsOutput;
-  findById: (input: FindReimbursementCategoryRuleByIdInput) => FindReimbursementCategoryRuleByIdOutput;
+  findById: (
+    input: FindReimbursementCategoryRuleByIdInput,
+  ) => FindReimbursementCategoryRuleByIdOutput;
   findByPair: (
     input: FindReimbursementCategoryRuleByPairInput,
   ) => FindReimbursementCategoryRuleByPairOutput;
   create: (input: CreateReimbursementCategoryRuleInput) => CreateReimbursementCategoryRuleOutput;
   update: (input: UpdateReimbursementCategoryRuleInput) => UpdateReimbursementCategoryRuleOutput;
-  deleteById: (input: DeleteReimbursementCategoryRuleInput) => DeleteReimbursementCategoryRuleOutput;
+  deleteById: (
+    input: DeleteReimbursementCategoryRuleInput,
+  ) => DeleteReimbursementCategoryRuleOutput;
 }
 
 export class SqliteReimbursementCategoryRulesRepository
@@ -129,7 +133,10 @@ export class SqliteReimbursementCategoryRulesRepository
     const query = this.db
       .select()
       .from(reimbursementCategoryRules)
-      .orderBy(reimbursementCategoryRules.expenseCategoryId, reimbursementCategoryRules.inboundCategoryId);
+      .orderBy(
+        reimbursementCategoryRules.expenseCategoryId,
+        reimbursementCategoryRules.inboundCategoryId,
+      );
     const rows = whereExpr ? query.where(whereExpr).all() : query.all();
     return { rules: rows.map(mapRule) };
   }
@@ -153,7 +160,9 @@ export class SqliteReimbursementCategoryRulesRepository
     return { rules: rows.map(mapRule) };
   }
 
-  findById({ id }: FindReimbursementCategoryRuleByIdInput): FindReimbursementCategoryRuleByIdOutput {
+  findById({
+    id,
+  }: FindReimbursementCategoryRuleByIdInput): FindReimbursementCategoryRuleByIdOutput {
     const row = this.db
       .select()
       .from(reimbursementCategoryRules)
@@ -192,8 +201,15 @@ export class SqliteReimbursementCategoryRulesRepository
     return { rule: mapRule(created) };
   }
 
-  update({ id, ...patch }: UpdateReimbursementCategoryRuleInput): UpdateReimbursementCategoryRuleOutput {
-    this.db.update(reimbursementCategoryRules).set(patch).where(eq(reimbursementCategoryRules.id, id)).run();
+  update({
+    id,
+    ...patch
+  }: UpdateReimbursementCategoryRuleInput): UpdateReimbursementCategoryRuleOutput {
+    this.db
+      .update(reimbursementCategoryRules)
+      .set(patch)
+      .where(eq(reimbursementCategoryRules.id, id))
+      .run();
     const updated = this.db
       .select()
       .from(reimbursementCategoryRules)

@@ -31,7 +31,12 @@ const resolveMonthRange = (month: string): { from: string; to: string } => {
   const [yearText, monthText] = month.split('-');
   const year = Number(yearText);
   const monthIndex = Number(monthText) - 1;
-  if (!Number.isInteger(year) || !Number.isInteger(monthIndex) || monthIndex < 0 || monthIndex > 11) {
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(monthIndex) ||
+    monthIndex < 0 ||
+    monthIndex > 11
+  ) {
     throw new AppError('VALIDATION_ERROR', 'month must match YYYY-MM', 400, { month });
   }
 

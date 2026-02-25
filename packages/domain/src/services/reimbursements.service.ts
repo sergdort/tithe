@@ -55,7 +55,10 @@ export interface CreateReimbursementCategoryRuleInput {
 }
 
 export interface ReimbursementsService {
-  link: (input: CreateReimbursementLinkInput, context?: ActorContext) => Promise<ReimbursementLinkDto>;
+  link: (
+    input: CreateReimbursementLinkInput,
+    context?: ActorContext,
+  ) => Promise<ReimbursementLinkDto>;
   createUnlinkApproval: (id: string) => Promise<ApprovalToken>;
   unlink: (id: string, approveOperationId: string, context?: ActorContext) => Promise<void>;
   listCategoryRules: () => Promise<ReimbursementCategoryRuleDto[]>;
@@ -64,8 +67,16 @@ export interface ReimbursementsService {
     context?: ActorContext,
   ) => Promise<ReimbursementCategoryRuleDto>;
   createDeleteCategoryRuleApproval: (id: string) => Promise<ApprovalToken>;
-  deleteCategoryRule: (id: string, approveOperationId: string, context?: ActorContext) => Promise<void>;
-  close: (expenseOutId: string, input: CloseReimbursementInput, context?: ActorContext) => Promise<ExpenseDto>;
+  deleteCategoryRule: (
+    id: string,
+    approveOperationId: string,
+    context?: ActorContext,
+  ) => Promise<void>;
+  close: (
+    expenseOutId: string,
+    input: CloseReimbursementInput,
+    context?: ActorContext,
+  ) => Promise<ExpenseDto>;
   reopen: (expenseOutId: string, context?: ActorContext) => Promise<ExpenseDto>;
   autoMatch: (
     input?: AutoMatchReimbursementsInput,
@@ -75,7 +86,10 @@ export interface ReimbursementsService {
 
 const assertPositiveMinor = (value: number, field: string): number => {
   if (!Number.isInteger(value) || value <= 0) {
-    throw new AppError('VALIDATION_ERROR', `${field} must be a positive integer`, 400, { field, value });
+    throw new AppError('VALIDATION_ERROR', `${field} must be a positive integer`, 400, {
+      field,
+      value,
+    });
   }
   return value;
 };
@@ -87,7 +101,10 @@ const computeRecoverableMinor = (expense: ExpenseDto): number => {
   return Math.max(expense.money.amountMinor - (expense.myShareMinor ?? 0), 0);
 };
 
-const deriveReimbursementStatus = (expense: ExpenseDto, recoveredMinor: number): ReimbursementStatus => {
+const deriveReimbursementStatus = (
+  expense: ExpenseDto,
+  recoveredMinor: number,
+): ReimbursementStatus => {
   if (expense.kind !== 'expense') {
     return 'none';
   }
@@ -113,8 +130,10 @@ export const createReimbursementsService = ({
 }: ReimbursementsServiceDeps): ReimbursementsService => {
   const categoriesRepo = (db: RepositoryDb = runtime.db) => new SqliteCategoriesRepository(db);
   const expensesRepo = (db: RepositoryDb = runtime.db) => new SqliteExpensesRepository(db);
-  const categoryRulesRepo = (db: RepositoryDb = runtime.db) => new SqliteReimbursementCategoryRulesRepository(db);
-  const reimbursementsRepo = (db: RepositoryDb = runtime.db) => new SqliteReimbursementsRepository(db);
+  const categoryRulesRepo = (db: RepositoryDb = runtime.db) =>
+    new SqliteReimbursementCategoryRulesRepository(db);
+  const reimbursementsRepo = (db: RepositoryDb = runtime.db) =>
+    new SqliteReimbursementsRepository(db);
 
   const getExpenseOrThrow = (db: RepositoryDb, id: string): ExpenseDto => {
     const expense = expensesRepo(db).findById({ id }).expense;
@@ -132,7 +151,11 @@ export const createReimbursementsService = ({
     return category;
   };
 
-  const assertCategoryRuleKinds = (db: RepositoryDb, expenseCategoryId: string, inboundCategoryId: string): void => {
+  const assertCategoryRuleKinds = (
+    db: RepositoryDb,
+    expenseCategoryId: string,
+    inboundCategoryId: string,
+  ): void => {
     const expenseCategory = getCategoryOrThrow(db, expenseCategoryId);
     const inboundCategory = getCategoryOrThrow(db, inboundCategoryId);
 
@@ -157,7 +180,8 @@ export const createReimbursementsService = ({
 
   const enrichExpense = (db: RepositoryDb, expense: ExpenseDto): ExpenseDto => {
     const recoveredMinor =
-      reimbursementsRepo(db).sumRecoveredByExpenseOutIds({ expenseOutIds: [expense.id] }).rows[0]?.totalMinor ?? 0;
+      reimbursementsRepo(db).sumRecoveredByExpenseOutIds({ expenseOutIds: [expense.id] }).rows[0]
+        ?.totalMinor ?? 0;
     const recoverableMinor = computeRecoverableMinor(expense);
     const outstandingMinor = Math.max(
       recoverableMinor - recoveredMinor - Math.max(expense.closedOutstandingMinor ?? 0, 0),
@@ -175,7 +199,8 @@ export const createReimbursementsService = ({
   const syncStoredReimbursementStatus = (db: RepositoryDb, expenseOutId: string): ExpenseDto => {
     const expense = getExpenseOrThrow(db, expenseOutId);
     const recoveredMinor =
-      reimbursementsRepo(db).sumRecoveredByExpenseOutIds({ expenseOutIds: [expenseOutId] }).rows[0]?.totalMinor ?? 0;
+      reimbursementsRepo(db).sumRecoveredByExpenseOutIds({ expenseOutIds: [expenseOutId] }).rows[0]
+        ?.totalMinor ?? 0;
     const nextStatus = deriveReimbursementStatus(expense, recoveredMinor);
     const updated = expensesRepo(db).updateReimbursement({
       id: expenseOutId,
@@ -240,13 +265,17 @@ export const createReimbursementsService = ({
         }
       }
 
-      let created: ReimbursementLinkDto;
+      let created: ReimbursementLinkDto | null = null;
       withTransaction(runtime.db, (tx) => {
         const outExpense = getExpenseOrThrow(tx, input.expenseOutId);
         const inExpense = getExpenseOrThrow(tx, input.expenseInId);
 
         if (outExpense.id === inExpense.id) {
-          throw new AppError('REIMBURSEMENT_INVALID_LINK_TARGET', 'Cannot link an expense to itself', 400);
+          throw new AppError(
+            'REIMBURSEMENT_INVALID_LINK_TARGET',
+            'Cannot link an expense to itself',
+            400,
+          );
         }
 
         assertOutboundReimbursable(outExpense);
@@ -261,22 +290,31 @@ export const createReimbursementsService = ({
         }
 
         if (outExpense.money.currency !== inExpense.money.currency) {
-          throw new AppError('REIMBURSEMENT_CURRENCY_MISMATCH', 'Currencies must match to create a reimbursement link', 400, {
-            expenseOutId: outExpense.id,
-            expenseInId: inExpense.id,
-            outCurrency: outExpense.money.currency,
-            inCurrency: inExpense.money.currency,
-          });
+          throw new AppError(
+            'REIMBURSEMENT_CURRENCY_MISMATCH',
+            'Currencies must match to create a reimbursement link',
+            400,
+            {
+              expenseOutId: outExpense.id,
+              expenseInId: inExpense.id,
+              outCurrency: outExpense.money.currency,
+              inCurrency: inExpense.money.currency,
+            },
+          );
         }
 
         const outRecoveredMinor =
-          reimbursementsRepo(tx).sumRecoveredByExpenseOutIds({ expenseOutIds: [outExpense.id] }).rows[0]?.totalMinor ?? 0;
+          reimbursementsRepo(tx).sumRecoveredByExpenseOutIds({ expenseOutIds: [outExpense.id] })
+            .rows[0]?.totalMinor ?? 0;
         const inAllocatedMinor =
-          reimbursementsRepo(tx).sumAllocatedByExpenseInIds({ expenseInIds: [inExpense.id] }).rows[0]?.totalMinor ?? 0;
+          reimbursementsRepo(tx).sumAllocatedByExpenseInIds({ expenseInIds: [inExpense.id] })
+            .rows[0]?.totalMinor ?? 0;
 
         const recoverableMinor = computeRecoverableMinor(outExpense);
         const outstandingMinor = Math.max(
-          recoverableMinor - outRecoveredMinor - Math.max(outExpense.closedOutstandingMinor ?? 0, 0),
+          recoverableMinor -
+            outRecoveredMinor -
+            Math.max(outExpense.closedOutstandingMinor ?? 0, 0),
           0,
         );
         const inboundAvailableMinor = Math.max(inExpense.money.amountMinor - inAllocatedMinor, 0);
@@ -322,8 +360,16 @@ export const createReimbursementsService = ({
         syncStoredReimbursementStatus(tx, outExpense.id);
       });
 
-      await audit.writeAudit('reimbursement.link', { input: { ...input, amountMinor, idempotencyKey } }, context);
-      return created!;
+      if (!created) {
+        throw new AppError('INTERNAL_ERROR', 'Failed to create reimbursement link', 500);
+      }
+
+      await audit.writeAudit(
+        'reimbursement.link',
+        { input: { ...input, amountMinor, idempotencyKey } },
+        context,
+      );
+      return created;
     },
 
     async createUnlinkApproval(id: string) {
@@ -336,7 +382,11 @@ export const createReimbursementsService = ({
       withTransaction(runtime.db, (tx) => {
         const link = reimbursementsRepo(tx).findById({ id }).link;
         if (!link) {
-          throw new AppError('REIMBURSEMENT_LINK_NOT_FOUND', `Reimbursement link ${id} does not exist`, 404);
+          throw new AppError(
+            'REIMBURSEMENT_LINK_NOT_FOUND',
+            `Reimbursement link ${id} does not exist`,
+            404,
+          );
         }
 
         reimbursementsRepo(tx).deleteById({ id });
@@ -359,10 +409,14 @@ export const createReimbursementsService = ({
       const enabled = input.enabled ?? true;
 
       if (!expenseCategoryId || !inboundCategoryId) {
-        throw new AppError('VALIDATION_ERROR', 'expenseCategoryId and inboundCategoryId are required', 400);
+        throw new AppError(
+          'VALIDATION_ERROR',
+          'expenseCategoryId and inboundCategoryId are required',
+          400,
+        );
       }
 
-      let rule: ReimbursementCategoryRuleDto;
+      let rule: ReimbursementCategoryRuleDto | null = null;
       withTransaction(runtime.db, (tx) => {
         assertCategoryRuleKinds(tx, expenseCategoryId, inboundCategoryId);
 
@@ -404,20 +458,30 @@ export const createReimbursementsService = ({
         }).rule;
       });
 
+      if (!rule) {
+        throw new AppError('INTERNAL_ERROR', 'Failed to create reimbursement category rule', 500);
+      }
+
       await audit.writeAudit(
         'reimbursement.category_rule.create',
         { expenseCategoryId, inboundCategoryId, enabled },
         context,
       );
-      return rule!;
+      return rule;
     },
 
     async createDeleteCategoryRuleApproval(id: string) {
       return approvals.createApproval('reimbursement_category_rule.delete', { id });
     },
 
-    async deleteCategoryRule(id: string, approveOperationId: string, context: ActorContext = DEFAULT_ACTOR) {
-      await approvals.consumeApproval('reimbursement_category_rule.delete', approveOperationId, { id });
+    async deleteCategoryRule(
+      id: string,
+      approveOperationId: string,
+      context: ActorContext = DEFAULT_ACTOR,
+    ) {
+      await approvals.consumeApproval('reimbursement_category_rule.delete', approveOperationId, {
+        id,
+      });
 
       const existing = categoryRulesRepo().findById({ id }).rule;
       if (!existing) {
@@ -432,7 +496,11 @@ export const createReimbursementsService = ({
       await audit.writeAudit('reimbursement.category_rule.delete', { id }, context);
     },
 
-    async close(expenseOutId: string, input: CloseReimbursementInput, context: ActorContext = DEFAULT_ACTOR) {
+    async close(
+      expenseOutId: string,
+      input: CloseReimbursementInput,
+      context: ActorContext = DEFAULT_ACTOR,
+    ) {
       let updatedExpense: ExpenseDto | null = null;
 
       withTransaction(runtime.db, (tx) => {
@@ -440,10 +508,14 @@ export const createReimbursementsService = ({
         assertOutboundReimbursable(expense);
 
         const recoveredMinor =
-          reimbursementsRepo(tx).sumRecoveredByExpenseOutIds({ expenseOutIds: [expense.id] }).rows[0]?.totalMinor ?? 0;
+          reimbursementsRepo(tx).sumRecoveredByExpenseOutIds({ expenseOutIds: [expense.id] })
+            .rows[0]?.totalMinor ?? 0;
         const recoverableMinor = computeRecoverableMinor(expense);
         const currentWrittenOffMinor = Math.max(expense.closedOutstandingMinor ?? 0, 0);
-        const outstandingMinor = Math.max(recoverableMinor - recoveredMinor - currentWrittenOffMinor, 0);
+        const outstandingMinor = Math.max(
+          recoverableMinor - recoveredMinor - currentWrittenOffMinor,
+          0,
+        );
 
         if (outstandingMinor === 0) {
           updatedExpense = enrichExpense(tx, syncStoredReimbursementStatus(tx, expense.id));
@@ -451,25 +523,42 @@ export const createReimbursementsService = ({
         }
 
         const closeOutstandingMinor =
-          input.closeOutstandingMinor === undefined ? outstandingMinor : input.closeOutstandingMinor;
+          input.closeOutstandingMinor === undefined
+            ? outstandingMinor
+            : input.closeOutstandingMinor;
 
         if (!Number.isInteger(closeOutstandingMinor) || closeOutstandingMinor < 0) {
-          throw new AppError('REIMBURSEMENT_CLOSE_INVALID', 'closeOutstandingMinor must be a non-negative integer', 400, {
-            closeOutstandingMinor,
-          });
+          throw new AppError(
+            'REIMBURSEMENT_CLOSE_INVALID',
+            'closeOutstandingMinor must be a non-negative integer',
+            400,
+            {
+              closeOutstandingMinor,
+            },
+          );
         }
 
         if (closeOutstandingMinor === 0) {
-          throw new AppError('REIMBURSEMENT_CLOSE_INVALID', 'closeOutstandingMinor must be greater than zero when outstanding remains', 400, {
-            outstandingMinor,
-          });
+          throw new AppError(
+            'REIMBURSEMENT_CLOSE_INVALID',
+            'closeOutstandingMinor must be greater than zero when outstanding remains',
+            400,
+            {
+              outstandingMinor,
+            },
+          );
         }
 
         if (closeOutstandingMinor > outstandingMinor) {
-          throw new AppError('REIMBURSEMENT_CLOSE_INVALID', 'closeOutstandingMinor exceeds outstanding amount', 400, {
-            closeOutstandingMinor,
-            outstandingMinor,
-          });
+          throw new AppError(
+            'REIMBURSEMENT_CLOSE_INVALID',
+            'closeOutstandingMinor exceeds outstanding amount',
+            400,
+            {
+              closeOutstandingMinor,
+              outstandingMinor,
+            },
+          );
         }
 
         const now = toIso(new Date());
@@ -494,7 +583,11 @@ export const createReimbursementsService = ({
 
       await audit.writeAudit(
         'reimbursement.close',
-        { expenseOutId, closeOutstandingMinor: input.closeOutstandingMinor, reason: input.reason ?? null },
+        {
+          expenseOutId,
+          closeOutstandingMinor: input.closeOutstandingMinor,
+          reason: input.reason ?? null,
+        },
         context,
       );
 
@@ -538,7 +631,10 @@ export const createReimbursementsService = ({
       return updatedExpense;
     },
 
-    async autoMatch(input: AutoMatchReimbursementsInput = {}, context: ActorContext = DEFAULT_ACTOR) {
+    async autoMatch(
+      input: AutoMatchReimbursementsInput = {},
+      context: ActorContext = DEFAULT_ACTOR,
+    ) {
       const from = input.from ? assertDate(input.from, 'from') : null;
       const to = input.to ? assertDate(input.to, 'to') : null;
 
@@ -558,11 +654,17 @@ export const createReimbursementsService = ({
           limit: 10_000,
         }).expenses;
 
-        const categoriesById = new Map(categoriesRepo(tx).list({}).categories.map((item) => [item.id, item] as const));
+        const categoriesById = new Map(
+          categoriesRepo(tx)
+            .list({})
+            .categories.map((item) => [item.id, item] as const),
+        );
 
         const reimbursableOutflows = allExpenses
           .filter((expense) => expense.kind === 'expense')
-          .filter((expense) => expense.reimbursementStatus !== 'none' || expense.myShareMinor !== null)
+          .filter(
+            (expense) => expense.reimbursementStatus !== 'none' || expense.myShareMinor !== null,
+          )
           .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
 
         const inboundCandidates = allExpenses
@@ -572,16 +674,17 @@ export const createReimbursementsService = ({
         summary.scannedOutflows = reimbursableOutflows.length;
         summary.scannedInflows = inboundCandidates.length;
 
-        const rules = categoryRulesRepo(tx)
-          .listByExpenseCategoryIds({
-            expenseCategoryIds: [...new Set(reimbursableOutflows.map((expense) => expense.categoryId))],
-            enabledOnly: true,
-          })
-          .rules;
+        const rules = categoryRulesRepo(tx).listByExpenseCategoryIds({
+          expenseCategoryIds: [
+            ...new Set(reimbursableOutflows.map((expense) => expense.categoryId)),
+          ],
+          enabledOnly: true,
+        }).rules;
 
         const inboundRuleIdsByExpenseCategoryId = new Map<string, Set<string>>();
         for (const rule of rules) {
-          const set = inboundRuleIdsByExpenseCategoryId.get(rule.expenseCategoryId) ?? new Set<string>();
+          const set =
+            inboundRuleIdsByExpenseCategoryId.get(rule.expenseCategoryId) ?? new Set<string>();
           set.add(rule.inboundCategoryId);
           inboundRuleIdsByExpenseCategoryId.set(rule.expenseCategoryId, set);
         }
@@ -603,7 +706,9 @@ export const createReimbursementsService = ({
         );
 
         for (const outExpense of reimbursableOutflows) {
-          const allowedInboundCategoryIds = inboundRuleIdsByExpenseCategoryId.get(outExpense.categoryId);
+          const allowedInboundCategoryIds = inboundRuleIdsByExpenseCategoryId.get(
+            outExpense.categoryId,
+          );
           if (!allowedInboundCategoryIds || allowedInboundCategoryIds.size === 0) {
             continue;
           }
@@ -647,7 +752,10 @@ export const createReimbursementsService = ({
             }
 
             const inboundAllocatedMinor = inAllocatedById.get(inExpense.id) ?? 0;
-            const inboundAvailableMinor = Math.max(inExpense.money.amountMinor - inboundAllocatedMinor, 0);
+            const inboundAvailableMinor = Math.max(
+              inExpense.money.amountMinor - inboundAllocatedMinor,
+              0,
+            );
             if (inboundAvailableMinor <= 0) {
               continue;
             }
@@ -668,7 +776,10 @@ export const createReimbursementsService = ({
               updatedAt: now,
             });
 
-            outRecoveredById.set(outExpense.id, (outRecoveredById.get(outExpense.id) ?? 0) + allocateMinor);
+            outRecoveredById.set(
+              outExpense.id,
+              (outRecoveredById.get(outExpense.id) ?? 0) + allocateMinor,
+            );
             inAllocatedById.set(inExpense.id, inboundAllocatedMinor + allocateMinor);
             remainingOutstandingMinor -= allocateMinor;
             summary.linksCreated += 1;

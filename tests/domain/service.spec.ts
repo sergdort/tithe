@@ -258,7 +258,12 @@ describe('Domain services', () => {
 
     try {
       const sportsExpense = await services.categories.create(
-        { name: 'Sunday League', kind: 'expense', reimbursementMode: 'always', defaultRecoveryWindowDays: 14 },
+        {
+          name: 'Sunday League',
+          kind: 'expense',
+          reimbursementMode: 'always',
+          defaultRecoveryWindowDays: 14,
+        },
         { actor: 'test', channel: 'system' },
       );
       const sportsIncome = await services.categories.create(
@@ -352,7 +357,9 @@ describe('Domain services', () => {
       );
       expect(renamedIncome.name).toBe('League repayments (renamed)');
 
-      const deleteApproval = await services.reimbursements.createDeleteCategoryRuleApproval(rule.id);
+      const deleteApproval = await services.reimbursements.createDeleteCategoryRuleApproval(
+        rule.id,
+      );
       await services.reimbursements.deleteCategoryRule(rule.id, deleteApproval.operationId, {
         actor: 'test',
         channel: 'system',

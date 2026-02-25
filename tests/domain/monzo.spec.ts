@@ -403,7 +403,9 @@ describe('Monzo integration domain service', () => {
       expect(explicitRangeCall.searchParams.get('before')).toBe(range.to);
 
       const expenses = await services.expenses.list();
-      const updatedExpense = expenses.find((expense) => expense.providerTransactionId === 'tx_resync_target');
+      const updatedExpense = expenses.find(
+        (expense) => expense.providerTransactionId === 'tx_resync_target',
+      );
       expect(updatedExpense).toBeTruthy();
       expect(updatedExpense?.id).toBe(importedExpense?.id);
       expect(updatedExpense?.note).toBe('Keep this note');
@@ -624,7 +626,9 @@ describe('Monzo integration domain service', () => {
       );
       expect(callbackResult.status).toBe('connected');
 
-      await expect(services.monzo.syncNow({ actor: 'test', channel: 'system' })).rejects.toMatchObject({
+      await expect(
+        services.monzo.syncNow({ actor: 'test', channel: 'system' }),
+      ).rejects.toMatchObject({
         code: 'MONZO_REAUTH_REQUIRED',
         statusCode: 403,
       });

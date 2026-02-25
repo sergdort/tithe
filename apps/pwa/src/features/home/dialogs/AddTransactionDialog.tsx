@@ -81,7 +81,7 @@ export const AddTransactionDialog = ({ open, onClose }: AddTransactionDialogProp
     }
 
     setTxReimbursable(false);
-  }, [selectedCategoryReimbursementMode, txKind, txCategoryId]);
+  }, [selectedCategoryReimbursementMode]);
 
   const resetAfterSuccess = () => {
     setTxAmount('');

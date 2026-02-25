@@ -41,7 +41,8 @@ const normalizeMonzoSyncBody = (value: unknown): MonzoSyncBody => {
 export const registerMonzoRoutes = (app: FastifyInstance): void => {
   const { services, docs } = app.tithe;
   const monzoService = services.monzo;
-  const { defaultErrorResponses, genericObjectSchema, isoDateTimeSchema, successEnvelopeSchema } = docs;
+  const { defaultErrorResponses, genericObjectSchema, isoDateTimeSchema, successEnvelopeSchema } =
+    docs;
   const monzoSyncBodySchema = {
     type: 'object',
     additionalProperties: false,
@@ -54,7 +55,17 @@ export const registerMonzoRoutes = (app: FastifyInstance): void => {
   const monzoSyncSummarySchema = {
     type: 'object',
     additionalProperties: false,
-    required: ['status', 'message', 'imported', 'updated', 'skipped', 'accountId', 'from', 'to', 'cursor'],
+    required: [
+      'status',
+      'message',
+      'imported',
+      'updated',
+      'skipped',
+      'accountId',
+      'from',
+      'to',
+      'cursor',
+    ],
     properties: {
       status: { type: 'string' },
       message: { type: 'string' },

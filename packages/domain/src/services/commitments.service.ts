@@ -86,190 +86,190 @@ export const createCommitmentsService = ({
   const commitmentsRepo = (db: RepositoryDb = runtime.db) => new SqliteCommitmentsRepository(db);
 
   return {
-  async list() {
-    return commitmentsRepo().listCommitments({}).commitments;
-  },
+    async list() {
+      return commitmentsRepo().listCommitments({}).commitments;
+    },
 
-  async create(input: CreateCommitmentInput, context: ActorContext = DEFAULT_ACTOR) {
-    const now = toIso(new Date());
-    const startDate = assertDate(input.startDate, 'startDate');
+    async create(input: CreateCommitmentInput, context: ActorContext = DEFAULT_ACTOR) {
+      const now = toIso(new Date());
+      const startDate = assertDate(input.startDate, 'startDate');
 
-    assertRrule(input.rrule, startDate);
+      assertRrule(input.rrule, startDate);
 
-    const payload = {
-      id: crypto.randomUUID(),
-      name: input.name.trim(),
-      rrule: input.rrule,
-      startDate,
-      defaultAmountMinor: input.defaultAmountMinor,
-      currency: normalizeCurrency(input.currency),
-      amountBaseMinor: input.amountBaseMinor,
-      fxRate: input.fxRate,
-      categoryId: input.categoryId,
-      graceDays: input.graceDays ?? 0,
-      active: input.active ?? true,
-      nextDueAt: null,
-      createdAt: now,
-      updatedAt: now,
-    };
+      const payload = {
+        id: crypto.randomUUID(),
+        name: input.name.trim(),
+        rrule: input.rrule,
+        startDate,
+        defaultAmountMinor: input.defaultAmountMinor,
+        currency: normalizeCurrency(input.currency),
+        amountBaseMinor: input.amountBaseMinor,
+        fxRate: input.fxRate,
+        categoryId: input.categoryId,
+        graceDays: input.graceDays ?? 0,
+        active: input.active ?? true,
+        nextDueAt: null,
+        createdAt: now,
+        updatedAt: now,
+      };
 
-    let commitment: CommitmentDto;
-    try {
-      commitment = commitmentsRepo().createCommitment(payload).commitment;
-    } catch (error) {
-      throw new AppError(
-        'COMMITMENT_CREATE_FAILED',
-        'Could not create recurring commitment',
-        409,
-        {
-          reason: error instanceof Error ? error.message : String(error),
-        },
-      );
-    }
+      let commitment: CommitmentDto;
+      try {
+        commitment = commitmentsRepo().createCommitment(payload).commitment;
+      } catch (error) {
+        throw new AppError(
+          'COMMITMENT_CREATE_FAILED',
+          'Could not create recurring commitment',
+          409,
+          {
+            reason: error instanceof Error ? error.message : String(error),
+          },
+        );
+      }
 
-    await audit.writeAudit('commitment.create', payload, context);
-    return commitment;
-  },
+      await audit.writeAudit('commitment.create', payload, context);
+      return commitment;
+    },
 
-  async get(id: string) {
-    const commitment = commitmentsRepo().findCommitmentById({ id }).commitment;
-    if (!commitment) {
-      throw new AppError('COMMITMENT_NOT_FOUND', `Commitment ${id} does not exist`, 404);
-    }
-    return commitment;
-  },
+    async get(id: string) {
+      const commitment = commitmentsRepo().findCommitmentById({ id }).commitment;
+      if (!commitment) {
+        throw new AppError('COMMITMENT_NOT_FOUND', `Commitment ${id} does not exist`, 404);
+      }
+      return commitment;
+    },
 
-  async update(id: string, input: UpdateCommitmentInput, context: ActorContext = DEFAULT_ACTOR) {
-    const existing = commitmentsRepo().findCommitmentById({ id }).commitment;
-    if (!existing) {
-      throw new AppError('COMMITMENT_NOT_FOUND', `Commitment ${id} does not exist`, 404);
-    }
+    async update(id: string, input: UpdateCommitmentInput, context: ActorContext = DEFAULT_ACTOR) {
+      const existing = commitmentsRepo().findCommitmentById({ id }).commitment;
+      if (!existing) {
+        throw new AppError('COMMITMENT_NOT_FOUND', `Commitment ${id} does not exist`, 404);
+      }
 
-    const nextStartDate = input.startDate
-      ? assertDate(input.startDate, 'startDate')
-      : existing.startDate;
-    const nextRule = input.rrule ?? existing.rrule;
-    assertRrule(nextRule, nextStartDate);
+      const nextStartDate = input.startDate
+        ? assertDate(input.startDate, 'startDate')
+        : existing.startDate;
+      const nextRule = input.rrule ?? existing.rrule;
+      assertRrule(nextRule, nextStartDate);
 
-    const patch = {
-      name: input.name?.trim() ?? existing.name,
-      rrule: nextRule,
-      startDate: nextStartDate,
-      defaultAmountMinor: input.defaultAmountMinor ?? existing.defaultMoney.amountMinor,
-      currency: input.currency
-        ? normalizeCurrency(input.currency)
-        : existing.defaultMoney.currency,
-      amountBaseMinor: input.amountBaseMinor ?? existing.defaultMoney.amountBaseMinor,
-      fxRate: input.fxRate ?? existing.defaultMoney.fxRate,
-      categoryId: input.categoryId ?? existing.categoryId,
-      graceDays: input.graceDays ?? existing.graceDays,
-      active: input.active ?? existing.active,
-      updatedAt: toIso(new Date()),
-    };
+      const patch = {
+        name: input.name?.trim() ?? existing.name,
+        rrule: nextRule,
+        startDate: nextStartDate,
+        defaultAmountMinor: input.defaultAmountMinor ?? existing.defaultMoney.amountMinor,
+        currency: input.currency
+          ? normalizeCurrency(input.currency)
+          : existing.defaultMoney.currency,
+        amountBaseMinor: input.amountBaseMinor ?? existing.defaultMoney.amountBaseMinor,
+        fxRate: input.fxRate ?? existing.defaultMoney.fxRate,
+        categoryId: input.categoryId ?? existing.categoryId,
+        graceDays: input.graceDays ?? existing.graceDays,
+        active: input.active ?? existing.active,
+        updatedAt: toIso(new Date()),
+      };
 
-    const commitment = commitmentsRepo().updateCommitment({
-      id,
-      ...patch,
-    }).commitment;
+      const commitment = commitmentsRepo().updateCommitment({
+        id,
+        ...patch,
+      }).commitment;
 
-    if (!commitment) {
-      throw new AppError('COMMITMENT_NOT_FOUND', `Commitment ${id} does not exist`, 404);
-    }
+      if (!commitment) {
+        throw new AppError('COMMITMENT_NOT_FOUND', `Commitment ${id} does not exist`, 404);
+      }
 
-    await audit.writeAudit('commitment.update', { id, patch }, context);
+      await audit.writeAudit('commitment.update', { id, patch }, context);
 
-    return commitment;
-  },
+      return commitment;
+    },
 
-  async createDeleteApproval(id: string) {
-    return approvals.createApproval('commitment.delete', { id });
-  },
+    async createDeleteApproval(id: string) {
+      return approvals.createApproval('commitment.delete', { id });
+    },
 
-  async delete(id: string, approveOperationId: string, context: ActorContext = DEFAULT_ACTOR) {
-    await approvals.consumeApproval('commitment.delete', approveOperationId, { id });
+    async delete(id: string, approveOperationId: string, context: ActorContext = DEFAULT_ACTOR) {
+      await approvals.consumeApproval('commitment.delete', approveOperationId, { id });
 
-    const existing = commitmentsRepo().findCommitmentById({ id }).commitment;
-    if (!existing) {
-      throw new AppError('COMMITMENT_NOT_FOUND', `Commitment ${id} does not exist`, 404);
-    }
+      const existing = commitmentsRepo().findCommitmentById({ id }).commitment;
+      if (!existing) {
+        throw new AppError('COMMITMENT_NOT_FOUND', `Commitment ${id} does not exist`, 404);
+      }
 
-    commitmentsRepo().deleteCommitment({ id });
+      commitmentsRepo().deleteCommitment({ id });
 
-    await audit.writeAudit('commitment.delete', { id }, context);
-  },
+      await audit.writeAudit('commitment.delete', { id }, context);
+    },
 
-  async runDueGeneration(upTo?: string, context: ActorContext = DEFAULT_ACTOR) {
-    const targetDate = upTo ? new Date(assertDate(upTo, 'upTo')) : new Date();
+    async runDueGeneration(upTo?: string, context: ActorContext = DEFAULT_ACTOR) {
+      const targetDate = upTo ? new Date(assertDate(upTo, 'upTo')) : new Date();
 
-    let created = 0;
+      let created = 0;
 
-    const activeCommitments = commitmentsRepo().listActiveCommitments({}).commitments;
+      const activeCommitments = commitmentsRepo().listActiveCommitments({}).commitments;
 
-    for (const commitment of activeCommitments) {
-      const rule = buildRule(commitment.rrule, commitment.startDate);
+      for (const commitment of activeCommitments) {
+        const rule = buildRule(commitment.rrule, commitment.startDate);
 
-      withTransaction(runtime.db, (tx) => {
-        const txCommitmentsRepo = commitmentsRepo(tx);
-        const lastInstance = txCommitmentsRepo.findLastInstance({
-          commitmentId: commitment.id,
-        }).instance;
+        withTransaction(runtime.db, (tx) => {
+          const txCommitmentsRepo = commitmentsRepo(tx);
+          const lastInstance = txCommitmentsRepo.findLastInstance({
+            commitmentId: commitment.id,
+          }).instance;
 
-        const fromDate = lastInstance
-          ? new Date(new Date(lastInstance.dueAt).getTime() + 1000)
-          : new Date(commitment.startDate);
+          const fromDate = lastInstance
+            ? new Date(new Date(lastInstance.dueAt).getTime() + 1000)
+            : new Date(commitment.startDate);
 
-        const dueDates = rule
-          .between(fromDate, targetDate, true)
-          .map((date) => toIso(date))
-          .filter((date) => date >= commitment.startDate);
+          const dueDates = rule
+            .between(fromDate, targetDate, true)
+            .map((date) => toIso(date))
+            .filter((date) => date >= commitment.startDate);
 
-        for (const dueAt of dueDates) {
-          try {
-            txCommitmentsRepo.createInstance({
-              id: crypto.randomUUID(),
-              commitmentId: commitment.id,
-              dueAt,
-              expectedAmountMinor: commitment.defaultAmountMinor,
-              currency: commitment.currency,
-              amountBaseMinor: commitment.amountBaseMinor,
-              fxRate: commitment.fxRate,
-              status: 'pending',
-              expenseId: null,
-              resolvedAt: null,
-              createdAt: toIso(new Date()),
-            });
+          for (const dueAt of dueDates) {
+            try {
+              txCommitmentsRepo.createInstance({
+                id: crypto.randomUUID(),
+                commitmentId: commitment.id,
+                dueAt,
+                expectedAmountMinor: commitment.defaultAmountMinor,
+                currency: commitment.currency,
+                amountBaseMinor: commitment.amountBaseMinor,
+                fxRate: commitment.fxRate,
+                status: 'pending',
+                expenseId: null,
+                resolvedAt: null,
+                createdAt: toIso(new Date()),
+              });
 
-            created += 1;
-          } catch {
-            // Ignore duplicates due to unique(commitment_id, due_at).
+              created += 1;
+            } catch {
+              // Ignore duplicates due to unique(commitment_id, due_at).
+            }
           }
-        }
 
-        const nextDue = rule.after(targetDate, false);
-        txCommitmentsRepo.updateNextDue({
-          commitmentId: commitment.id,
-          nextDueAt: nextDue ? toIso(nextDue) : null,
-          updatedAt: toIso(new Date()),
+          const nextDue = rule.after(targetDate, false);
+          txCommitmentsRepo.updateNextDue({
+            commitmentId: commitment.id,
+            nextDueAt: nextDue ? toIso(nextDue) : null,
+            updatedAt: toIso(new Date()),
+          });
         });
-      });
-    }
+      }
 
-    markOverdueWithinDb(runtime.db, targetDate);
+      markOverdueWithinDb(runtime.db, targetDate);
 
-    await audit.writeAudit(
-      'commitment.generate_due',
-      { upTo: targetDate.toISOString(), created },
-      context,
-    );
+      await audit.writeAudit(
+        'commitment.generate_due',
+        { upTo: targetDate.toISOString(), created },
+        context,
+      );
 
-    return {
-      upTo: targetDate.toISOString(),
-      created,
-    };
-  },
+      return {
+        upTo: targetDate.toISOString(),
+        created,
+      };
+    },
 
-  async listInstances(status?: 'pending' | 'paid' | 'overdue' | 'skipped') {
-    return commitmentsRepo().listInstances({ status }).instances;
-  },
-};
+    async listInstances(status?: 'pending' | 'paid' | 'overdue' | 'skipped') {
+      return commitmentsRepo().listInstances({ status }).instances;
+    },
+  };
 };

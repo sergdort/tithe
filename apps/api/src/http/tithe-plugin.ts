@@ -1,11 +1,8 @@
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 
-import {
-  createDomainServices,
-  type DomainServices,
-} from '@tithe/domain';
+import { type DomainServices, createDomainServices } from '@tithe/domain';
 
-import { apiDocs, type ApiDocs } from './api-docs.js';
+import { type ApiDocs, apiDocs } from './api-docs.js';
 
 export interface Actor {
   actor: string;
@@ -53,8 +50,16 @@ declare module 'fastify' {
 export const tithePlugin: FastifyPluginAsync<TithePluginOptions> = async (app, options) => {
   let ownedServices: ClosableDomainServicesLike | null = null;
   const createOwnedServices =
-    options.createServices ?? (() => createDomainServices() as unknown as ClosableDomainServicesLike);
-  const services = options.services ?? (ownedServices = createOwnedServices());
+    options.createServices ??
+    (() => createDomainServices() as unknown as ClosableDomainServicesLike);
+  const services = (() => {
+    if (options.services) {
+      return options.services;
+    }
+
+    ownedServices = createOwnedServices();
+    return ownedServices;
+  })();
 
   app.decorate('tithe', {
     services,

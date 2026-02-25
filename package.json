@@ -9,6 +9,7 @@
   },
   "scripts": {
     "build": "turbo run build",
+    "prepare": "husky",
     "dev": "pnpm check:sqlite && VITE_API_BASE=${VITE_API_BASE:-http://127.0.0.1:8787/v1} turbo run dev --parallel",
     "dev:api": "pnpm check:sqlite && pnpm --filter @tithe/api dev",
     "dev:cli": "pnpm --filter @tithe/cli dev",
@@ -22,6 +23,7 @@
     "setup:first-time": "node ./scripts/setup-first-time.mjs",
     "test": "turbo run test",
     "lint": "turbo run lint",
+    "lint:staged": "lint-staged",
     "typecheck": "turbo run typecheck",
     "format": "biome format --write .",
     "check": "biome check ."
@@ -29,13 +31,16 @@
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "@types/node": "^22.13.10",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.2",
     "tsx": "^4.19.3",
     "turbo": "^2.4.4",
     "typescript": "^5.8.2"
   },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,mjs,cjs,json}": ["pnpm exec biome check --write --no-errors-on-unmatched"]
+  },
   "pnpm": {
-    "onlyBuiltDependencies": [
-      "better-sqlite3"
-    ]
+    "onlyBuiltDependencies": ["better-sqlite3"]
   }
 }

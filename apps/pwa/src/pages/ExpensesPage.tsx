@@ -56,16 +56,11 @@ const ExpenseMerchantAvatar = ({
   merchantLogoUrl,
   merchantEmoji,
 }: ExpenseMerchantAvatarProps) => {
-  const [logoFailed, setLogoFailed] = useState(false);
-
-  useEffect(() => {
-    setLogoFailed(false);
-  }, [merchantLogoUrl]);
-
-  const merchantLabel = merchantName?.trim() || 'Merchant';
   const logoUrl = merchantLogoUrl?.trim() || '';
+  const [failedLogoUrl, setFailedLogoUrl] = useState<string | null>(null);
+  const merchantLabel = merchantName?.trim() || 'Merchant';
   const emoji = merchantEmoji?.trim() || '';
-  const canShowLogo = logoUrl.length > 0 && !logoFailed;
+  const canShowLogo = logoUrl.length > 0 && failedLogoUrl !== logoUrl;
   const fallbackText = emoji || merchantInitials(merchantName);
   const avatarKind = canShowLogo ? 'logo' : emoji ? 'emoji' : 'initials';
 
@@ -80,7 +75,7 @@ const ExpenseMerchantAvatar = ({
           component="img"
           src={logoUrl}
           alt={`${merchantLabel} logo`}
-          onError={() => setLogoFailed(true)}
+          onError={() => setFailedLogoUrl(logoUrl)}
           sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
         />
       ) : (
@@ -109,7 +104,10 @@ const dayLabel = (isoDate: string): string => {
   });
 };
 
-const semanticKindLabel = (kind?: string, transferDirection?: 'in' | 'out' | null): string | null => {
+const semanticKindLabel = (
+  kind?: string,
+  transferDirection?: 'in' | 'out' | null,
+): string | null => {
   if (kind === 'transfer_internal') {
     return `Internal transfer (${transferDirection === 'in' ? 'in' : 'out'})`;
   }
@@ -190,7 +188,11 @@ export const ExpensesPage = () => {
   });
 
   const closeReimbursement = useMutation({
-    mutationFn: (payload: { expenseOutId: string; closeOutstandingMinor?: number; reason?: string | null }) =>
+    mutationFn: (payload: {
+      expenseOutId: string;
+      closeOutstandingMinor?: number;
+      reason?: string | null;
+    }) =>
       api.reimbursements.close(payload.expenseOutId, {
         closeOutstandingMinor: payload.closeOutstandingMinor,
         reason: payload.reason ?? undefined,
@@ -214,7 +216,10 @@ export const ExpensesPage = () => {
   });
 
   const categoryById = useMemo(() => {
-    const map = new Map<string, { name: string; color: string; icon: string; kind: string; reimbursementMode?: string }>();
+    const map = new Map<
+      string,
+      { name: string; color: string; icon: string; kind: string; reimbursementMode?: string }
+    >();
     for (const category of categoriesQuery.data ?? []) {
       map.set(category.id, {
         name: category.name,
@@ -283,18 +288,26 @@ export const ExpensesPage = () => {
                         const categoryName = categoryMeta?.name ?? expense.categoryId;
                         const categoryColor = categoryMeta?.color ?? '#607D8B';
                         const kindChip = semanticKindLabel(expense.kind, expense.transferDirection);
-                        const reimbursementLabel = reimbursementChipLabel(expense.reimbursementStatus);
+                        const reimbursementLabel = reimbursementChipLabel(
+                          expense.reimbursementStatus,
+                        );
                         const canShowReimbursement =
                           expense.kind === 'expense' &&
-                          (expense.reimbursementStatus && expense.reimbursementStatus !== 'none');
+                          expense.reimbursementStatus &&
+                          expense.reimbursementStatus !== 'none';
                         const recoverableMinor = expense.recoverableMinor ?? 0;
                         const recoveredMinor = expense.recoveredMinor ?? 0;
                         const outstandingMinor = expense.outstandingMinor ?? 0;
 
                         const handleLinkRepayment = () => {
-                          const expenseInId = window.prompt('Inbound transaction ID to link as reimbursement');
+                          const expenseInId = window.prompt(
+                            'Inbound transaction ID to link as reimbursement',
+                          );
                           if (!expenseInId) return;
-                          const amountText = window.prompt('Allocation amount (GBP)', (outstandingMinor / 100).toFixed(2));
+                          const amountText = window.prompt(
+                            'Allocation amount (GBP)',
+                            (outstandingMinor / 100).toFixed(2),
+                          );
                           if (!amountText) return;
                           const parsed = Number(amountText);
                           if (!Number.isFinite(parsed) || parsed <= 0) return;
@@ -373,10 +386,14 @@ export const ExpensesPage = () => {
                                 ) : null}
                               </Stack>
                               {canShowReimbursement ? (
-                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                                  Recoverable {pounds(recoverableMinor, expense.money.currency)} • Recovered{' '}
-                                  {pounds(recoveredMinor, expense.money.currency)} • Outstanding{' '}
-                                  {pounds(outstandingMinor, expense.money.currency)}
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                  sx={{ display: 'block', mt: 0.5 }}
+                                >
+                                  Recoverable {pounds(recoverableMinor, expense.money.currency)} •
+                                  Recovered {pounds(recoveredMinor, expense.money.currency)} •
+                                  Outstanding {pounds(outstandingMinor, expense.money.currency)}
                                 </Typography>
                               ) : null}
                               {canShowReimbursement ? (

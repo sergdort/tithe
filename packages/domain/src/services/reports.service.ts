@@ -1,10 +1,10 @@
+import { AppError } from '../errors.js';
 import type {
   CategoryBreakdownDto,
   CommitmentForecastDto,
   MonthlyLedgerDto,
   MonthlyTrendDto,
 } from '../repositories/reports.repository.js';
-import { AppError } from '../errors.js';
 import { SqliteReportsRepository } from '../repositories/reports.repository.js';
 import { assertDate } from './shared/common.js';
 import type { DomainDbRuntime } from './shared/domain-db.js';

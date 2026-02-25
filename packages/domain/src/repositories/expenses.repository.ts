@@ -53,11 +53,11 @@ const mapExpense = (row: typeof expenses.$inferSelect): ExpenseDto => ({
   categoryId: row.categoryId,
   source: row.source as 'local' | 'monzo' | 'commitment',
   transferDirection:
-    row.transferDirection === 'in' || row.transferDirection === 'out' ? row.transferDirection : null,
+    row.transferDirection === 'in' || row.transferDirection === 'out'
+      ? row.transferDirection
+      : null,
   kind:
-    row.kind === 'income' ||
-    row.kind === 'transfer_internal' ||
-    row.kind === 'transfer_external'
+    row.kind === 'income' || row.kind === 'transfer_internal' || row.kind === 'transfer_external'
       ? row.kind
       : 'expense',
   reimbursementStatus:
@@ -269,7 +269,9 @@ export class SqliteExpensesRepository implements ExpensesRepository {
     const row = this.db
       .select()
       .from(expenses)
-      .where(and(eq(expenses.source, source), eq(expenses.providerTransactionId, providerTransactionId)))
+      .where(
+        and(eq(expenses.source, source), eq(expenses.providerTransactionId, providerTransactionId)),
+      )
       .get();
 
     return { expense: row ? mapExpense(row) : null };
@@ -296,7 +298,10 @@ export class SqliteExpensesRepository implements ExpensesRepository {
     };
   }
 
-  updateReimbursement({ id, ...patch }: UpdateExpenseReimbursementInput): UpdateExpenseReimbursementOutput {
+  updateReimbursement({
+    id,
+    ...patch
+  }: UpdateExpenseReimbursementInput): UpdateExpenseReimbursementOutput {
     this.db.update(expenses).set(patch).where(eq(expenses.id, id)).run();
 
     const updated = this.db.select().from(expenses).where(eq(expenses.id, id)).get();

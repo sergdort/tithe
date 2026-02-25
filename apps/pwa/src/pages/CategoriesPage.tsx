@@ -1,8 +1,8 @@
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import AddIcon from '@mui/icons-material/Add';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
-import CelebrationIcon from '@mui/icons-material/Celebration';
 import CategoryIcon from '@mui/icons-material/Category';
+import CelebrationIcon from '@mui/icons-material/Celebration';
 import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
 import EditIcon from '@mui/icons-material/Edit';
 import FavoriteIcon from '@mui/icons-material/Favorite';
@@ -65,7 +65,8 @@ import type { Category, ReimbursementCategoryRule } from '../types.js';
 const normalizeCategoryLabel = (name: string): string =>
   name.startsWith('Monzo: ') ? name.slice('Monzo: '.length) : name;
 
-const isMonzoPlaceholderCategoryName = (name: string): boolean => /^Category [a-z0-9]+$/i.test(name.trim());
+const isMonzoPlaceholderCategoryName = (name: string): boolean =>
+  /^Category [a-z0-9]+$/i.test(name.trim());
 
 interface CategoryEditDraft {
   name: string;
@@ -163,7 +164,9 @@ export const CategoriesPage = () => {
 
   const [name, setName] = useState('');
   const [kind, setKind] = useState<'expense' | 'income' | 'transfer'>('expense');
-  const [reimbursementMode, setReimbursementMode] = useState<'none' | 'optional' | 'always'>('none');
+  const [reimbursementMode, setReimbursementMode] = useState<'none' | 'optional' | 'always'>(
+    'none',
+  );
   const [icon, setIcon] = useState<string>('savings');
 
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
@@ -211,7 +214,9 @@ export const CategoriesPage = () => {
       if (category.kind === 'expense') {
         patch.reimbursementMode = draft.reimbursementMode;
         patch.defaultCounterpartyType = draft.defaultCounterpartyType;
-        patch.defaultRecoveryWindowDays = parseNullableNonNegativeInt(draft.defaultRecoveryWindowDaysText);
+        patch.defaultRecoveryWindowDays = parseNullableNonNegativeInt(
+          draft.defaultRecoveryWindowDaysText,
+        );
       }
 
       return api.categories.update(category.id, patch);
@@ -239,7 +244,7 @@ export const CategoriesPage = () => {
   const categories = categoriesQuery.data ?? [];
   const rules = rulesQuery.data ?? [];
   const editingCategory = editingCategoryId
-    ? categories.find((category) => category.id === editingCategoryId) ?? null
+    ? (categories.find((category) => category.id === editingCategoryId) ?? null)
     : null;
 
   const rulesByExpenseCategoryId = useMemo(() => {
@@ -253,7 +258,8 @@ export const CategoriesPage = () => {
   }, [rules]);
 
   const inboundCategories = useMemo(
-    () => categories.filter((category) => category.kind === 'income' || category.kind === 'transfer'),
+    () =>
+      categories.filter((category) => category.kind === 'income' || category.kind === 'transfer'),
     [categories],
   );
 
@@ -327,7 +333,11 @@ export const CategoriesPage = () => {
     }
   };
 
-  const handleToggleRule = async (expenseCategoryId: string, inboundCategoryId: string, enabled: boolean) => {
+  const handleToggleRule = async (
+    expenseCategoryId: string,
+    inboundCategoryId: string,
+    enabled: boolean,
+  ) => {
     setRulesErrorByExpenseCategoryId((prev) => ({ ...prev, [expenseCategoryId]: null }));
     try {
       const existing = (rulesByExpenseCategoryId.get(expenseCategoryId) ?? []).find(
@@ -341,7 +351,8 @@ export const CategoriesPage = () => {
     } catch (error) {
       setRulesErrorByExpenseCategoryId((prev) => ({
         ...prev,
-        [expenseCategoryId]: error instanceof Error ? error.message : 'Failed to update auto-match rule.',
+        [expenseCategoryId]:
+          error instanceof Error ? error.message : 'Failed to update auto-match rule.',
       }));
     }
   };
@@ -354,7 +365,11 @@ export const CategoriesPage = () => {
             Add Category
           </Typography>
           <Stack spacing={2} sx={{ mt: 1 }}>
-            <TextField label="Name" value={name} onChange={(event) => setName(event.target.value)} />
+            <TextField
+              label="Name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
             <TextField
               select
               label="Kind"
@@ -365,7 +380,12 @@ export const CategoriesPage = () => {
               <MenuItem value="income">Income</MenuItem>
               <MenuItem value="transfer">Transfer</MenuItem>
             </TextField>
-            <TextField select label="Icon" value={icon} onChange={(event) => setIcon(event.target.value)}>
+            <TextField
+              select
+              label="Icon"
+              value={icon}
+              onChange={(event) => setIcon(event.target.value)}
+            >
               {CATEGORY_ICON_OPTIONS.map((iconName) => {
                 const IconComponent = CATEGORY_ICON_COMPONENTS[iconName] ?? CategoryIcon;
                 return (
@@ -383,7 +403,9 @@ export const CategoriesPage = () => {
                 select
                 label="Reimbursement Mode"
                 value={reimbursementMode}
-                onChange={(event) => setReimbursementMode(event.target.value as typeof reimbursementMode)}
+                onChange={(event) =>
+                  setReimbursementMode(event.target.value as typeof reimbursementMode)
+                }
               >
                 <MenuItem value="none">None</MenuItem>
                 <MenuItem value="optional">Optional</MenuItem>
@@ -414,9 +436,11 @@ export const CategoriesPage = () => {
             {categories.map((category) => {
               const expenseRules = rulesByExpenseCategoryId.get(category.id) ?? [];
               const linkedInboundIds = new Set(expenseRules.map((rule) => rule.inboundCategoryId));
-              const showRulesEditor = rulesOpenCategoryId === category.id && category.kind === 'expense';
+              const showRulesEditor =
+                rulesOpenCategoryId === category.id && category.kind === 'expense';
               const isPlaceholder = isMonzoPlaceholderCategoryName(category.name);
-              const CategoryRowIcon = CATEGORY_ICON_COMPONENTS[category.icon || 'category'] ?? CategoryIcon;
+              const CategoryRowIcon =
+                CATEGORY_ICON_COMPONENTS[category.icon || 'category'] ?? CategoryIcon;
 
               return (
                 <Box key={category.id} sx={{ mb: 1.5 }}>
@@ -425,8 +449,12 @@ export const CategoriesPage = () => {
                       primary={
                         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
                           <CategoryRowIcon fontSize="small" color="action" />
-                          <Typography variant="body1">{normalizeCategoryLabel(category.name)}</Typography>
-                          {isPlaceholder ? <Chip size="small" color="warning" label="Monzo placeholder" /> : null}
+                          <Typography variant="body1">
+                            {normalizeCategoryLabel(category.name)}
+                          </Typography>
+                          {isPlaceholder ? (
+                            <Chip size="small" color="warning" label="Monzo placeholder" />
+                          ) : null}
                           {category.kind === 'expense' ? (
                             <Chip
                               size="small"
@@ -452,13 +480,19 @@ export const CategoriesPage = () => {
                             edge="end"
                             aria-label="auto-match rules"
                             onClick={() =>
-                              setRulesOpenCategoryId((prev) => (prev === category.id ? null : category.id))
+                              setRulesOpenCategoryId((prev) =>
+                                prev === category.id ? null : category.id,
+                              )
                             }
                           >
                             <LinkIcon fontSize="small" />
                           </IconButton>
                         ) : null}
-                        <IconButton edge="end" aria-label="edit category" onClick={() => beginEdit(category)}>
+                        <IconButton
+                          edge="end"
+                          aria-label="edit category"
+                          onClick={() => beginEdit(category)}
+                        >
                           <EditIcon fontSize="small" />
                         </IconButton>
                       </Stack>
@@ -495,7 +529,8 @@ export const CategoriesPage = () => {
                         </Stack>
                         {inboundCategories.length === 0 ? (
                           <Typography variant="caption" color="text.secondary">
-                            Create an income or transfer category first to add repayment auto-match rules.
+                            Create an income or transfer category first to add repayment auto-match
+                            rules.
                           </Typography>
                         ) : null}
                         {rulesErrorByExpenseCategoryId[category.id] ? (
@@ -562,7 +597,8 @@ export const CategoriesPage = () => {
                       label="Reimbursement Mode"
                       value={editingDraft.reimbursementMode}
                       onChange={(event) => {
-                        const nextMode = event.target.value as CategoryEditDraft['reimbursementMode'];
+                        const nextMode = event.target
+                          .value as CategoryEditDraft['reimbursementMode'];
                         setDraft(editingCategory.id, {
                           reimbursementMode: nextMode,
                           ...(nextMode === 'none'
@@ -590,7 +626,8 @@ export const CategoriesPage = () => {
                               defaultCounterpartyType:
                                 event.target.value === '__none'
                                   ? null
-                                  : (event.target.value as CategoryEditDraft['defaultCounterpartyType']),
+                                  : (event.target
+                                      .value as CategoryEditDraft['defaultCounterpartyType']),
                             })
                           }
                           size="small"

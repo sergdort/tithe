@@ -49,6 +49,8 @@ Manual steps (if you prefer to run them separately):
 pnpm install
 ```
 
+`pnpm install` also installs local Git hooks (via the root `prepare` script) so developers get lint/format feedback before code is pushed.
+
 If `pnpm` prompts to approve dependency build scripts, approve `better-sqlite3` (native SQLite addon) and rerun install:
 
 ```bash
@@ -57,6 +59,13 @@ pnpm install
 ```
 
 This repo also allowlists `better-sqlite3` in `package.json` (`pnpm.onlyBuiltDependencies`) so pnpm can run its native build script during install/rebuild without interactive approval.
+
+### 2.1 Local Git Hooks (lint + format)
+
+- `pre-commit` runs Biome on staged JS/TS/JSON files and auto-fixes formatting/import ordering when possible.
+- `pre-push` runs `pnpm lint` (same lint gate used by CI).
+- CI still runs `pnpm lint`, `pnpm typecheck`, and `pnpm test` and remains the source of truth.
+- Hooks can be bypassed with `git commit --no-verify` / `git push --no-verify`, but CI will still enforce checks.
 
 Verify the native SQLite binding before starting dev servers:
 

@@ -8,12 +8,12 @@ import {
 } from './monzo-client.js';
 
 import { AppError } from '../errors.js';
+import { SqliteCategoriesRepository } from '../repositories/categories.repository.js';
+import { SqliteExpensesRepository } from '../repositories/expenses.repository.js';
 import type {
   MonzoConnectionDto,
   UpsertMonzoConnectionInput,
 } from '../repositories/monzo.repository.js';
-import { SqliteCategoriesRepository } from '../repositories/categories.repository.js';
-import { SqliteExpensesRepository } from '../repositories/expenses.repository.js';
 import { SqliteMonzoRepository } from '../repositories/monzo.repository.js';
 import type { RepositoryDb } from '../repositories/shared.js';
 import { withTransaction } from '../repositories/shared.js';
@@ -128,7 +128,9 @@ const titleCaseCategory = (value: string): string =>
 
 const isExpenseDedupeConflict = (error: unknown): boolean =>
   error instanceof Error &&
-  (error.message.includes('UNIQUE constraint failed: expenses.source, expenses.provider_transaction_id') ||
+  (error.message.includes(
+    'UNIQUE constraint failed: expenses.source, expenses.provider_transaction_id',
+  ) ||
     error.message.includes('UNIQUE constraint failed: expenses.id'));
 
 const normalizeMonzoCategory = (value: string | undefined): string => {
@@ -202,11 +204,9 @@ const toAppError = (error: unknown): AppError => {
         ? (error.details.payload as Record<string, unknown>)
         : null;
 
-    const payloadCode =
-      payload && typeof payload.code === 'string' ? payload.code : null;
+    const payloadCode = payload && typeof payload.code === 'string' ? payload.code : null;
 
-    const payloadMessage =
-      payload && typeof payload.message === 'string' ? payload.message : null;
+    const payloadMessage = payload && typeof payload.message === 'string' ? payload.message : null;
 
     if (payloadCode || payloadMessage) {
       if (payloadCode === 'forbidden.insufficient_permissions') {
@@ -309,10 +309,7 @@ const mergeConnection = (
     tokenExpiresAt: patched(patch.tokenExpiresAt, existing?.tokenExpiresAt ?? null),
     scope: patched(patch.scope, existing?.scope ?? null),
     oauthState: patched(patch.oauthState, existing?.oauthState ?? null),
-    oauthStateExpiresAt: patched(
-      patch.oauthStateExpiresAt,
-      existing?.oauthStateExpiresAt ?? null,
-    ),
+    oauthStateExpiresAt: patched(patch.oauthStateExpiresAt, existing?.oauthStateExpiresAt ?? null),
     lastErrorText: patched(patch.lastErrorText, existing?.lastErrorText ?? null),
     lastSyncAt: patched(patch.lastSyncAt, existing?.lastSyncAt ?? null),
     lastCursor: patched(patch.lastCursor, existing?.lastCursor ?? null),
@@ -552,7 +549,9 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
       }
 
       if (!currentConnection.accountId || currentConnection.accountId.length === 0) {
-        const accounts = await client.listAccounts({ accessToken: currentConnection.accessToken ?? '' });
+        const accounts = await client.listAccounts({
+          accessToken: currentConnection.accessToken ?? '',
+        });
         const account = accounts.find((item) => item.closed !== true);
         if (!account) {
           throw new AppError('MONZO_ACCOUNT_NOT_FOUND', 'No open Monzo account available', 400);
@@ -628,36 +627,89 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
       }
 
       withTransaction(runtime.db, (tx) => {
-          const monzoTxRepo = monzoRepo(tx);
-          const expensesTxRepo = expensesRepo(tx);
-          const categoriesTxRepo = categoriesRepo(tx);
+        const monzoTxRepo = monzoRepo(tx);
+        const expensesTxRepo = expensesRepo(tx);
+        const categoriesTxRepo = categoriesRepo(tx);
 
-          for (const transaction of eligible) {
-            const nowIso = toIso(new Date());
-            const isPotTransfer = tryGetMonzoPotId(transaction.description) !== null;
-            const flow: 'in' | 'out' = transaction.amount < 0 ? 'out' : 'in';
-            const semanticKind = isPotTransfer
-              ? 'transfer_internal'
-              : flow === 'out'
-                ? 'expense'
-                : 'income';
-            const transferDirection = isPotTransfer ? flow : null;
-            let resolvedCategoryId: string | null = null;
+        for (const transaction of eligible) {
+          const nowIso = toIso(new Date());
+          const isPotTransfer = tryGetMonzoPotId(transaction.description) !== null;
+          const flow: 'in' | 'out' = transaction.amount < 0 ? 'out' : 'in';
+          const semanticKind = isPotTransfer
+            ? 'transfer_internal'
+            : flow === 'out'
+              ? 'expense'
+              : 'income';
+          const transferDirection = isPotTransfer ? flow : null;
+          let resolvedCategoryId: string | null = null;
 
-            if (isPotTransfer) {
-              const transferCategoryName = 'Monzo Pot Transfers';
-              let transferCategory = categoriesTxRepo
+          if (isPotTransfer) {
+            const transferCategoryName = 'Monzo Pot Transfers';
+            let transferCategory = categoriesTxRepo
+              .list({})
+              .categories.find(
+                (item) => item.kind === 'transfer' && item.name === transferCategoryName,
+              );
+
+            if (!transferCategory) {
+              try {
+                transferCategory = categoriesTxRepo.create({
+                  id: crypto.randomUUID(),
+                  name: transferCategoryName,
+                  kind: 'transfer',
+                  icon: 'savings',
+                  color: '#1976D2',
+                  isSystem: false,
+                  reimbursementMode: 'none',
+                  defaultCounterpartyType: null,
+                  defaultRecoveryWindowDays: null,
+                  defaultMyShareMode: null,
+                  defaultMyShareValue: null,
+                  archivedAt: null,
+                  createdAt: nowIso,
+                  updatedAt: nowIso,
+                }).category;
+              } catch {
+                transferCategory = categoriesTxRepo
+                  .list({})
+                  .categories.find(
+                    (item) => item.kind === 'transfer' && item.name === transferCategoryName,
+                  );
+              }
+            }
+
+            if (!transferCategory) {
+              throw new AppError(
+                'MONZO_CATEGORY_CREATE_FAILED',
+                'Could not resolve Monzo pot transfer category',
+                500,
+              );
+            }
+
+            resolvedCategoryId = transferCategory.id;
+          } else {
+            const monzoCategory = normalizeMonzoCategory(transaction.category);
+            let mapping = monzoTxRepo.findCategoryMapping({ monzoCategory, flow }).mapping;
+
+            if (!mapping) {
+              const categoryName = titleCaseCategory(monzoCategory);
+              const legacyCategoryName = `Monzo: ${categoryName}`;
+              const categoryKind = flow === 'out' ? 'expense' : 'income';
+              let category = categoriesTxRepo
                 .list({})
                 .categories.find(
-                  (item) => item.kind === 'transfer' && item.name === transferCategoryName,
+                  (item) =>
+                    item.kind === categoryKind &&
+                    (item.name === categoryName ||
+                      (categoryKind === 'expense' && item.name === legacyCategoryName)),
                 );
 
-              if (!transferCategory) {
+              if (!category) {
                 try {
-                  transferCategory = categoriesTxRepo.create({
+                  category = categoriesTxRepo.create({
                     id: crypto.randomUUID(),
-                    name: transferCategoryName,
-                    kind: 'transfer',
+                    name: categoryName,
+                    kind: categoryKind,
                     icon: 'savings',
                     color: '#1976D2',
                     isSystem: false,
@@ -671,204 +723,151 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
                     updatedAt: nowIso,
                   }).category;
                 } catch {
-                  transferCategory = categoriesTxRepo
+                  category = categoriesTxRepo
                     .list({})
                     .categories.find(
-                      (item) => item.kind === 'transfer' && item.name === transferCategoryName,
+                      (item) => item.kind === categoryKind && item.name === categoryName,
                     );
                 }
               }
 
-              if (!transferCategory) {
+              if (!category) {
                 throw new AppError(
                   'MONZO_CATEGORY_CREATE_FAILED',
-                  'Could not resolve Monzo pot transfer category',
+                  `Could not resolve category for Monzo category ${monzoCategory}:${flow}`,
                   500,
                 );
               }
 
-              resolvedCategoryId = transferCategory.id;
-            } else {
-              const monzoCategory = normalizeMonzoCategory(transaction.category);
-              let mapping = monzoTxRepo.findCategoryMapping({ monzoCategory, flow }).mapping;
-
-              if (!mapping) {
-                const categoryName = titleCaseCategory(monzoCategory);
-                const legacyCategoryName = `Monzo: ${categoryName}`;
-                const categoryKind = flow === 'out' ? 'expense' : 'income';
-                let category = categoriesTxRepo
-                  .list({})
-                  .categories.find(
-                    (item) =>
-                      item.kind === categoryKind &&
-                      (item.name === categoryName ||
-                        (categoryKind === 'expense' && item.name === legacyCategoryName)),
-                  );
-
-                if (!category) {
-                  try {
-                    category = categoriesTxRepo.create({
-                      id: crypto.randomUUID(),
-                      name: categoryName,
-                      kind: categoryKind,
-                      icon: 'savings',
-                      color: '#1976D2',
-                      isSystem: false,
-                      reimbursementMode: 'none',
-                      defaultCounterpartyType: null,
-                      defaultRecoveryWindowDays: null,
-                      defaultMyShareMode: null,
-                      defaultMyShareValue: null,
-                      archivedAt: null,
-                      createdAt: nowIso,
-                      updatedAt: nowIso,
-                    }).category;
-                  } catch {
-                    category = categoriesTxRepo
-                      .list({})
-                      .categories.find(
-                        (item) => item.kind === categoryKind && item.name === categoryName,
-                      );
-                  }
-                }
-
-                if (!category) {
-                  throw new AppError(
-                    'MONZO_CATEGORY_CREATE_FAILED',
-                    `Could not resolve category for Monzo category ${monzoCategory}:${flow}`,
-                    500,
-                  );
-                }
-
-                mapping = monzoTxRepo.upsertCategoryMapping({
-                  monzoCategory,
-                  flow,
-                  categoryId: category.id,
-                  createdAt: nowIso,
-                  updatedAt: nowIso,
-                }).mapping;
-              }
-
-              resolvedCategoryId = mapping.categoryId;
+              mapping = monzoTxRepo.upsertCategoryMapping({
+                monzoCategory,
+                flow,
+                categoryId: category.id,
+                createdAt: nowIso,
+                updatedAt: nowIso,
+              }).mapping;
             }
 
-            monzoTxRepo.upsertRawTransaction({
-              transactionId: transaction.id,
-              payloadJson: JSON.stringify(transaction),
+            resolvedCategoryId = mapping.categoryId;
+          }
+
+          monzoTxRepo.upsertRawTransaction({
+            transactionId: transaction.id,
+            payloadJson: JSON.stringify(transaction),
+            createdAt: nowIso,
+            updatedAt: nowIso,
+          });
+
+          const postedAt = transaction.settled
+            ? assertDate(transaction.settled, 'transaction.settled')
+            : null;
+          const occurredAt = assertDate(transaction.created, 'transaction.created');
+          const merchantLogoUrl =
+            typeof transaction.merchant === 'object' && transaction.merchant !== null
+              ? (transaction.merchant.logo ?? null)
+              : null;
+          const merchantEmoji =
+            typeof transaction.merchant === 'object' && transaction.merchant !== null
+              ? (transaction.merchant.emoji ?? null)
+              : null;
+          const merchantName = resolveImportedMerchantName(transaction, potNameById);
+
+          const canonicalExpenseId = `monzo:${transaction.id}`;
+          const existingImported = expensesTxRepo.findById({ id: canonicalExpenseId }).expense;
+
+          if (existingImported) {
+            expensesTxRepo.update({
+              id: existingImported.id,
+              occurredAt,
+              postedAt,
+              amountMinor: Math.abs(transaction.amount),
+              currency: normalizeCurrency(transaction.currency),
+              amountBaseMinor: null,
+              fxRate: null,
+              categoryId: resolvedCategoryId,
+              transferDirection,
+              kind: semanticKind,
+              reimbursementStatus: existingImported.reimbursementStatus,
+              myShareMinor: existingImported.myShareMinor,
+              closedOutstandingMinor: existingImported.closedOutstandingMinor,
+              counterpartyType: existingImported.counterpartyType,
+              reimbursementGroupId: existingImported.reimbursementGroupId,
+              reimbursementClosedAt: existingImported.reimbursementClosedAt,
+              reimbursementClosedReason: existingImported.reimbursementClosedReason,
+              merchantName,
+              merchantLogoUrl,
+              merchantEmoji,
+              note: existingImported.note,
+              updatedAt: nowIso,
+            });
+            updated += 1;
+            continue;
+          }
+
+          try {
+            expensesTxRepo.create({
+              id: canonicalExpenseId,
+              occurredAt,
+              postedAt,
+              amountMinor: Math.abs(transaction.amount),
+              currency: normalizeCurrency(transaction.currency),
+              amountBaseMinor: null,
+              fxRate: null,
+              categoryId: resolvedCategoryId,
+              source: 'monzo',
+              transferDirection,
+              kind: semanticKind,
+              reimbursementStatus: 'none',
+              myShareMinor: null,
+              closedOutstandingMinor: null,
+              counterpartyType: null,
+              reimbursementGroupId: null,
+              reimbursementClosedAt: null,
+              reimbursementClosedReason: null,
+              merchantName,
+              merchantLogoUrl,
+              merchantEmoji,
+              note: null,
+              providerTransactionId: transaction.id,
+              commitmentInstanceId: null,
               createdAt: nowIso,
               updatedAt: nowIso,
             });
-
-            const postedAt = transaction.settled
-              ? assertDate(transaction.settled, 'transaction.settled')
-              : null;
-            const occurredAt = assertDate(transaction.created, 'transaction.created');
-            const merchantLogoUrl =
-              typeof transaction.merchant === 'object' && transaction.merchant !== null
-                ? (transaction.merchant.logo ?? null)
-                : null;
-            const merchantEmoji =
-              typeof transaction.merchant === 'object' && transaction.merchant !== null
-                ? (transaction.merchant.emoji ?? null)
-                : null;
-            const merchantName = resolveImportedMerchantName(transaction, potNameById);
-
-            const canonicalExpenseId = `monzo:${transaction.id}`;
-            const existingImported = expensesTxRepo.findById({ id: canonicalExpenseId }).expense;
-
-            if (existingImported) {
-              expensesTxRepo.update({
-                id: existingImported.id,
-                occurredAt,
-                postedAt,
-                amountMinor: Math.abs(transaction.amount),
-                currency: normalizeCurrency(transaction.currency),
-                amountBaseMinor: null,
-                fxRate: null,
-                categoryId: resolvedCategoryId,
-                transferDirection,
-                kind: semanticKind,
-                reimbursementStatus: existingImported.reimbursementStatus,
-                myShareMinor: existingImported.myShareMinor,
-                closedOutstandingMinor: existingImported.closedOutstandingMinor,
-                counterpartyType: existingImported.counterpartyType,
-                reimbursementGroupId: existingImported.reimbursementGroupId,
-                reimbursementClosedAt: existingImported.reimbursementClosedAt,
-                reimbursementClosedReason: existingImported.reimbursementClosedReason,
-                merchantName,
-                merchantLogoUrl,
-                merchantEmoji,
-                note: existingImported.note,
-                updatedAt: nowIso,
-              });
-              updated += 1;
+            imported += 1;
+          } catch (error) {
+            if (isExpenseDedupeConflict(error)) {
+              skippedDuplicates += 1;
               continue;
             }
 
-            try {
-              expensesTxRepo.create({
-                id: canonicalExpenseId,
-                occurredAt,
-                postedAt,
-                amountMinor: Math.abs(transaction.amount),
-                currency: normalizeCurrency(transaction.currency),
-                amountBaseMinor: null,
-                fxRate: null,
-                categoryId: resolvedCategoryId,
-                source: 'monzo',
-                transferDirection,
-                kind: semanticKind,
-                reimbursementStatus: 'none',
-                myShareMinor: null,
-                closedOutstandingMinor: null,
-                counterpartyType: null,
-                reimbursementGroupId: null,
-                reimbursementClosedAt: null,
-                reimbursementClosedReason: null,
-                merchantName,
-                merchantLogoUrl,
-                merchantEmoji,
-                note: null,
-                providerTransactionId: transaction.id,
-                commitmentInstanceId: null,
-                createdAt: nowIso,
-                updatedAt: nowIso,
-              });
-              imported += 1;
-            } catch (error) {
-              if (isExpenseDedupeConflict(error)) {
-                skippedDuplicates += 1;
-                continue;
-              }
-
-              throw error;
-            }
+            throw error;
           }
+        }
 
-          monzoTxRepo.upsertConnection(
-            mergeConnection(currentConnection, {
-              id: currentConnection.id,
-              status: 'connected',
-              lastSyncAt: toIso(new Date()),
-              lastCursor:
-                newestEligibleCursor && currentConnection.lastCursor
-                  ? new Date(newestEligibleCursor).getTime() >
-                    new Date(currentConnection.lastCursor).getTime()
-                    ? newestEligibleCursor
-                    : currentConnection.lastCursor
-                  : (newestEligibleCursor ?? currentConnection.lastCursor),
-              lastErrorText: null,
-              updatedAt: toIso(new Date()),
-            }),
-          );
+        monzoTxRepo.upsertConnection(
+          mergeConnection(currentConnection, {
+            id: currentConnection.id,
+            status: 'connected',
+            lastSyncAt: toIso(new Date()),
+            lastCursor:
+              newestEligibleCursor && currentConnection.lastCursor
+                ? new Date(newestEligibleCursor).getTime() >
+                  new Date(currentConnection.lastCursor).getTime()
+                  ? newestEligibleCursor
+                  : currentConnection.lastCursor
+                : (newestEligibleCursor ?? currentConnection.lastCursor),
+            lastErrorText: null,
+            updatedAt: toIso(new Date()),
+          }),
+        );
 
-          monzoTxRepo.finishSyncRun({
-            id: runId,
-            endedAt: toIso(new Date()),
-            status: 'success',
-            importedCount: imported,
-            errorText: null,
-          });
+        monzoTxRepo.finishSyncRun({
+          id: runId,
+          endedAt: toIso(new Date()),
+          status: 'success',
+          importedCount: imported,
+          errorText: null,
+        });
       });
 
       const skipped = skippedNonEligible + skippedDuplicates;
@@ -906,20 +905,20 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
         const monzoCode =
           typeof appError.details?.monzoCode === 'string' ? appError.details.monzoCode : null;
         const latest = monzoRepo().findLatestConnection().connection;
-          if (latest) {
-            monzoRepo().upsertConnection(
-              mergeConnection(latest, {
-                id: latest.id,
-                status:
-                  appError.code === 'MONZO_REAUTH_REQUIRED' ||
-                  monzoCode === 'forbidden.insufficient_permissions'
-                    ? 'connected'
-                    : 'sync_error',
-                lastErrorText: appError.message,
-                updatedAt: toIso(new Date()),
-                }),
-            );
-          }
+        if (latest) {
+          monzoRepo().upsertConnection(
+            mergeConnection(latest, {
+              id: latest.id,
+              status:
+                appError.code === 'MONZO_REAUTH_REQUIRED' ||
+                monzoCode === 'forbidden.insufficient_permissions'
+                  ? 'connected'
+                  : 'sync_error',
+              lastErrorText: appError.message,
+              updatedAt: toIso(new Date()),
+            }),
+          );
+        }
 
         monzoRepo().finishSyncRun({
           id: runId,

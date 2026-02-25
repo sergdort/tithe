@@ -182,7 +182,7 @@ describe('API Fastify enforcement', () => {
       createServices: () =>
         ({
           close,
-        }) as any,
+        }) as unknown as DomainServices & { close: () => void },
     });
 
     await app.ready();

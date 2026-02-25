@@ -4,8 +4,8 @@ import {
   categories,
   commitmentInstances,
   expenses,
-  reimbursementLinks,
   recurringCommitments,
+  reimbursementLinks,
 } from '@tithe/db';
 
 import type { RepositoryDb } from './shared.js';
@@ -344,8 +344,7 @@ export class SqliteReportsRepository implements ReportsRepository {
         pushCategory(expenseMap, row.categoryId, row.categoryName, amountMinor);
         expenseMinor += amountMinor;
 
-        const isReimbursable =
-          row.reimbursementStatus !== 'none' || row.myShareMinor !== null;
+        const isReimbursable = row.reimbursementStatus !== 'none' || row.myShareMinor !== null;
         if (isReimbursable) {
           const myShareMinor = Math.max(Number(row.myShareMinor ?? 0), 0);
           const recoverableMinor = Math.max(amountMinor - myShareMinor, 0);
@@ -396,8 +395,10 @@ export class SqliteReportsRepository implements ReportsRepository {
       }
     }
 
-    const byTotalDesc = <T extends { totalMinor: number; categoryName: string }>(a: T, b: T): number =>
-      b.totalMinor - a.totalMinor || a.categoryName.localeCompare(b.categoryName);
+    const byTotalDesc = <T extends { totalMinor: number; categoryName: string }>(
+      a: T,
+      b: T,
+    ): number => b.totalMinor - a.totalMinor || a.categoryName.localeCompare(b.categoryName);
 
     const sortTransfer = (a: MonthlyLedgerTransferRowDto, b: MonthlyLedgerTransferRowDto): number =>
       (a.direction === b.direction ? 0 : a.direction === 'out' ? -1 : 1) ||

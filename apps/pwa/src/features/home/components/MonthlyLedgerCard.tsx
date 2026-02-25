@@ -19,7 +19,7 @@ import { useEffect, useState } from 'react';
 import type { MonthWindow } from '../../../lib/date/month.js';
 import { pounds, signedPounds } from '../../../lib/format/money.js';
 import { useMonzoSyncMutation } from '../hooks/useHomeMutations.js';
-import { useHomeMonzoStatusQuery, useHomeMonthlyLedgerQuery } from '../hooks/useHomeQueries.js';
+import { useHomeMonthlyLedgerQuery, useHomeMonzoStatusQuery } from '../hooks/useHomeQueries.js';
 import { MonthNavigator } from './MonthNavigator.js';
 
 interface MonthlyLedgerCardProps {
@@ -140,7 +140,9 @@ export const MonthlyLedgerCard = ({
   const monzoStatus = monzoStatusQuery.data;
   const monthKey = `${monthWindow.from}|${monthWindow.to}`;
   const resetSyncMutation = syncMutation.reset;
-  const [visibleSyncFeedbackMonthKey, setVisibleSyncFeedbackMonthKey] = useState<string | null>(null);
+  const [visibleSyncFeedbackMonthKey, setVisibleSyncFeedbackMonthKey] = useState<string | null>(
+    null,
+  );
   const [spendMode, setSpendMode] = useState<'gross' | 'net'>('net');
   const [excludeInternalTransfers, setExcludeInternalTransfers] = useState(true);
 
@@ -150,7 +152,7 @@ export const MonthlyLedgerCard = ({
   const showSyncFeedback = visibleSyncFeedbackMonthKey === monthKey;
 
   useEffect(() => {
-    setVisibleSyncFeedbackMonthKey(null);
+    setVisibleSyncFeedbackMonthKey((current) => (current === monthKey ? current : null));
     resetSyncMutation();
   }, [monthKey, resetSyncMutation]);
 
@@ -170,7 +172,8 @@ export const MonthlyLedgerCard = ({
   const displayCashInMinor = ledger
     ? excludeInternalTransfers
       ? (cashFlow?.cashInMinor ?? ledger.totals.incomeMinor)
-      : (cashFlow?.cashInMinor ?? ledger.totals.incomeMinor) + (cashFlow?.internalTransferInMinor ?? 0)
+      : (cashFlow?.cashInMinor ?? ledger.totals.incomeMinor) +
+        (cashFlow?.internalTransferInMinor ?? 0)
     : 0;
   const displayCashOutMinor = ledger
     ? excludeInternalTransfers
@@ -210,12 +213,7 @@ export const MonthlyLedgerCard = ({
           <Typography variant="caption" color="text.secondary">
             Monzo sync for this month overwrites existing imported transactions.
           </Typography>
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={handleSyncMonth}
-            disabled={syncDisabled}
-          >
+          <Button variant="outlined" size="small" onClick={handleSyncMonth} disabled={syncDisabled}>
             Sync month
           </Button>
         </Stack>
@@ -310,7 +308,10 @@ export const MonthlyLedgerCard = ({
               <Stack direction="row" justifyContent="space-between">
                 <Typography>Net Flow</Typography>
                 <Typography
-                  sx={{ fontWeight: 700, color: displayNetFlowMinor >= 0 ? 'info.main' : 'error.main' }}
+                  sx={{
+                    fontWeight: 700,
+                    color: displayNetFlowMinor >= 0 ? 'info.main' : 'error.main',
+                  }}
                 >
                   {signedPounds(displayNetFlowMinor)}
                 </Typography>

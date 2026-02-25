@@ -119,7 +119,11 @@ export class SqliteReimbursementsRepository implements ReimbursementsRepository 
   constructor(private readonly db: RepositoryDb) {}
 
   findById({ id }: FindReimbursementLinkByIdInput): FindReimbursementLinkByIdOutput {
-    const row = this.db.select().from(reimbursementLinks).where(eq(reimbursementLinks.id, id)).get();
+    const row = this.db
+      .select()
+      .from(reimbursementLinks)
+      .where(eq(reimbursementLinks.id, id))
+      .get();
     return { link: row ? mapLink(row) : null };
   }
 

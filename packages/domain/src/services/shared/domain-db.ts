@@ -1,4 +1,4 @@
-import { createDb, type DbClientOptions, type DrizzleDb } from '@tithe/db';
+import { type DbClientOptions, type DrizzleDb, createDb } from '@tithe/db';
 
 export interface DomainServiceOptions extends DbClientOptions {}
 

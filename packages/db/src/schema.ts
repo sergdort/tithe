@@ -120,7 +120,10 @@ export const expenses = sqliteTable(
   (table) => [
     index('expenses_category_idx').on(table.categoryId),
     index('expenses_occurred_idx').on(table.occurredAt),
-    uniqueIndex('expenses_source_provider_transaction_id_uq').on(table.source, table.providerTransactionId),
+    uniqueIndex('expenses_source_provider_transaction_id_uq').on(
+      table.source,
+      table.providerTransactionId,
+    ),
   ],
 );
 
@@ -141,17 +144,19 @@ export const monzoConnections = sqliteTable('monzo_connections', {
   updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
-export const monzoCategoryMappings = sqliteTable('monzo_category_mappings', {
-  monzoCategory: text('monzo_category').notNull(),
-  flow: text('flow').notNull(),
-  categoryId: text('category_id')
-    .notNull()
-    .references(() => categories.id, { onDelete: 'restrict' }),
-  createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
-}, (table) => [
-  primaryKey({ columns: [table.monzoCategory, table.flow] }),
-]);
+export const monzoCategoryMappings = sqliteTable(
+  'monzo_category_mappings',
+  {
+    monzoCategory: text('monzo_category').notNull(),
+    flow: text('flow').notNull(),
+    categoryId: text('category_id')
+      .notNull()
+      .references(() => categories.id, { onDelete: 'restrict' }),
+    createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [primaryKey({ columns: [table.monzoCategory, table.flow] })],
+);
 
 export const monzoTransactionsRaw = sqliteTable(
   'monzo_transactions_raw',
@@ -203,7 +208,10 @@ export const reimbursementCategoryRules = sqliteTable(
   (table) => [
     index('reimbursement_category_rules_expense_idx').on(table.expenseCategoryId),
     index('reimbursement_category_rules_inbound_idx').on(table.inboundCategoryId),
-    uniqueIndex('reimbursement_category_rules_pair_uq').on(table.expenseCategoryId, table.inboundCategoryId),
+    uniqueIndex('reimbursement_category_rules_pair_uq').on(
+      table.expenseCategoryId,
+      table.inboundCategoryId,
+    ),
   ],
 );
 

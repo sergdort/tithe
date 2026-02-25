@@ -107,12 +107,10 @@ const deriveExpenseKind = ({
   }
 
   if (requestedKind && isTransferKind(requestedKind)) {
-    throw new AppError(
-      'VALIDATION_ERROR',
-      'transfer kinds require a transfer category',
-      400,
-      { categoryId: category.id, kind: requestedKind },
-    );
+    throw new AppError('VALIDATION_ERROR', 'transfer kinds require a transfer category', 400, {
+      categoryId: category.id,
+      kind: requestedKind,
+    });
   }
 
   const expectedKind: ExpenseKind = category.kind === 'income' ? 'income' : 'expense';
@@ -137,7 +135,9 @@ const normalizeCounterpartyType = (
   return null;
 };
 
-const computeRecoverableMinor = (expense: Pick<ExpenseDto, 'kind' | 'reimbursementStatus' | 'money' | 'myShareMinor'>): number => {
+const computeRecoverableMinor = (
+  expense: Pick<ExpenseDto, 'kind' | 'reimbursementStatus' | 'money' | 'myShareMinor'>,
+): number => {
   if (expense.kind !== 'expense' || expense.reimbursementStatus === 'none') {
     return 0;
   }
@@ -226,9 +226,14 @@ const resolveReimbursableDefaults = ({
 
   if (category.reimbursementMode === 'none') {
     if (requestedReimbursable === true) {
-      throw new AppError('VALIDATION_ERROR', 'Category does not allow reimbursement tracking', 400, {
-        categoryId: category.id,
-      });
+      throw new AppError(
+        'VALIDATION_ERROR',
+        'Category does not allow reimbursement tracking',
+        400,
+        {
+          categoryId: category.id,
+        },
+      );
     }
     return false;
   }
@@ -269,25 +274,32 @@ const validateAndResolveMyShareMinor = ({
 }): number | null => {
   if (!reimbursable) {
     if (requestedMyShareMinor !== undefined && requestedMyShareMinor !== null) {
-      throw new AppError('VALIDATION_ERROR', 'myShareMinor is only valid for reimbursable expenses', 400);
+      throw new AppError(
+        'VALIDATION_ERROR',
+        'myShareMinor is only valid for reimbursable expenses',
+        400,
+      );
     }
     return null;
   }
 
   const resolved =
-    requestedMyShareMinor === undefined
-      ? (existing?.myShareMinor ?? 0)
-      : requestedMyShareMinor;
+    requestedMyShareMinor === undefined ? (existing?.myShareMinor ?? 0) : requestedMyShareMinor;
 
   if (resolved === null) {
     return 0;
   }
 
   if (!Number.isInteger(resolved) || resolved < 0 || resolved > amountMinor) {
-    throw new AppError('VALIDATION_ERROR', 'myShareMinor must be an integer between 0 and amountMinor', 400, {
-      myShareMinor: resolved,
-      amountMinor,
-    });
+    throw new AppError(
+      'VALIDATION_ERROR',
+      'myShareMinor must be an integer between 0 and amountMinor',
+      400,
+      {
+        myShareMinor: resolved,
+        amountMinor,
+      },
+    );
   }
 
   return resolved;
@@ -301,14 +313,23 @@ export const createExpensesService = ({
   const categoriesRepo = (db: RepositoryDb = runtime.db) => new SqliteCategoriesRepository(db);
   const commitmentsRepo = (db: RepositoryDb = runtime.db) => new SqliteCommitmentsRepository(db);
   const expensesRepo = (db: RepositoryDb = runtime.db) => new SqliteExpensesRepository(db);
-  const reimbursementsRepo = (db: RepositoryDb = runtime.db) => new SqliteReimbursementsRepository(db);
+  const reimbursementsRepo = (db: RepositoryDb = runtime.db) =>
+    new SqliteReimbursementsRepository(db);
 
   const enrich = (items: ExpenseDto[]): ExpenseDto[] => {
     const outIds = items
-      .filter((item) => item.kind === 'expense' && (item.reimbursementStatus !== 'none' || item.myShareMinor !== null))
+      .filter(
+        (item) =>
+          item.kind === 'expense' &&
+          (item.reimbursementStatus !== 'none' || item.myShareMinor !== null),
+      )
       .map((item) => item.id);
-    const recoveredRows = reimbursementsRepo().sumRecoveredByExpenseOutIds({ expenseOutIds: outIds }).rows;
-    const recoveredByOutId = new Map(recoveredRows.map((row) => [row.expenseOutId, row.totalMinor] as const));
+    const recoveredRows = reimbursementsRepo().sumRecoveredByExpenseOutIds({
+      expenseOutIds: outIds,
+    }).rows;
+    const recoveredByOutId = new Map(
+      recoveredRows.map((row) => [row.expenseOutId, row.totalMinor] as const),
+    );
     return enrichExpensesWithReimbursements({ items, recoveredByOutId });
   };
 
@@ -321,7 +342,8 @@ export const createExpensesService = ({
       throw new AppError('EXPENSE_NOT_FOUND', `Expense ${expenseId} does not exist`, 404);
     }
     const recoveredMinor =
-      reimbursementsRepo(db).sumRecoveredByExpenseOutIds({ expenseOutIds: [expenseId] }).rows[0]?.totalMinor ?? 0;
+      reimbursementsRepo(db).sumRecoveredByExpenseOutIds({ expenseOutIds: [expenseId] }).rows[0]
+        ?.totalMinor ?? 0;
     const nextStatus = deriveReimbursementStatus({ expense, recoveredMinor });
     const patched = repo.updateReimbursement({
       id: expenseId,
@@ -370,9 +392,14 @@ export const createExpensesService = ({
 
       const category = categoriesRepo().findById({ id: input.categoryId }).category;
       if (!category) {
-        throw new AppError('CATEGORY_NOT_FOUND', 'Cannot create expense with unknown category', 404, {
-          categoryId: input.categoryId,
-        });
+        throw new AppError(
+          'CATEGORY_NOT_FOUND',
+          'Cannot create expense with unknown category',
+          404,
+          {
+            categoryId: input.categoryId,
+          },
+        );
       }
 
       const kind = deriveExpenseKind({
@@ -383,9 +410,14 @@ export const createExpensesService = ({
 
       const effectiveTransferDirection = isTransferKind(kind) ? transferDirection : null;
       if (isTransferKind(kind) && !effectiveTransferDirection) {
-        throw new AppError('VALIDATION_ERROR', 'transferDirection is required for transfer kinds', 400, {
-          kind,
-        });
+        throw new AppError(
+          'VALIDATION_ERROR',
+          'transferDirection is required for transfer kinds',
+          400,
+          {
+            kind,
+          },
+        );
       }
 
       const reimbursable = resolveReimbursableDefaults({
@@ -472,9 +504,14 @@ export const createExpensesService = ({
       const targetCategoryId = input.categoryId ?? existing.categoryId;
       const category = categoriesRepo().findById({ id: targetCategoryId }).category;
       if (!category) {
-        throw new AppError('CATEGORY_NOT_FOUND', 'Cannot update expense with unknown category', 404, {
-          categoryId: targetCategoryId,
-        });
+        throw new AppError(
+          'CATEGORY_NOT_FOUND',
+          'Cannot update expense with unknown category',
+          404,
+          {
+            categoryId: targetCategoryId,
+          },
+        );
       }
 
       const requestedTransferDirection =
@@ -494,7 +531,8 @@ export const createExpensesService = ({
       const currency = input.currency ? normalizeCurrency(input.currency) : existing.money.currency;
 
       const inboundAllocatedMinor =
-        reimbursementsRepo().sumAllocatedByExpenseInIds({ expenseInIds: [id] }).rows[0]?.totalMinor ?? 0;
+        reimbursementsRepo().sumAllocatedByExpenseInIds({ expenseInIds: [id] }).rows[0]
+          ?.totalMinor ?? 0;
       if (inboundAllocatedMinor > 0) {
         if (!(nextKind === 'income' || nextKind === 'transfer_external')) {
           throw new AppError(
@@ -530,7 +568,8 @@ export const createExpensesService = ({
       });
 
       const recoveredMinor =
-        reimbursementsRepo().sumRecoveredByExpenseOutIds({ expenseOutIds: [id] }).rows[0]?.totalMinor ?? 0;
+        reimbursementsRepo().sumRecoveredByExpenseOutIds({ expenseOutIds: [id] }).rows[0]
+          ?.totalMinor ?? 0;
       if (!reimbursable && recoveredMinor > 0) {
         throw new AppError(
           'VALIDATION_ERROR',
@@ -558,19 +597,21 @@ export const createExpensesService = ({
       const nextCounterpartyType = reimbursable
         ? normalizeCounterpartyType(
             input.counterpartyType === undefined
-              ? existing.counterpartyType ?? category.defaultCounterpartyType
+              ? (existing.counterpartyType ?? category.defaultCounterpartyType)
               : input.counterpartyType,
           )
         : null;
       const nextReimbursementGroupId = reimbursable
-        ? (input.reimbursementGroupId === undefined
+        ? ((input.reimbursementGroupId === undefined
             ? existing.reimbursementGroupId
-            : input.reimbursementGroupId) ?? null
+            : input.reimbursementGroupId) ?? null)
         : null;
 
       const clearClosedBecauseNotReimbursable = !reimbursable;
       const patch = {
-        occurredAt: input.occurredAt ? assertDate(input.occurredAt, 'occurredAt') : existing.occurredAt,
+        occurredAt: input.occurredAt
+          ? assertDate(input.occurredAt, 'occurredAt')
+          : existing.occurredAt,
         postedAt:
           input.postedAt === undefined
             ? existing.postedAt
@@ -586,10 +627,14 @@ export const createExpensesService = ({
         kind: nextKind,
         reimbursementStatus: reimbursable ? existing.reimbursementStatus : 'none',
         myShareMinor,
-        closedOutstandingMinor: clearClosedBecauseNotReimbursable ? null : existing.closedOutstandingMinor,
+        closedOutstandingMinor: clearClosedBecauseNotReimbursable
+          ? null
+          : existing.closedOutstandingMinor,
         counterpartyType: nextCounterpartyType,
         reimbursementGroupId: nextReimbursementGroupId,
-        reimbursementClosedAt: clearClosedBecauseNotReimbursable ? null : existing.reimbursementClosedAt,
+        reimbursementClosedAt: clearClosedBecauseNotReimbursable
+          ? null
+          : existing.reimbursementClosedAt,
         reimbursementClosedReason: clearClosedBecauseNotReimbursable
           ? null
           : existing.reimbursementClosedReason,

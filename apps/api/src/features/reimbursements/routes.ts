@@ -50,13 +50,26 @@ interface ReimbursementAutoMatchQuery {
 export const registerReimbursementRoutes = (app: FastifyInstance): void => {
   const { services, actorFromRequest, parseBoolean, docs } = app.tithe;
   const reimbursementsService = services.reimbursements;
-  const { defaultErrorResponses, genericObjectSchema, isoDateTimeSchema, successEnvelopeSchema, uuidSchema } =
-    docs;
+  const {
+    defaultErrorResponses,
+    genericObjectSchema,
+    isoDateTimeSchema,
+    successEnvelopeSchema,
+    uuidSchema,
+  } = docs;
 
   const linkSchema = {
     type: 'object',
     additionalProperties: false,
-    required: ['id', 'expenseOutId', 'expenseInId', 'amountMinor', 'idempotencyKey', 'createdAt', 'updatedAt'],
+    required: [
+      'id',
+      'expenseOutId',
+      'expenseInId',
+      'amountMinor',
+      'idempotencyKey',
+      'createdAt',
+      'updatedAt',
+    ],
     properties: {
       id: uuidSchema,
       expenseOutId: { type: 'string', minLength: 1 },
@@ -128,7 +141,10 @@ export const registerReimbursementRoutes = (app: FastifyInstance): void => {
       ok(await reimbursementsService.createCategoryRule(request.body, actorFromRequest(request))),
   );
 
-  app.delete<{ Params: ReimbursementCategoryRuleParams; Querystring: ReimbursementCategoryRuleDeleteQuery }>(
+  app.delete<{
+    Params: ReimbursementCategoryRuleParams;
+    Querystring: ReimbursementCategoryRuleDeleteQuery;
+  }>(
     '/category-rules/:id',
     {
       schema: {
@@ -168,7 +184,9 @@ export const registerReimbursementRoutes = (app: FastifyInstance): void => {
     },
     async (request) => {
       if (parseBoolean(request.query.dryRun)) {
-        const token = await reimbursementsService.createDeleteCategoryRuleApproval(request.params.id);
+        const token = await reimbursementsService.createDeleteCategoryRuleApproval(
+          request.params.id,
+        );
         return ok(token, { mode: 'dry-run' });
       }
 
@@ -210,7 +228,8 @@ export const registerReimbursementRoutes = (app: FastifyInstance): void => {
         },
       },
     },
-    async (request) => ok(await reimbursementsService.link(request.body, actorFromRequest(request))),
+    async (request) =>
+      ok(await reimbursementsService.link(request.body, actorFromRequest(request))),
   );
 
   app.delete<{ Params: ReimbursementLinkParams; Querystring: ReimbursementLinkDeleteQuery }>(
@@ -334,7 +353,9 @@ export const registerReimbursementRoutes = (app: FastifyInstance): void => {
       },
     },
     async (request) =>
-      ok(await reimbursementsService.reopen(request.params.expenseOutId, actorFromRequest(request))),
+      ok(
+        await reimbursementsService.reopen(request.params.expenseOutId, actorFromRequest(request)),
+      ),
   );
 
   app.post<{ Querystring: ReimbursementAutoMatchQuery }>(
@@ -357,6 +378,7 @@ export const registerReimbursementRoutes = (app: FastifyInstance): void => {
         },
       },
     },
-    async (request) => ok(await reimbursementsService.autoMatch(request.query, actorFromRequest(request))),
+    async (request) =>
+      ok(await reimbursementsService.autoMatch(request.query, actorFromRequest(request))),
   );
 };

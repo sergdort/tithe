@@ -127,10 +127,14 @@ test('expenses list avatar prefers logo, then emoji, then initials', async ({ pa
     'data-avatar-kind',
     'initials',
   );
-  await expect(initialsRow.locator('[data-testid="expense-avatar-exp-initials"]')).toContainText('MI');
+  await expect(initialsRow.locator('[data-testid="expense-avatar-exp-initials"]')).toContainText(
+    'MI',
+  );
 });
 
-test('home shows monthly ledger and transfer direction in add transaction flow', async ({ page }) => {
+test('home shows monthly ledger and transfer direction in add transaction flow', async ({
+  page,
+}) => {
   await page.route('**/v1/reports/monthly-ledger*', async (route) => {
     await route.fulfill({
       status: 200,

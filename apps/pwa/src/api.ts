@@ -7,9 +7,9 @@ import type {
   MonzoConnectStart,
   MonzoStatus,
   MonzoSyncSummary,
+  RecurringCommitment,
   ReimbursementCategoryRule,
   ReimbursementLink,
-  RecurringCommitment,
   TrendPoint,
 } from './types.js';
 
@@ -187,7 +187,10 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(body),
       }),
-    close: (expenseOutId: string, body?: { closeOutstandingMinor?: number; reason?: string | null }) =>
+    close: (
+      expenseOutId: string,
+      body?: { closeOutstandingMinor?: number; reason?: string | null },
+    ) =>
       request<Expense>(`/reimbursements/${encodeURIComponent(expenseOutId)}/close`, {
         method: 'POST',
         body: JSON.stringify(body ?? {}),
@@ -202,9 +205,12 @@ export const api = {
       if (params?.from) search.set('from', params.from);
       if (params?.to) search.set('to', params.to);
       const suffix = search.size > 0 ? `?${search.toString()}` : '';
-      return request<{ matched: number; linksCreated: number }>(`/reimbursements/auto-match${suffix}`, {
-        method: 'POST',
-      });
+      return request<{ matched: number; linksCreated: number }>(
+        `/reimbursements/auto-match${suffix}`,
+        {
+          method: 'POST',
+        },
+      );
     },
   },
   monzo: {
