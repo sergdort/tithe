@@ -277,6 +277,7 @@ describe('API Fastify enforcement', () => {
       ['system', ''],
       ['categories', '/v1/categories'],
       ['expenses', '/v1/expenses'],
+      ['reimbursements', '/v1/reimbursements'],
       ['commitments', '/v1'],
       ['reports', '/v1/reports'],
       ['query', '/v1/query'],
