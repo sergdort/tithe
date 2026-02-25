@@ -298,7 +298,9 @@ export const ExpensesPage = () => {
                         ((expense.kind === 'transfer_external' ||
                           expense.kind === 'transfer_internal') &&
                           expense.transferDirection === 'in');
-                      return sum + (isInflow ? expense.money.amountMinor : -expense.money.amountMinor);
+                      return (
+                        sum + (isInflow ? expense.money.amountMinor : -expense.money.amountMinor)
+                      );
                     }, 0),
                     'GBP',
                   )}

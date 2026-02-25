@@ -57,7 +57,16 @@ export const MobileShell = ({ title, children }: MobileShellProps) => {
         </Toolbar>
       </AppBar>
 
-      <Box component="main" sx={{ px: 2, pb: 'calc(88px + env(safe-area-inset-bottom, 0px))', pt: 1.5, maxWidth: 640, mx: 'auto' }}>
+      <Box
+        component="main"
+        sx={{
+          px: 2,
+          pb: 'calc(88px + env(safe-area-inset-bottom, 0px))',
+          pt: 1.5,
+          maxWidth: 640,
+          mx: 'auto',
+        }}
+      >
         {children}
       </Box>
 
