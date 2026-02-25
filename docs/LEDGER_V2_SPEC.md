@@ -1,9 +1,5 @@
 # Ledger v2 Spec
 
-Status: Draft
-Owner: Serg / Tithe
-Date: 2026-02-23
-
 ## 1) Problem
 
 Current ledger mixes different money movements into a single “expense-like” view, which hides true spending and makes cash-flow analysis noisy.

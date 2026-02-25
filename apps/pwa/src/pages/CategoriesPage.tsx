@@ -36,12 +36,6 @@ import {
   CardContent,
   Chip,
   CircularProgress,
-  Collapse,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  FormControlLabel,
   IconButton,
   List,
   ListItem,
@@ -49,7 +43,6 @@ import {
   ListItemText,
   MenuItem,
   Stack,
-  Switch,
   TextField,
   Typography,
   useMediaQuery,
@@ -60,6 +53,11 @@ import type { ElementType } from 'react';
 import { useMemo, useState } from 'react';
 
 import { api } from '../api.js';
+import { AutoMatchRepaymentCategoriesDialog } from '../features/categories/dialogs/AutoMatchRepaymentCategoriesDialog.js';
+import {
+  type CategoryEditDraft,
+  EditCategoryDialog,
+} from '../features/categories/dialogs/EditCategoryDialog.js';
 import type { Category, ReimbursementCategoryRule } from '../types.js';
 
 const normalizeCategoryLabel = (name: string): string =>
@@ -67,14 +65,6 @@ const normalizeCategoryLabel = (name: string): string =>
 
 const isMonzoPlaceholderCategoryName = (name: string): boolean =>
   /^Category [a-z0-9]+$/i.test(name.trim());
-
-interface CategoryEditDraft {
-  name: string;
-  icon: string;
-  reimbursementMode: 'none' | 'optional' | 'always';
-  defaultCounterpartyType: 'self' | 'partner' | 'team' | 'other' | null;
-  defaultRecoveryWindowDaysText: string;
-}
 
 const CATEGORY_ICON_OPTIONS = [
   'savings',
@@ -246,6 +236,11 @@ export const CategoriesPage = () => {
   const editingCategory = editingCategoryId
     ? (categories.find((category) => category.id === editingCategoryId) ?? null)
     : null;
+  const rulesEditingCategory = rulesOpenCategoryId
+    ? (categories.find(
+        (category) => category.id === rulesOpenCategoryId && category.kind === 'expense',
+      ) ?? null)
+    : null;
 
   const rulesByExpenseCategoryId = useMemo(() => {
     const map = new Map<string, ReimbursementCategoryRule[]>();
@@ -266,6 +261,11 @@ export const CategoriesPage = () => {
   const editingDraft = editingCategory
     ? (draftsById[editingCategory.id] ?? buildDraftFromCategory(editingCategory))
     : null;
+  const rulesEditingLinkedInboundIds = new Set(
+    (rulesEditingCategory ? (rulesByExpenseCategoryId.get(rulesEditingCategory.id) ?? []) : []).map(
+      (rule) => rule.inboundCategoryId,
+    ),
+  );
 
   if (categoriesQuery.isLoading || rulesQuery.isLoading) {
     return (
@@ -436,8 +436,6 @@ export const CategoriesPage = () => {
             {categories.map((category) => {
               const expenseRules = rulesByExpenseCategoryId.get(category.id) ?? [];
               const linkedInboundIds = new Set(expenseRules.map((rule) => rule.inboundCategoryId));
-              const showRulesEditor =
-                rulesOpenCategoryId === category.id && category.kind === 'expense';
               const isPlaceholder = isMonzoPlaceholderCategoryName(category.name);
               const CategoryRowIcon =
                 CATEGORY_ICON_COMPONENTS[category.icon || 'category'] ?? CategoryIcon;
@@ -479,11 +477,7 @@ export const CategoriesPage = () => {
                           <IconButton
                             edge="end"
                             aria-label="auto-match rules"
-                            onClick={() =>
-                              setRulesOpenCategoryId((prev) =>
-                                prev === category.id ? null : category.id,
-                              )
-                            }
+                            onClick={() => setRulesOpenCategoryId(category.id)}
                           >
                             <LinkIcon fontSize="small" />
                           </IconButton>
@@ -498,49 +492,6 @@ export const CategoriesPage = () => {
                       </Stack>
                     </ListItemSecondaryAction>
                   </ListItem>
-
-                  {category.kind === 'expense' ? (
-                    <Collapse in={showRulesEditor} timeout="auto" unmountOnExit>
-                      <Box sx={{ px: 1, pb: 1.5 }}>
-                        <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>
-                          Auto-match repayment categories
-                        </Typography>
-                        <Stack spacing={0.5}>
-                          {inboundCategories.map((inboundCategory) => (
-                            <FormControlLabel
-                              key={`${category.id}:${inboundCategory.id}`}
-                              control={
-                                <Switch
-                                  size="small"
-                                  checked={linkedInboundIds.has(inboundCategory.id)}
-                                  onChange={(event) =>
-                                    void handleToggleRule(
-                                      category.id,
-                                      inboundCategory.id,
-                                      event.target.checked,
-                                    )
-                                  }
-                                  disabled={createRule.isPending || deleteRule.isPending}
-                                />
-                              }
-                              label={`${normalizeCategoryLabel(inboundCategory.name)} (${inboundCategory.kind})`}
-                            />
-                          ))}
-                        </Stack>
-                        {inboundCategories.length === 0 ? (
-                          <Typography variant="caption" color="text.secondary">
-                            Create an income or transfer category first to add repayment auto-match
-                            rules.
-                          </Typography>
-                        ) : null}
-                        {rulesErrorByExpenseCategoryId[category.id] ? (
-                          <Alert severity="error" sx={{ mt: 1 }}>
-                            {rulesErrorByExpenseCategoryId[category.id]}
-                          </Alert>
-                        ) : null}
-                      </Box>
-                    </Collapse>
-                  ) : null}
                 </Box>
               );
             })}
@@ -548,130 +499,47 @@ export const CategoriesPage = () => {
         </CardContent>
       </Card>
 
-      <Dialog
-        open={Boolean(editingCategory && editingDraft)}
-        onClose={() => {
-          if (editingCategory) {
-            cancelEdit(editingCategory.id);
-          }
+      <AutoMatchRepaymentCategoriesDialog
+        open={Boolean(rulesEditingCategory)}
+        expenseCategory={rulesEditingCategory}
+        inboundCategories={inboundCategories}
+        linkedInboundIds={rulesEditingLinkedInboundIds}
+        errorMessage={
+          rulesEditingCategory
+            ? (rulesErrorByExpenseCategoryId[rulesEditingCategory.id] ?? null)
+            : null
+        }
+        isBusy={createRule.isPending || deleteRule.isPending}
+        isMobile={isMobile}
+        onClose={() => setRulesOpenCategoryId(null)}
+        onToggleRule={(inboundCategoryId, enabled) => {
+          if (!rulesEditingCategory) return;
+          void handleToggleRule(rulesEditingCategory.id, inboundCategoryId, enabled);
         }}
-        fullWidth
-        maxWidth="sm"
-        fullScreen={isMobile}
-      >
-        {editingCategory && editingDraft ? (
-          <>
-            <DialogTitle>Edit category</DialogTitle>
-            <DialogContent>
-              <Stack spacing={1.5} sx={{ pt: 1 }}>
-                <TextField
-                  label="Name"
-                  value={editingDraft.name}
-                  onChange={(event) => setDraft(editingCategory.id, { name: event.target.value })}
-                  size="small"
-                  autoFocus
-                />
-                <TextField
-                  select
-                  label="Icon"
-                  value={editingDraft.icon}
-                  onChange={(event) => setDraft(editingCategory.id, { icon: event.target.value })}
-                  size="small"
-                >
-                  {CATEGORY_ICON_OPTIONS.map((iconName) => {
-                    const IconComponent = CATEGORY_ICON_COMPONENTS[iconName] ?? CategoryIcon;
-                    return (
-                      <MenuItem key={iconName} value={iconName}>
-                        <Stack direction="row" spacing={1} alignItems="center">
-                          <IconComponent fontSize="small" />
-                          <Typography variant="body2">{iconName}</Typography>
-                        </Stack>
-                      </MenuItem>
-                    );
-                  })}
-                </TextField>
-                {editingCategory.kind === 'expense' ? (
-                  <>
-                    <TextField
-                      select
-                      label="Reimbursement Mode"
-                      value={editingDraft.reimbursementMode}
-                      onChange={(event) => {
-                        const nextMode = event.target
-                          .value as CategoryEditDraft['reimbursementMode'];
-                        setDraft(editingCategory.id, {
-                          reimbursementMode: nextMode,
-                          ...(nextMode === 'none'
-                            ? {
-                                defaultCounterpartyType: null,
-                                defaultRecoveryWindowDaysText: '',
-                              }
-                            : {}),
-                        });
-                      }}
-                      size="small"
-                    >
-                      <MenuItem value="none">None</MenuItem>
-                      <MenuItem value="optional">Optional</MenuItem>
-                      <MenuItem value="always">Always</MenuItem>
-                    </TextField>
-                    {editingDraft.reimbursementMode !== 'none' ? (
-                      <>
-                        <TextField
-                          select
-                          label="Default Counterparty"
-                          value={editingDraft.defaultCounterpartyType ?? '__none'}
-                          onChange={(event) =>
-                            setDraft(editingCategory.id, {
-                              defaultCounterpartyType:
-                                event.target.value === '__none'
-                                  ? null
-                                  : (event.target
-                                      .value as CategoryEditDraft['defaultCounterpartyType']),
-                            })
-                          }
-                          size="small"
-                        >
-                          <MenuItem value="__none">None</MenuItem>
-                          <MenuItem value="self">Self</MenuItem>
-                          <MenuItem value="partner">Partner</MenuItem>
-                          <MenuItem value="team">Team</MenuItem>
-                          <MenuItem value="other">Other</MenuItem>
-                        </TextField>
-                        <TextField
-                          label="Default Recovery Window (days)"
-                          type="number"
-                          size="small"
-                          value={editingDraft.defaultRecoveryWindowDaysText}
-                          onChange={(event) =>
-                            setDraft(editingCategory.id, {
-                              defaultRecoveryWindowDaysText: event.target.value,
-                            })
-                          }
-                          inputProps={{ min: 0 }}
-                        />
-                      </>
-                    ) : null}
-                  </>
-                ) : null}
-                {rowErrorById[editingCategory.id] ? (
-                  <Alert severity="error">{rowErrorById[editingCategory.id]}</Alert>
-                ) : null}
-              </Stack>
-            </DialogContent>
-            <DialogActions sx={{ px: 3, pb: 2 }}>
-              <Button onClick={() => cancelEdit(editingCategory.id)}>Cancel</Button>
-              <Button
-                variant="contained"
-                onClick={() => void handleSaveCategory(editingCategory)}
-                disabled={updateCategory.isPending || editingDraft.name.trim().length === 0}
-              >
-                Save
-              </Button>
-            </DialogActions>
-          </>
-        ) : null}
-      </Dialog>
+      />
+
+      <EditCategoryDialog
+        open={Boolean(editingCategory && editingDraft)}
+        category={editingCategory}
+        draft={editingDraft}
+        iconOptions={CATEGORY_ICON_OPTIONS}
+        iconComponents={CATEGORY_ICON_COMPONENTS}
+        errorMessage={editingCategory ? (rowErrorById[editingCategory.id] ?? null) : null}
+        isSubmitting={updateCategory.isPending}
+        isMobile={isMobile}
+        onClose={() => {
+          if (!editingCategory) return;
+          cancelEdit(editingCategory.id);
+        }}
+        onSave={() => {
+          if (!editingCategory) return;
+          void handleSaveCategory(editingCategory);
+        }}
+        onChangeDraft={(patch) => {
+          if (!editingCategory) return;
+          setDraft(editingCategory.id, patch);
+        }}
+      />
     </Stack>
   );
 };

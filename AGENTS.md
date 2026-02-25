@@ -151,7 +151,7 @@ Failure:
 - PWA Home `Add Transaction` is a single manual entry flow for `income|expense|transfer`; transfer entries require direction and support transfer subtype (`internal|external`) via semantic `kind`, and reimbursable expense categories can capture `Track reimbursement` + `My share`.
 - PWA Home pending commitments support a quick `Mark paid` action that creates a linked actual transaction (`source='commitment'`) and updates the ledger.
 - PWA Expenses page now surfaces semantic/reimbursement chips (`Internal transfer`, `External transfer`, `Reimbursable`, `Partial`, `Settled`, `Written off`) and basic reimbursement actions (`Link repayment`, `Mark written off`, `Reopen`).
-- PWA Categories page supports inline category rename/edit (including reimbursement settings on expense categories) and reimbursement auto-match rule management for expense categories.
+- PWA Categories page supports inline category rename/edit (including reimbursement settings on expense categories), and opens reimbursement auto-match rule management for expense categories in a dialog.
 - Ledger v2 development rollout requires a fresh local DB reset (no backfill); reset `DB_PATH` (default `~/.tithe/tithe.db`) before running v2 migrations/commands.
 - PWA large pages should use thin route entrypoints in `apps/pwa/src/pages` and feature-scoped UI/data modules under `apps/pwa/src/features/<feature>`; shared domain-neutral helpers belong in `apps/pwa/src/lib`.
 - PWA Home dashboard widgets (ledger, Monzo, commitments) should manage loading/error states independently to avoid page-wide blocking when one widget fails.
