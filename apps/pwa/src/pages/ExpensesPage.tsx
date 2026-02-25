@@ -123,28 +123,33 @@ const reimbursementChipLabel = (status?: string): string | null => {
   return null;
 };
 
+const isInflowExpense = (expense: {
+  kind?: string;
+  transferDirection?: 'in' | 'out' | null;
+}): boolean => {
+  if (expense.kind === 'income') return true;
+  if (expense.kind === 'transfer_external' || expense.kind === 'transfer_internal') {
+    return expense.transferDirection === 'in';
+  }
+  return false;
+};
+
 const expenseAmountPresentation = (expense: {
   kind?: string;
   transferDirection?: 'in' | 'out' | null;
   money: { amountMinor: number; currency: string };
 }): { text: string; color: string } => {
   const base = pounds(expense.money.amountMinor, expense.money.currency);
-  const isInflow =
-    expense.kind === 'income' ||
-    expense.kind === 'transfer_external' ||
-    expense.kind === 'transfer_internal'
-      ? expense.transferDirection === 'in' || expense.kind === 'income'
-      : false;
 
-  if (isInflow) {
-    return { text: `+${base}`, color: '#2E7D32' };
+  if (isInflowExpense(expense)) {
+    return { text: `+${base}`, color: 'success.main' };
   }
 
   if (expense.kind === 'transfer_internal') {
-    return { text: base, color: '#5F6368' };
+    return { text: base, color: 'text.secondary' };
   }
 
-  return { text: base, color: '#111827' };
+  return { text: base, color: 'text.primary' };
 };
 
 export const ExpensesPage = () => {
@@ -199,6 +204,24 @@ export const ExpensesPage = () => {
       api.reimbursements.link({
         ...payload,
         idempotencyKey: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`,
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['expenses'] }),
+        queryClient.invalidateQueries({ queryKey: ['report', 'monthlyLedger'] }),
+      ]);
+    },
+  });
+
+  const closeReimbursement = useMutation({
+    mutationFn: (payload: {
+      expenseOutId: string;
+      closeOutstandingMinor?: number;
+      reason?: string | null;
+    }) =>
+      api.reimbursements.close(payload.expenseOutId, {
+        closeOutstandingMinor: payload.closeOutstandingMinor,
+        reason: payload.reason ?? undefined,
       }),
     onSuccess: async () => {
       await Promise.all([
@@ -292,16 +315,14 @@ export const ExpensesPage = () => {
                 </Typography>
                 <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
                   {pounds(
-                    items.reduce((sum, expense) => {
-                      const isInflow =
-                        expense.kind === 'income' ||
-                        ((expense.kind === 'transfer_external' ||
-                          expense.kind === 'transfer_internal') &&
-                          expense.transferDirection === 'in');
-                      return (
-                        sum + (isInflow ? expense.money.amountMinor : -expense.money.amountMinor)
-                      );
-                    }, 0),
+                    items.reduce(
+                      (sum, expense) =>
+                        sum +
+                        (isInflowExpense(expense)
+                          ? expense.money.amountMinor
+                          : -expense.money.amountMinor),
+                      0,
+                    ),
                     'GBP',
                   )}
                 </Typography>
@@ -346,6 +367,22 @@ export const ExpensesPage = () => {
                     });
                   };
 
+                  const handleCloseRemainder = () => {
+                    const amountText = window.prompt(
+                      'Write-off outstanding amount (GBP)',
+                      (outstandingMinor / 100).toFixed(2),
+                    );
+                    if (!amountText) return;
+                    const parsed = Number(amountText);
+                    if (!Number.isFinite(parsed) || parsed < 0) return;
+                    const reason = window.prompt('Reason (optional)') ?? undefined;
+                    closeReimbursement.mutate({
+                      expenseOutId: expense.id,
+                      closeOutstandingMinor: Math.round(parsed * 100),
+                      reason,
+                    });
+                  };
+
                   return (
                     <ListItem
                       key={expense.id}
@@ -370,15 +407,26 @@ export const ExpensesPage = () => {
                           {subtitle}
                         </Typography>
                         {canShowReimbursement && outstandingMinor > 0 ? (
-                          <Button
-                            size="small"
-                            variant="text"
-                            onClick={handleLinkRepayment}
-                            disabled={linkReimbursement.isPending}
-                            sx={{ mt: 0.1, minHeight: 22, px: 0 }}
-                          >
-                            Link repayment
-                          </Button>
+                          <Stack direction="row" spacing={0.75} sx={{ mt: 0.25 }}>
+                            <Button
+                              size="small"
+                              variant="text"
+                              onClick={handleLinkRepayment}
+                              disabled={linkReimbursement.isPending}
+                              sx={{ minHeight: 36, px: 0.5 }}
+                            >
+                              Link repayment
+                            </Button>
+                            <Button
+                              size="small"
+                              variant="text"
+                              onClick={handleCloseRemainder}
+                              disabled={closeReimbursement.isPending}
+                              sx={{ minHeight: 36, px: 0.5 }}
+                            >
+                              Mark written off
+                            </Button>
+                          </Stack>
                         ) : null}
                         {canShowReimbursement &&
                         outstandingMinor === 0 &&
@@ -388,7 +436,7 @@ export const ExpensesPage = () => {
                             variant="text"
                             onClick={() => reopenReimbursement.mutate(expense.id)}
                             disabled={reopenReimbursement.isPending}
-                            sx={{ mt: 0.1, minHeight: 22, px: 0 }}
+                            sx={{ mt: 0.25, minHeight: 36, px: 0.5 }}
                           >
                             Reopen
                           </Button>
