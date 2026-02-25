@@ -14,14 +14,7 @@ import {
 import type { ElementType } from 'react';
 
 import type { Category } from '../../../types.js';
-
-export interface CategoryEditDraft {
-  name: string;
-  icon: string;
-  reimbursementMode: 'none' | 'optional' | 'always';
-  defaultCounterpartyType: 'self' | 'partner' | 'team' | 'other' | null;
-  defaultRecoveryWindowDaysText: string;
-}
+import type { CategoryEditDraft } from '../types.js';
 
 interface EditCategoryDialogProps {
   open: boolean;
@@ -31,7 +24,6 @@ interface EditCategoryDialogProps {
   iconComponents: Record<string, ElementType>;
   errorMessage: string | null;
   isSubmitting: boolean;
-  isMobile: boolean;
   onClose: () => void;
   onSave: () => void;
   onChangeDraft: (patch: Partial<CategoryEditDraft>) => void;
@@ -45,12 +37,11 @@ export const EditCategoryDialog = ({
   iconComponents,
   errorMessage,
   isSubmitting,
-  isMobile,
   onClose,
   onSave,
   onChangeDraft,
 }: EditCategoryDialogProps) => (
-  <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" fullScreen={isMobile}>
+  <Dialog open={open} onClose={onClose} fullWidth>
     {category && draft ? (
       <>
         <DialogTitle>Edit category</DialogTitle>

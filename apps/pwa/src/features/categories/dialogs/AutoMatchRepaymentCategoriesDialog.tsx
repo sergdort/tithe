@@ -12,9 +12,7 @@ import {
 } from '@mui/material';
 
 import type { Category } from '../../../types.js';
-
-const normalizeCategoryLabel = (name: string): string =>
-  name.startsWith('Monzo: ') ? name.slice('Monzo: '.length) : name;
+import { normalizeCategoryLabel } from '../utils.js';
 
 interface AutoMatchRepaymentCategoriesDialogProps {
   open: boolean;
@@ -23,7 +21,6 @@ interface AutoMatchRepaymentCategoriesDialogProps {
   linkedInboundIds: Set<string>;
   errorMessage: string | null;
   isBusy: boolean;
-  isMobile: boolean;
   onClose: () => void;
   onToggleRule: (inboundCategoryId: string, enabled: boolean) => void;
 }
@@ -35,11 +32,10 @@ export const AutoMatchRepaymentCategoriesDialog = ({
   linkedInboundIds,
   errorMessage,
   isBusy,
-  isMobile,
   onClose,
   onToggleRule,
 }: AutoMatchRepaymentCategoriesDialogProps) => (
-  <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" fullScreen={isMobile}>
+  <Dialog open={open} onClose={onClose} fullWidth>
     {expenseCategory ? (
       <>
         <DialogTitle>Auto-match repayment categories</DialogTitle>
