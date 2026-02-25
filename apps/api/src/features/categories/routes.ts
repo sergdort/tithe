@@ -86,19 +86,19 @@ export const registerCategoryRoutes = (app: FastifyInstance): void => {
             color: { type: 'string' },
             reimbursementMode: { type: 'string', enum: ['none', 'optional', 'always'] },
             defaultCounterpartyType: {
-              oneOf: [
+              anyOf: [
                 { type: 'string', enum: ['self', 'partner', 'team', 'other'] },
                 { type: 'null' },
               ],
             },
             defaultRecoveryWindowDays: {
-              oneOf: [{ type: 'integer', minimum: 0 }, { type: 'null' }],
+              anyOf: [{ type: 'integer', minimum: 0 }, { type: 'null' }],
             },
             defaultMyShareMode: {
-              oneOf: [{ type: 'string', enum: ['fixed', 'percent'] }, { type: 'null' }],
+              anyOf: [{ type: 'string', enum: ['fixed', 'percent'] }, { type: 'null' }],
             },
             defaultMyShareValue: {
-              oneOf: [{ type: 'integer', minimum: 0 }, { type: 'null' }],
+              anyOf: [{ type: 'integer', minimum: 0 }, { type: 'null' }],
             },
           },
         },
@@ -134,19 +134,19 @@ export const registerCategoryRoutes = (app: FastifyInstance): void => {
             },
             reimbursementMode: { type: 'string', enum: ['none', 'optional', 'always'] },
             defaultCounterpartyType: {
-              oneOf: [
+              anyOf: [
                 { type: 'string', enum: ['self', 'partner', 'team', 'other'] },
                 { type: 'null' },
               ],
             },
             defaultRecoveryWindowDays: {
-              oneOf: [{ type: 'integer', minimum: 0 }, { type: 'null' }],
+              anyOf: [{ type: 'integer', minimum: 0 }, { type: 'null' }],
             },
             defaultMyShareMode: {
-              oneOf: [{ type: 'string', enum: ['fixed', 'percent'] }, { type: 'null' }],
+              anyOf: [{ type: 'string', enum: ['fixed', 'percent'] }, { type: 'null' }],
             },
             defaultMyShareValue: {
-              oneOf: [{ type: 'integer', minimum: 0 }, { type: 'null' }],
+              anyOf: [{ type: 'integer', minimum: 0 }, { type: 'null' }],
             },
           },
         },

@@ -72,6 +72,7 @@ export const api = {
       id: string,
       body: {
         name?: string;
+        icon?: string;
         reimbursementMode?: 'none' | 'optional' | 'always';
         defaultCounterpartyType?: 'self' | 'partner' | 'team' | 'other' | null;
         defaultRecoveryWindowDays?: number | null;

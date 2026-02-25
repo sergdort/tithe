@@ -1,6 +1,33 @@
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import AddIcon from '@mui/icons-material/Add';
+import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import CelebrationIcon from '@mui/icons-material/Celebration';
+import CategoryIcon from '@mui/icons-material/Category';
+import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
 import EditIcon from '@mui/icons-material/Edit';
+import FavoriteIcon from '@mui/icons-material/Favorite';
+import FlightIcon from '@mui/icons-material/Flight';
+import HomeIcon from '@mui/icons-material/Home';
+import HouseIcon from '@mui/icons-material/House';
 import LinkIcon from '@mui/icons-material/Link';
+import LocalCafeIcon from '@mui/icons-material/LocalCafe';
+import MedicalServicesIcon from '@mui/icons-material/MedicalServices';
+import MovieIcon from '@mui/icons-material/Movie';
+import MusicNoteIcon from '@mui/icons-material/MusicNote';
+import PaymentsIcon from '@mui/icons-material/Payments';
+import PetsIcon from '@mui/icons-material/Pets';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import RestaurantIcon from '@mui/icons-material/Restaurant';
+import SavingsIcon from '@mui/icons-material/Savings';
+import SchoolIcon from '@mui/icons-material/School';
+import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
+import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
+import SportsEsportsIcon from '@mui/icons-material/SportsEsports';
+import SportsSoccerIcon from '@mui/icons-material/SportsSoccer';
+import TheatersIcon from '@mui/icons-material/Theaters';
+import TrainIcon from '@mui/icons-material/Train';
+import TvIcon from '@mui/icons-material/Tv';
+import WorkIcon from '@mui/icons-material/Work';
 import {
   Alert,
   Box,
@@ -29,6 +56,7 @@ import {
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { ElementType } from 'react';
 import { useMemo, useState } from 'react';
 
 import { api } from '../api.js';
@@ -41,13 +69,75 @@ const isMonzoPlaceholderCategoryName = (name: string): boolean => /^Category [a-
 
 interface CategoryEditDraft {
   name: string;
+  icon: string;
   reimbursementMode: 'none' | 'optional' | 'always';
   defaultCounterpartyType: 'self' | 'partner' | 'team' | 'other' | null;
   defaultRecoveryWindowDaysText: string;
 }
 
+const CATEGORY_ICON_OPTIONS = [
+  'savings',
+  'home',
+  'house',
+  'payments',
+  'account_balance',
+  'shopping_bag',
+  'shopping_cart',
+  'restaurant',
+  'local_cafe',
+  'sports_soccer',
+  'sports_esports',
+  'movie',
+  'theaters',
+  'music_note',
+  'tv',
+  'directions_car',
+  'train',
+  'flight',
+  'medical_services',
+  'school',
+  'work',
+  'pets',
+  'celebration',
+  'favorite',
+  'receipt_long',
+  'attach_money',
+  'category',
+] as const;
+
+const CATEGORY_ICON_COMPONENTS: Record<string, ElementType> = {
+  savings: SavingsIcon,
+  home: HomeIcon,
+  house: HouseIcon,
+  payments: PaymentsIcon,
+  account_balance: AccountBalanceIcon,
+  shopping_bag: ShoppingBagIcon,
+  shopping_cart: ShoppingCartIcon,
+  restaurant: RestaurantIcon,
+  local_cafe: LocalCafeIcon,
+  sports_soccer: SportsSoccerIcon,
+  sports_esports: SportsEsportsIcon,
+  movie: MovieIcon,
+  theaters: TheatersIcon,
+  music_note: MusicNoteIcon,
+  tv: TvIcon,
+  directions_car: DirectionsCarIcon,
+  train: TrainIcon,
+  flight: FlightIcon,
+  medical_services: MedicalServicesIcon,
+  school: SchoolIcon,
+  work: WorkIcon,
+  pets: PetsIcon,
+  celebration: CelebrationIcon,
+  favorite: FavoriteIcon,
+  receipt_long: ReceiptLongIcon,
+  attach_money: AttachMoneyIcon,
+  category: CategoryIcon,
+};
+
 const buildDraftFromCategory = (category: Category): CategoryEditDraft => ({
   name: category.name,
+  icon: category.icon,
   reimbursementMode: category.reimbursementMode ?? 'none',
   defaultCounterpartyType: category.defaultCounterpartyType ?? null,
   defaultRecoveryWindowDaysText:
@@ -74,6 +164,7 @@ export const CategoriesPage = () => {
   const [name, setName] = useState('');
   const [kind, setKind] = useState<'expense' | 'income' | 'transfer'>('expense');
   const [reimbursementMode, setReimbursementMode] = useState<'none' | 'optional' | 'always'>('none');
+  const [icon, setIcon] = useState<string>('savings');
 
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [draftsById, setDraftsById] = useState<Record<string, CategoryEditDraft>>({});
@@ -94,10 +185,11 @@ export const CategoriesPage = () => {
   });
 
   const createCategory = useMutation({
-    mutationFn: () => api.categories.create({ name, kind, reimbursementMode }),
+    mutationFn: () => api.categories.create({ name, kind, icon, reimbursementMode }),
     onSuccess: async () => {
       setName('');
       setReimbursementMode('none');
+      setIcon('savings');
       await queryClient.invalidateQueries({ queryKey: ['categories'] });
     },
   });
@@ -107,11 +199,13 @@ export const CategoriesPage = () => {
       const { category, draft } = input;
       const patch: {
         name?: string;
+        icon?: string;
         reimbursementMode?: 'none' | 'optional' | 'always';
         defaultCounterpartyType?: 'self' | 'partner' | 'team' | 'other' | null;
         defaultRecoveryWindowDays?: number | null;
       } = {
         name: draft.name.trim(),
+        icon: draft.icon,
       };
 
       if (category.kind === 'expense') {
@@ -208,6 +302,7 @@ export const CategoriesPage = () => {
       [categoryId]: {
         ...(prev[categoryId] ?? {
           name: '',
+          icon: 'savings',
           reimbursementMode: 'none',
           defaultCounterpartyType: null,
           defaultRecoveryWindowDaysText: '',
@@ -270,6 +365,19 @@ export const CategoriesPage = () => {
               <MenuItem value="income">Income</MenuItem>
               <MenuItem value="transfer">Transfer</MenuItem>
             </TextField>
+            <TextField select label="Icon" value={icon} onChange={(event) => setIcon(event.target.value)}>
+              {CATEGORY_ICON_OPTIONS.map((iconName) => {
+                const IconComponent = CATEGORY_ICON_COMPONENTS[iconName] ?? CategoryIcon;
+                return (
+                  <MenuItem key={iconName} value={iconName}>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <IconComponent fontSize="small" />
+                      <Typography variant="body2">{iconName}</Typography>
+                    </Stack>
+                  </MenuItem>
+                );
+              })}
+            </TextField>
             {kind === 'expense' ? (
               <TextField
                 select
@@ -308,6 +416,7 @@ export const CategoriesPage = () => {
               const linkedInboundIds = new Set(expenseRules.map((rule) => rule.inboundCategoryId));
               const showRulesEditor = rulesOpenCategoryId === category.id && category.kind === 'expense';
               const isPlaceholder = isMonzoPlaceholderCategoryName(category.name);
+              const CategoryRowIcon = CATEGORY_ICON_COMPONENTS[category.icon || 'category'] ?? CategoryIcon;
 
               return (
                 <Box key={category.id} sx={{ mb: 1.5 }}>
@@ -315,6 +424,7 @@ export const CategoriesPage = () => {
                     <ListItemText
                       primary={
                         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                          <CategoryRowIcon fontSize="small" color="action" />
                           <Typography variant="body1">{normalizeCategoryLabel(category.name)}</Typography>
                           {isPlaceholder ? <Chip size="small" color="warning" label="Monzo placeholder" /> : null}
                           {category.kind === 'expense' ? (
@@ -426,55 +536,85 @@ export const CategoriesPage = () => {
                   size="small"
                   autoFocus
                 />
+                <TextField
+                  select
+                  label="Icon"
+                  value={editingDraft.icon}
+                  onChange={(event) => setDraft(editingCategory.id, { icon: event.target.value })}
+                  size="small"
+                >
+                  {CATEGORY_ICON_OPTIONS.map((iconName) => {
+                    const IconComponent = CATEGORY_ICON_COMPONENTS[iconName] ?? CategoryIcon;
+                    return (
+                      <MenuItem key={iconName} value={iconName}>
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <IconComponent fontSize="small" />
+                          <Typography variant="body2">{iconName}</Typography>
+                        </Stack>
+                      </MenuItem>
+                    );
+                  })}
+                </TextField>
                 {editingCategory.kind === 'expense' ? (
                   <>
                     <TextField
                       select
                       label="Reimbursement Mode"
                       value={editingDraft.reimbursementMode}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        const nextMode = event.target.value as CategoryEditDraft['reimbursementMode'];
                         setDraft(editingCategory.id, {
-                          reimbursementMode: event.target.value as CategoryEditDraft['reimbursementMode'],
-                        })
-                      }
+                          reimbursementMode: nextMode,
+                          ...(nextMode === 'none'
+                            ? {
+                                defaultCounterpartyType: null,
+                                defaultRecoveryWindowDaysText: '',
+                              }
+                            : {}),
+                        });
+                      }}
                       size="small"
                     >
                       <MenuItem value="none">None</MenuItem>
                       <MenuItem value="optional">Optional</MenuItem>
                       <MenuItem value="always">Always</MenuItem>
                     </TextField>
-                    <TextField
-                      select
-                      label="Default Counterparty"
-                      value={editingDraft.defaultCounterpartyType ?? '__none'}
-                      onChange={(event) =>
-                        setDraft(editingCategory.id, {
-                          defaultCounterpartyType:
-                            event.target.value === '__none'
-                              ? null
-                              : (event.target.value as CategoryEditDraft['defaultCounterpartyType']),
-                        })
-                      }
-                      size="small"
-                    >
-                      <MenuItem value="__none">None</MenuItem>
-                      <MenuItem value="self">Self</MenuItem>
-                      <MenuItem value="partner">Partner</MenuItem>
-                      <MenuItem value="team">Team</MenuItem>
-                      <MenuItem value="other">Other</MenuItem>
-                    </TextField>
-                    <TextField
-                      label="Default Recovery Window (days)"
-                      type="number"
-                      size="small"
-                      value={editingDraft.defaultRecoveryWindowDaysText}
-                      onChange={(event) =>
-                        setDraft(editingCategory.id, {
-                          defaultRecoveryWindowDaysText: event.target.value,
-                        })
-                      }
-                      inputProps={{ min: 0 }}
-                    />
+                    {editingDraft.reimbursementMode !== 'none' ? (
+                      <>
+                        <TextField
+                          select
+                          label="Default Counterparty"
+                          value={editingDraft.defaultCounterpartyType ?? '__none'}
+                          onChange={(event) =>
+                            setDraft(editingCategory.id, {
+                              defaultCounterpartyType:
+                                event.target.value === '__none'
+                                  ? null
+                                  : (event.target.value as CategoryEditDraft['defaultCounterpartyType']),
+                            })
+                          }
+                          size="small"
+                        >
+                          <MenuItem value="__none">None</MenuItem>
+                          <MenuItem value="self">Self</MenuItem>
+                          <MenuItem value="partner">Partner</MenuItem>
+                          <MenuItem value="team">Team</MenuItem>
+                          <MenuItem value="other">Other</MenuItem>
+                        </TextField>
+                        <TextField
+                          label="Default Recovery Window (days)"
+                          type="number"
+                          size="small"
+                          value={editingDraft.defaultRecoveryWindowDaysText}
+                          onChange={(event) =>
+                            setDraft(editingCategory.id, {
+                              defaultRecoveryWindowDaysText: event.target.value,
+                            })
+                          }
+                          inputProps={{ min: 0 }}
+                        />
+                      </>
+                    ) : null}
                   </>
                 ) : null}
                 {rowErrorById[editingCategory.id] ? (
