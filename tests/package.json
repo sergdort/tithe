@@ -20,6 +20,7 @@
   "devDependencies": {
     "@playwright/test": "^1.50.1",
     "@types/supertest": "^6.0.3",
+    "fastify": "^5.2.1",
     "vitest": "^3.0.8"
   }
 }
