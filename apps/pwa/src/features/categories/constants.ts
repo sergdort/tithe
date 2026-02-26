@@ -68,6 +68,8 @@ import TwoWheelerIcon from '@mui/icons-material/TwoWheeler';
 import WorkIcon from '@mui/icons-material/Work';
 import type { ElementType } from 'react';
 
+export const DEFAULT_CATEGORY_COLOR = '#2E7D32';
+
 export interface CategoryIconOption {
   name: string;
   label: string;
@@ -75,6 +77,7 @@ export interface CategoryIconOption {
     | 'bills/finance'
     | 'transport'
     | 'food'
+    | 'shopping'
     | 'subscriptions'
     | 'health'
     | 'work'
@@ -194,13 +197,8 @@ export const CATEGORY_ICON_OPTIONS: readonly CategoryIconOption[] = [
   { name: 'hiking', label: 'Outdoor', group: 'travel', keywords: ['nature'] },
   { name: 'camera_alt', label: 'Photography', group: 'travel', keywords: ['camera'] },
 
-  { name: 'shopping_bag', label: 'Shopping bag', group: 'subscriptions', keywords: ['shopping'] },
-  {
-    name: 'shopping_cart',
-    label: 'Shopping cart',
-    group: 'subscriptions',
-    keywords: ['groceries'],
-  },
+  { name: 'shopping_bag', label: 'Shopping bag', group: 'shopping', keywords: ['shopping'] },
+  { name: 'shopping_cart', label: 'Shopping cart', group: 'shopping', keywords: ['groceries'] },
   { name: 'category', label: 'Generic category', group: 'bills/finance', keywords: ['default'] },
 ] as const;
 

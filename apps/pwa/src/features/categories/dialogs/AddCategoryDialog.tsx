@@ -23,6 +23,7 @@ import {
   CATEGORY_ICON_COMPONENTS,
   CATEGORY_ICON_OPTIONS,
   type CategoryIconOption,
+  DEFAULT_CATEGORY_COLOR,
 } from '../constants.js';
 import { useCreateCategoryMutation } from '../hooks/useCategoriesMutations.js';
 import type { CategoryKind } from '../types.js';
@@ -44,7 +45,7 @@ export const AddCategoryDialog = ({ open, onClose }: AddCategoryDialogProps) => 
     'none',
   );
   const [icon, setIcon] = useState<string>('savings');
-  const [color, setColor] = useState<string>('#2E7D32');
+  const [color, setColor] = useState<string>(DEFAULT_CATEGORY_COLOR);
   const [defaultCounterpartyType, setDefaultCounterpartyType] = useState<
     'self' | 'partner' | 'team' | 'other' | null
   >(null);
@@ -56,7 +57,7 @@ export const AddCategoryDialog = ({ open, onClose }: AddCategoryDialogProps) => 
     setKind('expense');
     setReimbursementMode('none');
     setIcon('savings');
-    setColor('#2E7D32');
+    setColor(DEFAULT_CATEGORY_COLOR);
     setDefaultCounterpartyType(null);
     setDefaultRecoveryWindowDaysText('');
     setSubmitError(null);
@@ -133,7 +134,7 @@ export const AddCategoryDialog = ({ open, onClose }: AddCategoryDialogProps) => 
             <MenuItem value="transfer">Transfer</MenuItem>
           </TextField>
           <Autocomplete<CategoryIconOption, false, false, false>
-            options={CATEGORY_ICON_OPTIONS as CategoryIconOption[]}
+            options={CATEGORY_ICON_OPTIONS}
             value={CATEGORY_ICON_OPTIONS.find((option) => option.name === icon) ?? null}
             onChange={(_event, option) => setIcon(option?.name ?? 'savings')}
             groupBy={(option) => option.group}
@@ -182,12 +183,16 @@ export const AddCategoryDialog = ({ open, onClose }: AddCategoryDialogProps) => 
                   key={option}
                   component="button"
                   type="button"
+                  aria-label={`Color ${option}`}
                   onClick={() => setColor(option)}
                   sx={{
                     width: 28,
                     height: 28,
                     borderRadius: '50%',
-                    border: color === option ? '2px solid #111827' : '1px solid #CFD8DC',
+                    border:
+                      color === option
+                        ? `2px solid ${theme.palette.grey[900]}`
+                        : `1px solid ${theme.palette.divider}`,
                     backgroundColor: option,
                     cursor: 'pointer',
                   }}
@@ -206,14 +211,12 @@ export const AddCategoryDialog = ({ open, onClose }: AddCategoryDialogProps) => 
               bgcolor: 'action.hover',
             }}
           >
-            {(() => {
-              const IconComponent = CATEGORY_ICON_COMPONENTS[icon] ?? CategoryIcon;
-              return (
-                <Avatar sx={{ width: 32, height: 32, bgcolor: `${color}22`, color }}>
-                  <IconComponent fontSize="small" />
-                </Avatar>
-              );
-            })()}
+            <Avatar sx={{ width: 32, height: 32, bgcolor: `${color}33`, color }}>
+              {(() => {
+                const PreviewIcon = CATEGORY_ICON_COMPONENTS[icon] ?? CategoryIcon;
+                return <PreviewIcon fontSize="small" />;
+              })()}
+            </Avatar>
             <Typography variant="body2" sx={{ fontWeight: 600 }}>
               {name.trim() || 'Category preview'}
             </Typography>

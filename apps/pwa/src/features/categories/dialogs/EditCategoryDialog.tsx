@@ -65,7 +65,7 @@ export const EditCategoryDialog = ({
                 autoFocus
               />
               <Autocomplete<CategoryIconOption, false, false, false>
-                options={iconOptions as CategoryIconOption[]}
+                options={iconOptions}
                 value={iconOptions.find((option) => option.name === draft.icon) ?? null}
                 onChange={(_event, option) => onChangeDraft({ icon: option?.name ?? 'savings' })}
                 groupBy={(option) => option.group}
@@ -115,12 +115,16 @@ export const EditCategoryDialog = ({
                       key={option}
                       component="button"
                       type="button"
+                      aria-label={`Color ${option}`}
                       onClick={() => onChangeDraft({ color: option })}
                       sx={{
                         width: 28,
                         height: 28,
                         borderRadius: '50%',
-                        border: draft.color === option ? '2px solid #111827' : '1px solid #CFD8DC',
+                        border:
+                          draft.color === option
+                            ? `2px solid ${theme.palette.grey[900]}`
+                            : `1px solid ${theme.palette.divider}`,
                         backgroundColor: option,
                         cursor: 'pointer',
                       }}
@@ -139,21 +143,19 @@ export const EditCategoryDialog = ({
                   bgcolor: 'action.hover',
                 }}
               >
-                {(() => {
-                  const IconComponent = iconComponents[draft.icon] ?? CategoryIcon;
-                  return (
-                    <Avatar
-                      sx={{
-                        width: 32,
-                        height: 32,
-                        bgcolor: `${draft.color}22`,
-                        color: draft.color,
-                      }}
-                    >
-                      <IconComponent fontSize="small" />
-                    </Avatar>
-                  );
-                })()}
+                <Avatar
+                  sx={{
+                    width: 32,
+                    height: 32,
+                    bgcolor: `${draft.color}33`,
+                    color: draft.color,
+                  }}
+                >
+                  {(() => {
+                    const PreviewIcon = iconComponents[draft.icon] ?? CategoryIcon;
+                    return <PreviewIcon fontSize="small" />;
+                  })()}
+                </Avatar>
                 <Typography variant="body2" sx={{ fontWeight: 600 }}>
                   {draft.name.trim() || 'Category preview'}
                 </Typography>
