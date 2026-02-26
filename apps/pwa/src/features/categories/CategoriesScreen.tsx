@@ -4,7 +4,11 @@ import { useMemo, useState } from 'react';
 
 import type { Category, ReimbursementCategoryRule } from '../../types.js';
 import { CategoriesListCard } from './components/CategoriesListCard.js';
-import { CATEGORY_ICON_COMPONENTS, CATEGORY_ICON_OPTIONS } from './constants.js';
+import {
+  CATEGORY_ICON_COMPONENTS,
+  CATEGORY_ICON_OPTIONS,
+  DEFAULT_CATEGORY_COLOR,
+} from './constants.js';
 import { AddCategoryDialog } from './dialogs/AddCategoryDialog.js';
 import { AutoMatchRepaymentCategoriesDialog } from './dialogs/AutoMatchRepaymentCategoriesDialog.js';
 import { EditCategoryDialog } from './dialogs/EditCategoryDialog.js';
@@ -100,6 +104,7 @@ export const CategoriesScreen = () => {
         ...(prev[categoryId] ?? {
           name: '',
           icon: 'savings',
+          color: DEFAULT_CATEGORY_COLOR,
           reimbursementMode: 'none',
           defaultCounterpartyType: null,
           defaultRecoveryWindowDaysText: '',
@@ -117,12 +122,14 @@ export const CategoriesScreen = () => {
       const patch: {
         name?: string;
         icon?: string;
+        color?: string;
         reimbursementMode?: 'none' | 'optional' | 'always';
         defaultCounterpartyType?: 'self' | 'partner' | 'team' | 'other' | null;
         defaultRecoveryWindowDays?: number | null;
       } = {
         name: draft.name.trim(),
         icon: draft.icon,
+        color: draft.color,
       };
 
       if (category.kind === 'expense') {

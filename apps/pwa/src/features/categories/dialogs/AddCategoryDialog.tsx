@@ -1,6 +1,9 @@
 import CategoryIcon from '@mui/icons-material/Category';
 import {
   Alert,
+  Autocomplete,
+  Avatar,
+  Box,
   Button,
   Dialog,
   DialogActions,
@@ -10,10 +13,18 @@ import {
   Stack,
   TextField,
   Typography,
+  useMediaQuery,
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import { useState } from 'react';
 
-import { CATEGORY_ICON_COMPONENTS, CATEGORY_ICON_OPTIONS } from '../constants.js';
+import {
+  CATEGORY_COLOR_OPTIONS,
+  CATEGORY_ICON_COMPONENTS,
+  CATEGORY_ICON_OPTIONS,
+  type CategoryIconOption,
+  DEFAULT_CATEGORY_COLOR,
+} from '../constants.js';
 import { useCreateCategoryMutation } from '../hooks/useCategoriesMutations.js';
 import type { CategoryKind } from '../types.js';
 import { getErrorMessage, parseNullableNonNegativeInt } from '../utils.js';
@@ -25,6 +36,8 @@ interface AddCategoryDialogProps {
 
 export const AddCategoryDialog = ({ open, onClose }: AddCategoryDialogProps) => {
   const createCategory = useCreateCategoryMutation();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const [name, setName] = useState('');
   const [kind, setKind] = useState<CategoryKind>('expense');
@@ -32,6 +45,7 @@ export const AddCategoryDialog = ({ open, onClose }: AddCategoryDialogProps) => 
     'none',
   );
   const [icon, setIcon] = useState<string>('savings');
+  const [color, setColor] = useState<string>(DEFAULT_CATEGORY_COLOR);
   const [defaultCounterpartyType, setDefaultCounterpartyType] = useState<
     'self' | 'partner' | 'team' | 'other' | null
   >(null);
@@ -43,6 +57,7 @@ export const AddCategoryDialog = ({ open, onClose }: AddCategoryDialogProps) => 
     setKind('expense');
     setReimbursementMode('none');
     setIcon('savings');
+    setColor(DEFAULT_CATEGORY_COLOR);
     setDefaultCounterpartyType(null);
     setDefaultRecoveryWindowDaysText('');
     setSubmitError(null);
@@ -62,6 +77,7 @@ export const AddCategoryDialog = ({ open, onClose }: AddCategoryDialogProps) => 
         name: name.trim(),
         kind,
         icon,
+        color,
         ...(kind === 'expense'
           ? {
               reimbursementMode,
@@ -117,24 +133,94 @@ export const AddCategoryDialog = ({ open, onClose }: AddCategoryDialogProps) => 
             <MenuItem value="income">Income</MenuItem>
             <MenuItem value="transfer">Transfer</MenuItem>
           </TextField>
-          <TextField
-            select
-            label="Icon"
-            value={icon}
-            onChange={(event) => setIcon(event.target.value)}
-          >
-            {CATEGORY_ICON_OPTIONS.map((iconName) => {
-              const IconComponent = CATEGORY_ICON_COMPONENTS[iconName] ?? CategoryIcon;
+          <Autocomplete<CategoryIconOption, false, false, false>
+            options={CATEGORY_ICON_OPTIONS}
+            value={CATEGORY_ICON_OPTIONS.find((option) => option.name === icon) ?? null}
+            onChange={(_event, option) => setIcon(option?.name ?? 'savings')}
+            groupBy={(option) => option.group}
+            getOptionLabel={(option) => option.label}
+            isOptionEqualToValue={(option, value) => option.name === value.name}
+            openOnFocus={!isMobile}
+            ListboxProps={{ style: { maxHeight: isMobile ? 260 : 360 } }}
+            filterOptions={(options, state) => {
+              const query = state.inputValue.trim().toLowerCase();
+              if (!query) return options;
+              return options.filter((option) =>
+                [option.label, option.name, ...(option.keywords ?? [])]
+                  .join(' ')
+                  .toLowerCase()
+                  .includes(query),
+              );
+            }}
+            renderOption={(props, option) => {
+              const IconComponent = CATEGORY_ICON_COMPONENTS[option.name] ?? CategoryIcon;
               return (
-                <MenuItem key={iconName} value={iconName}>
+                <li {...props} key={option.name}>
                   <Stack direction="row" spacing={1} alignItems="center">
                     <IconComponent fontSize="small" />
-                    <Typography variant="body2">{iconName}</Typography>
+                    <span>{option.label}</span>
                   </Stack>
-                </MenuItem>
+                </li>
               );
-            })}
-          </TextField>
+            }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Icon"
+                helperText={isMobile ? 'Tap to choose icon (keyboard disabled)' : undefined}
+                inputProps={{ ...params.inputProps, readOnly: isMobile }}
+              />
+            )}
+          />
+
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+              Color
+            </Typography>
+            <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 1 }}>
+              {CATEGORY_COLOR_OPTIONS.map((option) => (
+                <Box
+                  key={option}
+                  component="button"
+                  type="button"
+                  aria-label={`Color ${option}`}
+                  onClick={() => setColor(option)}
+                  sx={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: '50%',
+                    border:
+                      color === option
+                        ? `2px solid ${theme.palette.grey[900]}`
+                        : `1px solid ${theme.palette.divider}`,
+                    backgroundColor: option,
+                    cursor: 'pointer',
+                  }}
+                />
+              ))}
+            </Stack>
+          </Box>
+
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              p: 1,
+              borderRadius: 2,
+              bgcolor: 'action.hover',
+            }}
+          >
+            <Avatar sx={{ width: 32, height: 32, bgcolor: `${color}33`, color }}>
+              {(() => {
+                const PreviewIcon = CATEGORY_ICON_COMPONENTS[icon] ?? CategoryIcon;
+                return <PreviewIcon fontSize="small" />;
+              })()}
+            </Avatar>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+              {name.trim() || 'Category preview'}
+            </Typography>
+          </Box>
           {kind === 'expense' ? (
             <TextField
               select

@@ -10,6 +10,7 @@ export const isMonzoPlaceholderCategoryName = (name: string): boolean =>
 export const buildDraftFromCategory = (category: Category): CategoryEditDraft => ({
   name: category.name,
   icon: category.icon,
+  color: category.color,
   reimbursementMode: category.reimbursementMode ?? 'none',
   defaultCounterpartyType: category.defaultCounterpartyType ?? null,
   defaultRecoveryWindowDaysText:
