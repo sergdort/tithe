@@ -42,17 +42,31 @@ export const MobileShell = ({ title, children }: MobileShellProps) => {
       <AppBar
         elevation={0}
         position="sticky"
-        color="transparent"
-        sx={{ borderBottom: '1px solid #DCE8E0' }}
+        color="inherit"
+        sx={{
+          pt: 'env(safe-area-inset-top, 0px)',
+          bgcolor: 'background.paper',
+          borderBottom: '1px solid #DCE8E0',
+          zIndex: (theme) => theme.zIndex.appBar,
+        }}
       >
-        <Toolbar>
+        <Toolbar sx={{ minHeight: 56 }}>
           <Typography component="h1" variant="h6" sx={{ fontWeight: 700 }}>
             {title}
           </Typography>
         </Toolbar>
       </AppBar>
 
-      <Box component="main" sx={{ px: 2, pb: 12, pt: 2, maxWidth: 640, mx: 'auto' }}>
+      <Box
+        component="main"
+        sx={{
+          px: 2,
+          pb: 'calc(88px + env(safe-area-inset-bottom, 0px))',
+          pt: 1.5,
+          maxWidth: 640,
+          mx: 'auto',
+        }}
+      >
         {children}
       </Box>
 
@@ -63,6 +77,8 @@ export const MobileShell = ({ title, children }: MobileShellProps) => {
           bottom: 0,
           left: 0,
           right: 0,
+          zIndex: (theme) => theme.zIndex.appBar + 2,
+          pb: 'env(safe-area-inset-bottom, 0px)',
           borderTopLeftRadius: 18,
           borderTopRightRadius: 18,
           overflow: 'hidden',
