@@ -21,7 +21,7 @@ const makeCategory = (
   overrides: Partial<{
     id: string;
     kind: 'expense' | 'income' | 'transfer';
-    reimbursementMode: string;
+    reimbursementMode: 'none' | 'optional' | 'always';
   }> = {},
 ) => ({
   id: overrides.id ?? 'cat-1',
@@ -54,8 +54,8 @@ const makeExpense = (
   money: {
     amountMinor: overrides.amountMinor ?? 10000,
     currency: 'GBP',
-    amountBaseMinor: null,
-    fxRate: null,
+    amountBaseMinor: undefined,
+    fxRate: undefined,
   },
   myShareMinor: overrides.myShareMinor === undefined ? 2000 : overrides.myShareMinor,
   closedOutstandingMinor: overrides.closedOutstandingMinor ?? null,
