@@ -100,6 +100,7 @@ export const CategoriesScreen = () => {
         ...(prev[categoryId] ?? {
           name: '',
           icon: 'savings',
+          color: '#2E7D32',
           reimbursementMode: 'none',
           defaultCounterpartyType: null,
           defaultRecoveryWindowDaysText: '',
@@ -117,12 +118,14 @@ export const CategoriesScreen = () => {
       const patch: {
         name?: string;
         icon?: string;
+        color?: string;
         reimbursementMode?: 'none' | 'optional' | 'always';
         defaultCounterpartyType?: 'self' | 'partner' | 'team' | 'other' | null;
         defaultRecoveryWindowDays?: number | null;
       } = {
         name: draft.name.trim(),
         icon: draft.icon,
+        color: draft.color,
       };
 
       if (category.kind === 'expense') {
