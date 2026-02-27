@@ -8,7 +8,10 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -w -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "lint": "biome check src"
+    "lint": "biome check src",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@tithe/contracts": "workspace:*",
@@ -16,5 +19,9 @@
     "drizzle-orm": "^0.41.0",
     "rrule": "^2.8.1",
     "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^3.0.8",
+    "vitest": "^3.0.8"
   }
 }

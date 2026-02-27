@@ -24,3 +24,12 @@ jobs:
         run: pnpm typecheck
       - name: Test
         run: pnpm test
+      - name: Domain unit tests + coverage
+        run: pnpm --filter @tithe/domain test:coverage
+      - name: Upload domain coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: domain-coverage
+          path: packages/domain/coverage/
+          retention-days: 14
