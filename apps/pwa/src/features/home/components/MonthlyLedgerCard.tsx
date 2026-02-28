@@ -208,6 +208,9 @@ export const MonthlyLedgerCard = ({
         <Typography variant="caption" color="text.secondary">
           Monthly cashflow ledger (actual transactions only)
         </Typography>
+        <Typography variant="caption" color="text.secondary" display="block">
+          Pending Monzo card transactions are excluded from totals until settled.
+        </Typography>
 
         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 1.5 }}>
           <Typography variant="caption" color="text.secondary">

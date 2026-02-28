@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, lt, lte, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNotNull, lt, lte, ne, or, sql } from 'drizzle-orm';
 
 import {
   categories,
@@ -137,6 +137,7 @@ export class SqliteReportsRepository implements ReportsRepository {
   constructor(private readonly db: RepositoryDb) {}
 
   monthlyTrends({ months }: MonthlyTrendsInput): MonthlyTrendsOutput {
+    const settledOrNonMonzo = or(ne(expenses.source, 'monzo'), isNotNull(expenses.postedAt));
     const rows = this.db
       .select({
         month: sql<string>`substr(${expenses.occurredAt}, 1, 7)`,
@@ -145,7 +146,7 @@ export class SqliteReportsRepository implements ReportsRepository {
         txCount: sql<number>`COUNT(*)`,
       })
       .from(expenses)
-      .where(eq(expenses.kind, 'expense'))
+      .where(and(eq(expenses.kind, 'expense'), settledOrNonMonzo))
       .groupBy(sql`substr(${expenses.occurredAt}, 1, 7)`)
       .orderBy(sql`substr(${expenses.occurredAt}, 1, 7) DESC`)
       .limit(months)
@@ -162,6 +163,7 @@ export class SqliteReportsRepository implements ReportsRepository {
   }
 
   categoryBreakdown({ from, to }: CategoryBreakdownInput): CategoryBreakdownOutput {
+    const settledOrNonMonzo = or(ne(expenses.source, 'monzo'), isNotNull(expenses.postedAt));
     const filters = [];
     if (from) {
       filters.push(gte(expenses.occurredAt, from));
@@ -184,8 +186,8 @@ export class SqliteReportsRepository implements ReportsRepository {
 
     const rows =
       filters.length > 0
-        ? query.where(and(eq(expenses.kind, 'expense'), ...filters)).all()
-        : query.where(eq(expenses.kind, 'expense')).all();
+        ? query.where(and(eq(expenses.kind, 'expense'), settledOrNonMonzo, ...filters)).all()
+        : query.where(and(eq(expenses.kind, 'expense'), settledOrNonMonzo)).all();
 
     return {
       rows: rows.map((row) => ({
@@ -227,6 +229,7 @@ export class SqliteReportsRepository implements ReportsRepository {
   }
 
   monthlyLedger({ from, to }: MonthlyLedgerInput): MonthlyLedgerOutput {
+    const settledOrNonMonzo = or(ne(expenses.source, 'monzo'), isNotNull(expenses.postedAt));
     const rows = this.db
       .select({
         id: expenses.id,
@@ -241,7 +244,7 @@ export class SqliteReportsRepository implements ReportsRepository {
       })
       .from(expenses)
       .innerJoin(categories, eq(expenses.categoryId, categories.id))
-      .where(and(gte(expenses.occurredAt, from), lt(expenses.occurredAt, to)))
+      .where(and(gte(expenses.occurredAt, from), lt(expenses.occurredAt, to), settledOrNonMonzo))
       .all();
 
     const expenseIds = rows.map((row) => row.id);

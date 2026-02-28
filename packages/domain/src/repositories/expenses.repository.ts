@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, lte } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNull, lt, lte } from 'drizzle-orm';
 
 import { expenses } from '@tithe/db';
 
@@ -97,6 +97,15 @@ export interface ListExpensesInput {
 }
 
 export interface ListExpensesOutput {
+  expenses: ExpenseDto[];
+}
+
+export interface ListPendingMonzoExpensesInRangeInput {
+  from: string;
+  to: string;
+}
+
+export interface ListPendingMonzoExpensesInRangeOutput {
   expenses: ExpenseDto[];
 }
 
@@ -213,6 +222,9 @@ export interface UpdateExpenseReimbursementOutput {
 
 export interface ExpensesRepository {
   list(input: ListExpensesInput): ListExpensesOutput;
+  listPendingMonzoInRange: (
+    input: ListPendingMonzoExpensesInRangeInput,
+  ) => ListPendingMonzoExpensesInRangeOutput;
   findById(input: FindExpenseByIdInput): FindExpenseByIdOutput;
   findByIds(input: FindExpensesByIdsInput): FindExpensesByIdsOutput;
   findBySourceProviderTransactionId: (
@@ -244,6 +256,27 @@ export class SqliteExpensesRepository implements ExpensesRepository {
     const query = this.db.select().from(expenses).orderBy(desc(expenses.occurredAt)).limit(limit);
 
     const rows = whereExpr ? query.where(whereExpr).all() : query.all();
+
+    return { expenses: rows.map(mapExpense) };
+  }
+
+  listPendingMonzoInRange({
+    from,
+    to,
+  }: ListPendingMonzoExpensesInRangeInput): ListPendingMonzoExpensesInRangeOutput {
+    const rows = this.db
+      .select()
+      .from(expenses)
+      .where(
+        and(
+          eq(expenses.source, 'monzo'),
+          isNull(expenses.postedAt),
+          gte(expenses.occurredAt, from),
+          lt(expenses.occurredAt, to),
+        ),
+      )
+      .orderBy(desc(expenses.occurredAt))
+      .all();
 
     return { expenses: rows.map(mapExpense) };
   }

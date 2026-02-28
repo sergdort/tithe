@@ -129,8 +129,9 @@ Failure:
 - `tithe --json monzo connect` stores short-lived OAuth `state` and returns `authUrl`.
 - `GET /v1/integrations/monzo/connect/callback` requires query `code+state` or `error`.
 - Monzo OAuth callback stores/refreshes tokens only and does not auto-run sync; first import happens on manual `monzo sync` / PWA Monthly Ledger `Sync month`.
-- `tithe --json monzo sync` imports settled Monzo debits and credits (`amount != 0`, pending/zero skipped); optional `--month`/`--from --to` scopes the sync window and `--override` overwrites existing imported Monzo rows in that window.
+- `tithe --json monzo sync` imports Monzo debits and credits where `amount != 0`, including pending rows (`posted_at = null` until settlement); optional `--month`/`--from --to` scopes the sync window and `--override` overwrites existing imported Monzo rows in that window.
 - Monzo import dedupe key is `expenses.source='monzo' + expenses.provider_transaction_id=transaction.id`.
+- Monzo sync performs strict pending reconciliation within the active sync window: pending imported rows missing from the fetched Monzo transaction IDs are deleted, even if local note/reimbursement metadata exists on those rows.
 - Monzo month sync overwrite updates existing imported rows in place (same `id`/provider transaction id) and refreshes Monzo-derived fields including category, amount/date, kind, and merchant metadata while preserving local notes and local reimbursement fields.
 - Expense API responses include optional Monzo merchant display metadata (`merchantLogoUrl`, `merchantEmoji`) for UI avatar rendering.
 - Expense API responses include semantic `kind` (`expense|income|transfer_internal|transfer_external`) and reimbursement fields (`reimbursementStatus`, `myShareMinor`, `recoverableMinor`, `recoveredMinor`, `outstandingMinor`).
@@ -142,6 +143,7 @@ Failure:
 - Monzo category mappings are flow-aware (`in|out`) and auto-create categories named `Monzo: <Category>` with category kind inferred from flow (`expense` for debits, `income` for credits). Pot transfers use a dedicated transfer category (`Monzo Pot Transfers`).
 - Optional `MONZO_SCOPE` can be set when building Monzo auth URL; if unset, no explicit scope is requested.
 - `GET /v1/reports/monthly-ledger` returns a month-range ledger with legacy `income`/`expense`/`transfer` sections plus additive v2 `cashFlow`, `spending`, and `reimbursements` blocks and split `transferInternal`/`transferExternal` sections.
+- Reports (`trends`, `category-breakdown`, `monthly-ledger`) exclude pending Monzo rows (`source='monzo'` and `posted_at IS NULL`) from totals by default.
 - Reimbursement auto-match in v2 uses explicit category-link rules (`expense category -> income/transfer category`), not hidden grouping keys.
 - `reimbursement_group_id` may still exist on expense rows as a reserved/deferred field, but v2 auto-match does not use it.
 - PWA Home embeds a full monthly cashflow ledger (month navigation, income/expense/transfer totals, category breakdown lists) and replaces the previous spend-only snapshot card.
@@ -150,7 +152,7 @@ Failure:
 - PWA Home Monthly Ledger widget also surfaces v2 summary metrics (`Cash In`, `Cash Out`, `Net Flow`, `True Spend`, `Reimbursement Outstanding`) with `Gross/Net` and `Exclude internal transfers` toggles.
 - PWA Home `Add Transaction` is a single manual entry flow for `income|expense|transfer`; transfer entries require direction and support transfer subtype (`internal|external`) via semantic `kind`, and reimbursable expense categories can capture `Track reimbursement` + `My share`.
 - PWA Home pending commitments support a quick `Mark paid` action that creates a linked actual transaction (`source='commitment'`) and updates the ledger.
-- PWA Expenses page now surfaces semantic/reimbursement chips (`Internal transfer`, `External transfer`, `Reimbursable`, `Partial`, `Settled`, `Written off`) and basic reimbursement actions (`Link repayment`, `Mark written off`, `Reopen`).
+- PWA Expenses page now surfaces semantic/reimbursement chips (`Internal transfer`, `External transfer`, `Pending`, `Reimbursable`, `Partial`, `Settled`, `Written off`) and basic reimbursement actions (`Link repayment`, `Mark written off`, `Reopen`).
 - PWA Categories page uses a floating `+` action to open `Add Category`, and category add/edit dialogs can capture expense-category reimbursement settings/defaults while reimbursement auto-match rule management also runs in a dialog.
 - PWA short-form list-page dialogs (for example Expenses/Categories add/edit flows) should follow the Expenses pattern: MUI `Dialog` with `fullWidth` and no mobile `fullScreen`.
 - Ledger v2 development rollout requires a fresh local DB reset (no backfill); reset `DB_PATH` (default `~/.tithe/tithe.db`) before running v2 migrations/commands.

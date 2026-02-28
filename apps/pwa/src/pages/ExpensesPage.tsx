@@ -4,6 +4,7 @@ import {
   Avatar,
   Box,
   Button,
+  Chip,
   CircularProgress,
   Dialog,
   DialogActions,
@@ -340,6 +341,7 @@ export const ExpensesPage = () => {
                     expense.reimbursementStatus !== 'none';
                   const outstandingMinor = expense.outstandingMinor ?? 0;
                   const amountView = expenseAmountPresentation(expense);
+                  const isPendingMonzo = expense.source === 'monzo' && expense.postedAt === null;
 
                   const subtitle = canShowReimbursement
                     ? `${reimbursementLabel ?? 'Reimbursable'} · Outstanding ${pounds(
@@ -403,9 +405,30 @@ export const ExpensesPage = () => {
                         <Typography variant="body1" sx={{ fontWeight: 600 }} noWrap>
                           {merchant}
                         </Typography>
-                        <Typography variant="body2" color="text.secondary" noWrap>
-                          {subtitle}
-                        </Typography>
+                        <Stack
+                          direction="row"
+                          spacing={0.75}
+                          alignItems="center"
+                          sx={{ minWidth: 0 }}
+                        >
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            noWrap
+                            sx={{ flex: 1 }}
+                          >
+                            {subtitle}
+                          </Typography>
+                          {isPendingMonzo ? (
+                            <Chip
+                              size="small"
+                              variant="outlined"
+                              color="warning"
+                              label="Pending"
+                              sx={{ height: 20 }}
+                            />
+                          ) : null}
+                        </Stack>
                         {canShowReimbursement && outstandingMinor > 0 ? (
                           <Stack direction="row" spacing={0.75} sx={{ mt: 0.25 }}>
                             <Button

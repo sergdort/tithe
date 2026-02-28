@@ -10,7 +10,9 @@ test('home screen renders mobile navigation without horizontal overflow', async 
   expect(width).toBeLessThanOrEqual((viewport?.width ?? 0) + 1);
 });
 
-test('expenses list avatar prefers logo, then emoji, then initials', async ({ page }) => {
+test('expenses list avatar prefers logo, then emoji, then initials and shows pending badge', async ({
+  page,
+}) => {
   await page.route('**/v1/categories', async (route) => {
     await route.fulfill({
       status: 200,
@@ -61,7 +63,7 @@ test('expenses list avatar prefers logo, then emoji, then initials', async ({ pa
           {
             id: 'exp-emoji',
             occurredAt: '2026-02-05T09:00:00.000Z',
-            postedAt: '2026-02-05T10:00:00.000Z',
+            postedAt: null,
             money: { amountMinor: 510, currency: 'GBP' },
             categoryId: '11111111-1111-1111-1111-111111111111',
             source: 'monzo',
@@ -122,6 +124,7 @@ test('expenses list avatar prefers logo, then emoji, then initials', async ({ pa
     'emoji',
   );
   await expect(emojiRow.locator('[data-testid="expense-avatar-exp-emoji"]')).toContainText('🍞');
+  await expect(emojiRow.getByText('Pending')).toBeVisible();
 
   await expect(initialsRow.locator('[data-testid="expense-avatar-exp-initials"]')).toHaveAttribute(
     'data-avatar-kind',
@@ -317,6 +320,9 @@ test('home shows monthly ledger and transfer direction in add transaction flow',
   await page.goto('/');
 
   await expect(page.getByText('Monthly cashflow ledger (actual transactions only)')).toBeVisible();
+  await expect(
+    page.getByText('Pending Monzo card transactions are excluded from totals until settled.'),
+  ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sync month' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Sync now' })).toHaveCount(0);
   await expect(page.getByText('Operating Surplus')).toBeVisible();

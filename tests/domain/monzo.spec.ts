@@ -121,7 +121,7 @@ describe('Monzo integration domain service', () => {
     }
   });
 
-  it('imports settled debit transactions, skips others, dedupes, and reports status', async () => {
+  it('imports non-zero transactions (including pending), dedupes, and reports status', async () => {
     const { services, dir, dbPath } = setupService();
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
@@ -225,15 +225,18 @@ describe('Monzo integration domain service', () => {
       );
 
       const syncResult = await services.monzo.syncNow({ actor: 'test', channel: 'system' });
-      expect(syncResult.imported).toBe(2);
+      expect(syncResult.imported).toBe(3);
       expect(syncResult.updated).toBe(0);
-      expect(syncResult.skipped).toBe(1);
+      expect(syncResult.skipped).toBe(0);
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/pots'))).toBe(false);
 
       const expensesAfterResync = await services.expenses.list();
-      expect(expensesAfterResync.length).toBe(2);
+      expect(expensesAfterResync.length).toBe(3);
       const debit = expensesAfterResync.find(
         (item) => item.providerTransactionId === 'tx_debit_settled',
+      );
+      const pending = expensesAfterResync.find(
+        (item) => item.providerTransactionId === 'tx_pending',
       );
       const income = expensesAfterResync.find((item) => item.providerTransactionId === 'tx_income');
       expect(debit).toBeDefined();
@@ -243,6 +246,11 @@ describe('Monzo integration domain service', () => {
       expect(debit?.merchantName).toBe('Local Shop');
       expect(debit?.merchantLogoUrl).toBe('https://img.test/local-shop.png');
       expect(debit?.merchantEmoji).toBe('🛍️');
+      expect(pending).toBeDefined();
+      expect(pending?.postedAt).toBeNull();
+      expect(pending?.money.amountMinor).toBe(500);
+      expect(pending?.kind).toBe('expense');
+      expect(pending?.merchantName).toBe('Pending charge');
       expect(income?.kind).toBe('income');
       expect(income?.money.amountMinor).toBe(2200);
 
@@ -266,6 +274,266 @@ describe('Monzo integration domain service', () => {
       } finally {
         sqlite.close();
       }
+    } finally {
+      closeServices(services);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('updates an imported pending transaction in place when it later settles', async () => {
+    const { services, dir } = setupService();
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const started = await services.monzo.connectStart({ actor: 'test', channel: 'system' });
+      const state = new URL(started.authUrl).searchParams.get('state');
+      expect(state).toBeTruthy();
+
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({
+          access_token: 'token-1',
+          refresh_token: 'refresh-1',
+          expires_in: 3600,
+        }),
+      );
+
+      await services.monzo.callback(
+        {
+          code: 'auth-code',
+          state: state ?? undefined,
+        },
+        { actor: 'test', channel: 'system' },
+      );
+
+      fetchMock
+        .mockResolvedValueOnce(
+          jsonResponse({
+            accounts: [{ id: 'acc_main', closed: false }],
+          }),
+        )
+        .mockResolvedValueOnce(
+          jsonResponse({
+            transactions: [
+              {
+                id: 'tx_pending_to_settle',
+                account_id: 'acc_main',
+                amount: -900,
+                currency: 'GBP',
+                description: 'Cafe pending',
+                category: 'eating_out',
+                created: '2026-02-10T09:00:00.000Z',
+                settled: null,
+                merchant: null,
+              },
+            ],
+          }),
+        );
+
+      const firstSync = await services.monzo.syncNow({ actor: 'test', channel: 'system' });
+      expect(firstSync.imported).toBe(1);
+      expect(firstSync.updated).toBe(0);
+      expect(firstSync.skipped).toBe(0);
+
+      const firstRow = (await services.expenses.list()).find(
+        (expense) => expense.providerTransactionId === 'tx_pending_to_settle',
+      );
+      expect(firstRow).toBeTruthy();
+      expect(firstRow?.postedAt).toBeNull();
+      expect(firstRow?.merchantName).toBe('Cafe pending');
+
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({
+          transactions: [
+            {
+              id: 'tx_pending_to_settle',
+              account_id: 'acc_main',
+              amount: -900,
+              currency: 'GBP',
+              description: 'Cafe settled',
+              category: 'eating_out',
+              created: '2026-02-10T09:00:00.000Z',
+              settled: '2026-02-11T08:00:00.000Z',
+              merchant: {
+                name: 'Cafe Final',
+                logo: 'https://img.test/cafe.png',
+                emoji: '☕',
+              },
+            },
+          ],
+        }),
+      );
+
+      const secondSync = await services.monzo.syncNow({ actor: 'test', channel: 'system' });
+      expect(secondSync.imported).toBe(0);
+      expect(secondSync.updated).toBe(1);
+      expect(secondSync.skipped).toBe(0);
+
+      const secondRow = (await services.expenses.list()).find(
+        (expense) => expense.providerTransactionId === 'tx_pending_to_settle',
+      );
+      expect(secondRow).toBeTruthy();
+      expect(secondRow?.id).toBe(firstRow?.id);
+      expect(secondRow?.postedAt).toBe('2026-02-11T08:00:00.000Z');
+      expect(secondRow?.merchantName).toBe('Cafe Final');
+      expect(secondRow?.merchantLogoUrl).toBe('https://img.test/cafe.png');
+      expect(secondRow?.merchantEmoji).toBe('☕');
+    } finally {
+      closeServices(services);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('deletes imported pending transactions that disappear from the sync window', async () => {
+    const { services, dir } = setupService();
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const started = await services.monzo.connectStart({ actor: 'test', channel: 'system' });
+      const state = new URL(started.authUrl).searchParams.get('state');
+      expect(state).toBeTruthy();
+
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({
+          access_token: 'token-1',
+          refresh_token: 'refresh-1',
+          expires_in: 3600,
+        }),
+      );
+
+      await services.monzo.callback(
+        {
+          code: 'auth-code',
+          state: state ?? undefined,
+        },
+        { actor: 'test', channel: 'system' },
+      );
+
+      fetchMock
+        .mockResolvedValueOnce(
+          jsonResponse({
+            accounts: [{ id: 'acc_main', closed: false }],
+          }),
+        )
+        .mockResolvedValueOnce(
+          jsonResponse({
+            transactions: [
+              {
+                id: 'tx_pending_removed',
+                account_id: 'acc_main',
+                amount: -777,
+                currency: 'GBP',
+                description: 'Card auth',
+                category: 'shopping',
+                created: '2026-02-12T09:00:00.000Z',
+                settled: null,
+                merchant: null,
+              },
+            ],
+          }),
+        );
+
+      const firstSync = await services.monzo.syncNow({ actor: 'test', channel: 'system' });
+      expect(firstSync.imported).toBe(1);
+      expect(firstSync.updated).toBe(0);
+      expect(firstSync.skipped).toBe(0);
+      expect((await services.expenses.list()).length).toBe(1);
+
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({
+          transactions: [],
+        }),
+      );
+
+      const secondSync = await services.monzo.syncNow({ actor: 'test', channel: 'system' });
+      expect(secondSync.imported).toBe(0);
+      expect(secondSync.updated).toBe(0);
+      expect(secondSync.skipped).toBe(0);
+
+      const rowsAfterCleanup = await services.expenses.list();
+      expect(rowsAfterCleanup).toHaveLength(0);
+    } finally {
+      closeServices(services);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('excludes pending Monzo rows from report aggregates while counting settled rows', async () => {
+    const { services, dir } = setupService();
+
+    try {
+      const food = await services.categories.create(
+        { name: 'Food', kind: 'expense' },
+        { actor: 'test', channel: 'system' },
+      );
+
+      await services.expenses.create(
+        {
+          occurredAt: '2026-02-01T10:00:00.000Z',
+          postedAt: null,
+          amountMinor: 1000,
+          currency: 'GBP',
+          categoryId: food.id,
+          source: 'monzo',
+          kind: 'expense',
+          merchantName: 'Pending card payment',
+          providerTransactionId: 'tx_pending_report',
+        },
+        { actor: 'test', channel: 'system' },
+      );
+
+      await services.expenses.create(
+        {
+          occurredAt: '2026-02-02T10:00:00.000Z',
+          postedAt: '2026-02-02T11:00:00.000Z',
+          amountMinor: 2000,
+          currency: 'GBP',
+          categoryId: food.id,
+          source: 'monzo',
+          kind: 'expense',
+          merchantName: 'Settled card payment',
+          providerTransactionId: 'tx_settled_report',
+        },
+        { actor: 'test', channel: 'system' },
+      );
+
+      await services.expenses.create(
+        {
+          occurredAt: '2026-02-03T10:00:00.000Z',
+          amountMinor: 3000,
+          currency: 'GBP',
+          categoryId: food.id,
+          source: 'local',
+          kind: 'expense',
+          merchantName: 'Manual expense',
+        },
+        { actor: 'test', channel: 'system' },
+      );
+
+      const trends = await services.reports.monthlyTrends(1);
+      expect(trends[0]?.month).toBe('2026-02');
+      expect(trends[0]?.spendMinor).toBe(5000);
+      expect(trends[0]?.txCount).toBe(2);
+
+      const breakdown = await services.reports.categoryBreakdown(
+        '2026-02-01T00:00:00.000Z',
+        '2026-03-01T00:00:00.000Z',
+      );
+      expect(breakdown).toEqual([
+        expect.objectContaining({
+          categoryId: food.id,
+          totalMinor: 5000,
+          txCount: 2,
+        }),
+      ]);
+
+      const ledger = await services.reports.monthlyLedger({
+        from: '2026-02-01T00:00:00.000Z',
+        to: '2026-03-01T00:00:00.000Z',
+      });
+      expect(ledger.totals.expenseMinor).toBe(5000);
+      expect(ledger.totals.txCount).toBe(2);
     } finally {
       closeServices(services);
       fs.rmSync(dir, { recursive: true, force: true });

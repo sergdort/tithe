@@ -138,9 +138,6 @@ const normalizeMonzoCategory = (value: string | undefined): string => {
   return normalized && normalized.length > 0 ? normalized : 'uncategorised';
 };
 
-const isPendingTransaction = (transaction: MonzoTransaction): boolean =>
-  transaction.settled === null || transaction.settled === undefined || transaction.settled === '';
-
 const tryGetMonzoPotId = (description: string): string | null => {
   const trimmed = description.trim();
   if (!trimmed.startsWith(MONZO_POT_ID_PREFIX)) {
@@ -581,12 +578,11 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
         to: window.to,
       });
 
-      const eligible = allTransactions.filter(
-        (transaction) => !isPendingTransaction(transaction) && transaction.amount !== 0,
-      );
+      const eligible = allTransactions.filter((transaction) => transaction.amount !== 0);
       const skippedNonEligible = allTransactions.length - eligible.length;
       let skippedDuplicates = 0;
       const potCandidateIds = new Set<string>();
+      const fetchedTransactionIds = new Set(eligible.map((transaction) => transaction.id));
 
       for (const transaction of eligible) {
         const potId = tryGetMonzoPotId(transaction.description);
@@ -842,6 +838,19 @@ export const createMonzoService = ({ runtime, audit }: MonzoServiceDeps): MonzoS
 
             throw error;
           }
+        }
+
+        const pendingInWindow = expensesTxRepo.listPendingMonzoInRange({
+          from: window.from,
+          to: window.to,
+        }).expenses;
+        for (const pendingExpense of pendingInWindow) {
+          const transactionId = pendingExpense.providerTransactionId;
+          if (transactionId && fetchedTransactionIds.has(transactionId)) {
+            continue;
+          }
+
+          expensesTxRepo.deleteById({ id: pendingExpense.id });
         }
 
         monzoTxRepo.upsertConnection(
