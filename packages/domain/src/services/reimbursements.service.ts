@@ -584,6 +584,8 @@ export const createReimbursementsService = ({
 
           const outCategory = categoriesById.get(outExpense.categoryId);
           const recoveryWindowDays = Math.max(outCategory?.defaultRecoveryWindowDays ?? 14, 0);
+          const outOccurredTs = new Date(outExpense.occurredAt).getTime();
+          const windowEndTs = outOccurredTs + recoveryWindowDays * 24 * 60 * 60 * 1000;
 
           const recoverableMinor = computeRecoverableMinor(outExpense);
           const writtenOffMinor = Math.max(outExpense.closedOutstandingMinor ?? 0, 0);
@@ -616,6 +618,8 @@ export const createReimbursementsService = ({
                 outOccurredAt: outExpense.occurredAt,
                 inOccurredAt: inExpense.occurredAt,
                 recoveryWindowDays,
+                outOccurredTs,
+                windowEndTs,
               })
             ) {
               continue;

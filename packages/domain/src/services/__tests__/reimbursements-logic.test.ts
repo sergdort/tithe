@@ -149,7 +149,7 @@ describe('deriveReimbursementStatus', () => {
     ).toBe('settled');
   });
 
-  it('returns "settled" when outstanding reaches 0 via recovery + write-off', () => {
+  it('returns "written_off" when outstanding reaches 0 via recovery + write-off', () => {
     expect(
       deriveReimbursementStatus(
         makeExpense({ amountMinor: 10000, myShareMinor: 2000, closedOutstandingMinor: 4000 }),
@@ -303,6 +303,10 @@ describe('validateCloseOutstandingMinor', () => {
     expect(() => validateCloseOutstandingMinor(0, 5000)).toThrow(
       'must be greater than zero when outstanding remains',
     );
+  });
+
+  it('allows zero when outstanding is zero', () => {
+    expect(() => validateCloseOutstandingMinor(0, 0)).not.toThrow();
   });
 
   it('throws when exceeds outstanding', () => {

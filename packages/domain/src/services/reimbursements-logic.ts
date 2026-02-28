@@ -6,7 +6,10 @@
 
 import { AppError } from '../errors.js';
 import type { ExpenseDto } from '../repositories/expenses.repository.js';
-import type { ReimbursementStatus } from '../types.js';
+import {
+  computeRecoverableMinor as computeRecoverableMinorFromExpenses,
+  deriveReimbursementStatus as deriveReimbursementStatusFromExpenses,
+} from './expenses-logic.js';
 
 // ── Validation ─────────────────────────────────────────────────────────────
 
@@ -24,10 +27,7 @@ export const assertPositiveMinor = (value: number, field: string): number => {
 
 export const computeRecoverableMinor = (
   expense: Pick<ExpenseDto, 'kind' | 'reimbursementStatus' | 'money' | 'myShareMinor'>,
-): number => {
-  if (expense.kind !== 'expense' || expense.reimbursementStatus === 'none') return 0;
-  return Math.max(expense.money.amountMinor - (expense.myShareMinor ?? 0), 0);
-};
+): number => computeRecoverableMinorFromExpenses(expense);
 
 export const deriveReimbursementStatus = (
   expense: Pick<
@@ -35,21 +35,11 @@ export const deriveReimbursementStatus = (
     'kind' | 'reimbursementStatus' | 'money' | 'myShareMinor' | 'closedOutstandingMinor'
   >,
   recoveredMinor: number,
-): ReimbursementStatus => {
-  if (expense.kind !== 'expense') return 'none';
-
-  const isReimbursable = expense.reimbursementStatus !== 'none' || expense.myShareMinor !== null;
-  if (!isReimbursable) return 'none';
-
-  const recoverableMinor = computeRecoverableMinor(expense);
-  const writtenOffMinor = Math.max(expense.closedOutstandingMinor ?? 0, 0);
-  const outstandingMinor = Math.max(recoverableMinor - recoveredMinor - writtenOffMinor, 0);
-
-  if (writtenOffMinor > 0) return 'written_off';
-  if (recoverableMinor === 0 || outstandingMinor === 0) return 'settled';
-  if (recoveredMinor > 0) return 'partial';
-  return 'expected';
-};
+) =>
+  deriveReimbursementStatusFromExpenses({
+    expense,
+    recoveredMinor,
+  });
 
 // ── Link validation ────────────────────────────────────────────────────────
 
@@ -161,7 +151,7 @@ export const validateCloseOutstandingMinor = (
     );
   }
 
-  if (closeOutstandingMinor === 0) {
+  if (closeOutstandingMinor === 0 && outstandingMinor > 0) {
     throw new AppError(
       'REIMBURSEMENT_CLOSE_INVALID',
       'closeOutstandingMinor must be greater than zero when outstanding remains',
@@ -210,18 +200,23 @@ export const isInRecoveryWindow = ({
   outOccurredAt,
   inOccurredAt,
   recoveryWindowDays,
+  outOccurredTs,
+  windowEndTs,
 }: {
   outOccurredAt: string;
   inOccurredAt: string;
   recoveryWindowDays: number;
+  outOccurredTs?: number;
+  windowEndTs?: number;
 }): boolean => {
-  const outTs = new Date(outOccurredAt).getTime();
+  const resolvedOutTs = outOccurredTs ?? new Date(outOccurredAt).getTime();
   const inTs = new Date(inOccurredAt).getTime();
 
-  if (!Number.isFinite(outTs) || !Number.isFinite(inTs)) return true;
+  if (!Number.isFinite(resolvedOutTs) || !Number.isFinite(inTs)) return true;
 
-  const windowEndTs = outTs + recoveryWindowDays * 24 * 60 * 60 * 1000;
-  return inTs >= outTs && inTs <= windowEndTs;
+  const resolvedWindowEndTs =
+    windowEndTs ?? resolvedOutTs + recoveryWindowDays * 24 * 60 * 60 * 1000;
+  return inTs >= resolvedOutTs && inTs <= resolvedWindowEndTs;
 };
 
 export const computeAutoMatchAllocation = ({
