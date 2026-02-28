@@ -10,7 +10,21 @@ import { SqliteReimbursementCategoryRulesRepository } from '../repositories/reim
 import type { ReimbursementLinkDto } from '../repositories/reimbursements.repository.js';
 import { SqliteReimbursementsRepository } from '../repositories/reimbursements.repository.js';
 import { type RepositoryDb, withTransaction } from '../repositories/shared.js';
-import type { ActorContext, ReimbursementStatus } from '../types.js';
+import type { ActorContext } from '../types.js';
+import {
+  assertExpenseCategoryKind,
+  assertInboundCategoryKind,
+  assertOutboundReimbursable,
+  assertPositiveMinor,
+  computeAutoMatchAllocation,
+  computeRecoverableMinor,
+  deriveReimbursementStatus,
+  isInRecoveryWindow,
+  validateCloseOutstandingMinor,
+  validateLinkAmounts,
+  validateLinkCurrency,
+  validateLinkTarget,
+} from './reimbursements-logic.js';
 import type { ApprovalService, ApprovalToken } from './shared/approval-service.js';
 import type { AuditService } from './shared/audit-service.js';
 import { DEFAULT_ACTOR, assertDate, toIso } from './shared/common.js';
@@ -84,45 +98,6 @@ export interface ReimbursementsService {
   ) => Promise<AutoMatchReimbursementsSummary>;
 }
 
-const assertPositiveMinor = (value: number, field: string): number => {
-  if (!Number.isInteger(value) || value <= 0) {
-    throw new AppError('VALIDATION_ERROR', `${field} must be a positive integer`, 400, {
-      field,
-      value,
-    });
-  }
-  return value;
-};
-
-const computeRecoverableMinor = (expense: ExpenseDto): number => {
-  if (expense.kind !== 'expense' || expense.reimbursementStatus === 'none') {
-    return 0;
-  }
-  return Math.max(expense.money.amountMinor - (expense.myShareMinor ?? 0), 0);
-};
-
-const deriveReimbursementStatus = (
-  expense: ExpenseDto,
-  recoveredMinor: number,
-): ReimbursementStatus => {
-  if (expense.kind !== 'expense') {
-    return 'none';
-  }
-  const isReimbursable = expense.reimbursementStatus !== 'none' || expense.myShareMinor !== null;
-  if (!isReimbursable) {
-    return 'none';
-  }
-
-  const recoverableMinor = computeRecoverableMinor(expense);
-  const writtenOffMinor = Math.max(expense.closedOutstandingMinor ?? 0, 0);
-  const outstandingMinor = Math.max(recoverableMinor - recoveredMinor - writtenOffMinor, 0);
-
-  if (writtenOffMinor > 0) return 'written_off';
-  if (recoverableMinor === 0 || outstandingMinor === 0) return 'settled';
-  if (recoveredMinor > 0) return 'partial';
-  return 'expected';
-};
-
 export const createReimbursementsService = ({
   runtime,
   approvals,
@@ -159,23 +134,8 @@ export const createReimbursementsService = ({
     const expenseCategory = getCategoryOrThrow(db, expenseCategoryId);
     const inboundCategory = getCategoryOrThrow(db, inboundCategoryId);
 
-    if (expenseCategory.kind !== 'expense') {
-      throw new AppError(
-        'REIMBURSEMENT_CATEGORY_RULE_INVALID_EXPENSE_CATEGORY',
-        'Expense category rule source must be an expense category',
-        400,
-        { expenseCategoryId, kind: expenseCategory.kind },
-      );
-    }
-
-    if (!(inboundCategory.kind === 'income' || inboundCategory.kind === 'transfer')) {
-      throw new AppError(
-        'REIMBURSEMENT_CATEGORY_RULE_INVALID_INBOUND_CATEGORY',
-        'Inbound category rule target must be an income or transfer category',
-        400,
-        { inboundCategoryId, kind: inboundCategory.kind },
-      );
-    }
+    assertExpenseCategoryKind(expenseCategory);
+    assertInboundCategoryKind(inboundCategory);
   };
 
   const enrichExpense = (db: RepositoryDb, expense: ExpenseDto): ExpenseDto => {
@@ -220,26 +180,6 @@ export const createReimbursementsService = ({
     return updated;
   };
 
-  const assertOutboundReimbursable = (expense: ExpenseDto): void => {
-    if (expense.kind !== 'expense') {
-      throw new AppError(
-        'REIMBURSEMENT_INVALID_LINK_TARGET',
-        'Outgoing reimbursement source must be an expense row',
-        400,
-        { expenseOutId: expense.id, kind: expense.kind },
-      );
-    }
-
-    if (expense.reimbursementStatus === 'none' && expense.myShareMinor === null) {
-      throw new AppError(
-        'REIMBURSEMENT_NOT_REIMBURSABLE',
-        'Expense is not configured as reimbursable',
-        400,
-        { expenseOutId: expense.id },
-      );
-    }
-  };
-
   return {
     async link(input: CreateReimbursementLinkInput, context: ActorContext = DEFAULT_ACTOR) {
       const amountMinor = assertPositiveMinor(input.amountMinor, 'amountMinor');
@@ -280,28 +220,8 @@ export const createReimbursementsService = ({
 
         assertOutboundReimbursable(outExpense);
 
-        if (!(inExpense.kind === 'income' || inExpense.kind === 'transfer_external')) {
-          throw new AppError(
-            'REIMBURSEMENT_INVALID_LINK_TARGET',
-            'Inbound reimbursement target must be income or external transfer',
-            400,
-            { expenseInId: inExpense.id, kind: inExpense.kind },
-          );
-        }
-
-        if (outExpense.money.currency !== inExpense.money.currency) {
-          throw new AppError(
-            'REIMBURSEMENT_CURRENCY_MISMATCH',
-            'Currencies must match to create a reimbursement link',
-            400,
-            {
-              expenseOutId: outExpense.id,
-              expenseInId: inExpense.id,
-              outCurrency: outExpense.money.currency,
-              inCurrency: inExpense.money.currency,
-            },
-          );
-        }
+        validateLinkTarget(inExpense);
+        validateLinkCurrency(outExpense, inExpense);
 
         const outRecoveredMinor =
           reimbursementsRepo(tx).sumRecoveredByExpenseOutIds({ expenseOutIds: [outExpense.id] })
@@ -319,32 +239,13 @@ export const createReimbursementsService = ({
         );
         const inboundAvailableMinor = Math.max(inExpense.money.amountMinor - inAllocatedMinor, 0);
 
-        if (outstandingMinor <= 0) {
-          throw new AppError(
-            'REIMBURSEMENT_ALLOCATION_EXCEEDS_OUTSTANDING',
-            'No outstanding reimbursable amount remains on outbound expense',
-            400,
-            { expenseOutId: outExpense.id },
-          );
-        }
-
-        if (amountMinor > outstandingMinor) {
-          throw new AppError(
-            'REIMBURSEMENT_ALLOCATION_EXCEEDS_OUTSTANDING',
-            'Link amount exceeds outbound outstanding amount',
-            400,
-            { amountMinor, outstandingMinor, expenseOutId: outExpense.id },
-          );
-        }
-
-        if (amountMinor > inboundAvailableMinor) {
-          throw new AppError(
-            'REIMBURSEMENT_ALLOCATION_EXCEEDS_INBOUND_AVAILABLE',
-            'Link amount exceeds inbound unallocated amount',
-            400,
-            { amountMinor, inboundAvailableMinor, expenseInId: inExpense.id },
-          );
-        }
+        validateLinkAmounts({
+          amountMinor,
+          outstandingMinor,
+          inboundAvailableMinor,
+          expenseOutId: outExpense.id,
+          expenseInId: inExpense.id,
+        });
 
         const now = toIso(new Date());
         created = reimbursementsRepo(tx).create({
@@ -527,39 +428,7 @@ export const createReimbursementsService = ({
             ? outstandingMinor
             : input.closeOutstandingMinor;
 
-        if (!Number.isInteger(closeOutstandingMinor) || closeOutstandingMinor < 0) {
-          throw new AppError(
-            'REIMBURSEMENT_CLOSE_INVALID',
-            'closeOutstandingMinor must be a non-negative integer',
-            400,
-            {
-              closeOutstandingMinor,
-            },
-          );
-        }
-
-        if (closeOutstandingMinor === 0) {
-          throw new AppError(
-            'REIMBURSEMENT_CLOSE_INVALID',
-            'closeOutstandingMinor must be greater than zero when outstanding remains',
-            400,
-            {
-              outstandingMinor,
-            },
-          );
-        }
-
-        if (closeOutstandingMinor > outstandingMinor) {
-          throw new AppError(
-            'REIMBURSEMENT_CLOSE_INVALID',
-            'closeOutstandingMinor exceeds outstanding amount',
-            400,
-            {
-              closeOutstandingMinor,
-              outstandingMinor,
-            },
-          );
-        }
+        validateCloseOutstandingMinor(closeOutstandingMinor, outstandingMinor);
 
         const now = toIso(new Date());
         const patched = expensesRepo(tx).updateReimbursement({
@@ -715,8 +584,6 @@ export const createReimbursementsService = ({
 
           const outCategory = categoriesById.get(outExpense.categoryId);
           const recoveryWindowDays = Math.max(outCategory?.defaultRecoveryWindowDays ?? 14, 0);
-          const outOccurredTs = new Date(outExpense.occurredAt).getTime();
-          const windowEndTs = outOccurredTs + recoveryWindowDays * 24 * 60 * 60 * 1000;
 
           const recoverableMinor = computeRecoverableMinor(outExpense);
           const writtenOffMinor = Math.max(outExpense.closedOutstandingMinor ?? 0, 0);
@@ -744,11 +611,14 @@ export const createReimbursementsService = ({
               continue;
             }
 
-            const inboundTs = new Date(inExpense.occurredAt).getTime();
-            if (Number.isFinite(outOccurredTs) && Number.isFinite(inboundTs)) {
-              if (inboundTs < outOccurredTs || inboundTs > windowEndTs) {
-                continue;
-              }
+            if (
+              !isInRecoveryWindow({
+                outOccurredAt: outExpense.occurredAt,
+                inOccurredAt: inExpense.occurredAt,
+                recoveryWindowDays,
+              })
+            ) {
+              continue;
             }
 
             const inboundAllocatedMinor = inAllocatedById.get(inExpense.id) ?? 0;
@@ -756,11 +626,11 @@ export const createReimbursementsService = ({
               inExpense.money.amountMinor - inboundAllocatedMinor,
               0,
             );
-            if (inboundAvailableMinor <= 0) {
-              continue;
-            }
 
-            const allocateMinor = Math.min(remainingOutstandingMinor, inboundAvailableMinor);
+            const allocateMinor = computeAutoMatchAllocation({
+              remainingOutstandingMinor,
+              inboundAvailableMinor,
+            });
             if (allocateMinor <= 0) {
               continue;
             }
