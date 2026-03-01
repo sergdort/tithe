@@ -5,6 +5,11 @@
       "source": "mcollina/skills",
       "sourceType": "github",
       "computedHash": "b66ef38b684ef2f10c2419bf379d0f8de6a016ae41540dac5379b344ebb15ff9"
+    },
+    "gh-cli": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "computedHash": "cbe644b0c6760ae2a1eaafa39133920d889331327065d92a131675a665273e56"
     }
   }
 }
