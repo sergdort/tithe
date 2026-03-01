@@ -202,28 +202,6 @@ describe('Monzo integration domain service', () => {
       const expensesAfterCallback = await services.expenses.list();
       expect(expensesAfterCallback.length).toBe(0);
 
-      fetchMock.mockResolvedValueOnce(
-        jsonResponse({
-          transactions: [
-            {
-              id: 'tx_debit_settled',
-              account_id: 'acc_main',
-              amount: -1234,
-              currency: 'GBP',
-              description: 'Store purchase',
-              category: 'groceries',
-              created: '2026-02-01T10:00:00.000Z',
-              settled: '2026-02-02T10:00:00.000Z',
-              merchant: {
-                name: 'Local Shop',
-                logo: 'https://img.test/local-shop.png',
-                emoji: '🛍️',
-              },
-            },
-          ],
-        }),
-      );
-
       const syncResult = await services.monzo.syncNow({ actor: 'test', channel: 'system' });
       expect(syncResult.imported).toBe(3);
       expect(syncResult.updated).toBe(0);
