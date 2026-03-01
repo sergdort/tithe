@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -10,6 +11,7 @@ import {
   resolveCorsOrigin,
   tithePlugin,
 } from '@tithe/api/server';
+import { runMigrations } from '@tithe/db';
 import { AppError, type DomainServices } from '@tithe/domain';
 import Fastify from 'fastify';
 import { vi } from 'vitest';
@@ -34,6 +36,30 @@ const featureRouteFiles = [
 ] as const;
 
 describe('API Fastify enforcement', () => {
+  let previousDbPath: string | undefined;
+  let testDir: string | null = null;
+
+  beforeEach(() => {
+    previousDbPath = process.env.DB_PATH;
+    testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tithe-fastify-test-'));
+    const dbPath = path.join(testDir, 'api.sqlite');
+    process.env.DB_PATH = dbPath;
+    runMigrations(dbPath);
+  });
+
+  afterEach(() => {
+    if (previousDbPath === undefined) {
+      process.env.DB_PATH = undefined;
+    } else {
+      process.env.DB_PATH = previousDbPath;
+    }
+
+    if (testDir) {
+      fs.rmSync(testDir, { recursive: true, force: true });
+    }
+
+    testDir = null;
+  });
   it('returns contract envelope for Fastify validation errors', async () => {
     const app = buildServer({ config: baseConfig });
 

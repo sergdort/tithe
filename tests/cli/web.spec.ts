@@ -1,17 +1,38 @@
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { runMigrations } from '@tithe/db';
 
 const testsRoot = path.dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = path.resolve(testsRoot, '../..');
 const cliEntry = path.resolve(workspaceRoot, 'apps/cli/src/index.ts');
 
-const runCli = (args: string[]) =>
-  spawnSync('node', ['--import', 'tsx', cliEntry, ...args], {
-    cwd: workspaceRoot,
-    encoding: 'utf8',
-    env: { ...process.env },
-  });
+const runCli = (args: string[]) => {
+  const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tithe-cli-test-'));
+  const dbPath = path.join(testDir, 'cli.sqlite');
+  runMigrations(dbPath);
+
+  try {
+    return spawnSync('node', ['--import', 'tsx', cliEntry, ...args], {
+      cwd: workspaceRoot,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        DB_PATH: dbPath,
+        MONZO_CLIENT_ID: '',
+        MONZO_CLIENT_SECRET: '',
+        MONZO_REDIRECT_URI: '',
+        MONZO_AUTH_BASE: '',
+        MONZO_API_BASE: '',
+      },
+    });
+  } finally {
+    fs.rmSync(testDir, { recursive: true, force: true });
+  }
+};
 
 describe('CLI web command', () => {
   it('prints help and exits successfully without a subcommand', () => {

@@ -6,6 +6,30 @@ import { buildServer } from '@tithe/api/server';
 import { runMigrations } from '@tithe/db';
 
 describe('API routes', () => {
+  let previousDbPath: string | undefined;
+  let testDir: string | null = null;
+
+  beforeEach(() => {
+    previousDbPath = process.env.DB_PATH;
+    testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tithe-api-test-'));
+    const dbPath = path.join(testDir, 'api.sqlite');
+    process.env.DB_PATH = dbPath;
+    runMigrations(dbPath);
+  });
+
+  afterEach(() => {
+    if (previousDbPath === undefined) {
+      process.env.DB_PATH = undefined;
+    } else {
+      process.env.DB_PATH = previousDbPath;
+    }
+
+    if (testDir) {
+      fs.rmSync(testDir, { recursive: true, force: true });
+    }
+
+    testDir = null;
+  });
   it('exposes OpenAPI operations at /docs/json', async () => {
     const app = buildServer();
 
@@ -105,11 +129,6 @@ describe('API routes', () => {
   });
 
   it('creates category and expense through HTTP', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tithe-api-test-'));
-    const dbPath = path.join(dir, 'api.sqlite');
-    process.env.DB_PATH = dbPath;
-    runMigrations(dbPath);
-
     const app = buildServer();
 
     try {
@@ -186,17 +205,10 @@ describe('API routes', () => {
       expect(invalidLedgerBody.error.code).toBe('VALIDATION_ERROR');
     } finally {
       await app.close();
-      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 
   it('manages reimbursement category rules through HTTP with approval-token delete', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tithe-api-rules-test-'));
-    const dbPath = path.join(dir, 'api.sqlite');
-    const previousDbPath = process.env.DB_PATH;
-    process.env.DB_PATH = dbPath;
-    runMigrations(dbPath);
-
     const app = buildServer();
 
     try {
@@ -269,22 +281,10 @@ describe('API routes', () => {
       expect(deleteBody.data).toMatchObject({ deleted: true, id: ruleId });
     } finally {
       await app.close();
-      if (previousDbPath === undefined) {
-        process.env.DB_PATH = undefined;
-      } else {
-        process.env.DB_PATH = previousDbPath;
-      }
-      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 
   it('validates Monzo callback query and exposes status endpoint', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tithe-api-monzo-test-'));
-    const dbPath = path.join(dir, 'api.sqlite');
-    const previousDbPath = process.env.DB_PATH;
-    process.env.DB_PATH = dbPath;
-    runMigrations(dbPath);
-
     const app = buildServer();
 
     try {
@@ -315,12 +315,6 @@ describe('API routes', () => {
       expect(typeof statusBody.data.mappingCount).toBe('number');
     } finally {
       await app.close();
-      if (previousDbPath === undefined) {
-        process.env.DB_PATH = undefined;
-      } else {
-        process.env.DB_PATH = previousDbPath;
-      }
-      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 
