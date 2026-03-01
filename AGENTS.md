@@ -343,6 +343,40 @@ For destructive actions:
 - Run smoke queries (`category list`, `expense list`).
 - Validate row counts and recent timestamps.
 
+## Testing Approach (Required for Agents)
+
+When implementing or reviewing features, follow these rules:
+
+1. **Write tests for humans first.**
+   - Keep tests readable and intentional (clear setup, action, assertion flow).
+   - Prefer explicit expected values over opaque helper magic.
+
+2. **Test requirements and business rules, not implementation trivia.**
+   - Feature tests should validate behavior users/business care about.
+   - Keep lower-level/unit tests for mechanics, but feature coverage must stay requirement-led.
+
+3. **Do not “game” tests.**
+   - Making tests green is not the only goal.
+   - When tests fail, first verify whether requirements are correct and still desired.
+   - Never patch tests with hacks that hide real regressions.
+
+4. **Default to red → green → refactor.**
+   - Add/adjust a failing test first, then implement behavior.
+   - If infra is missing, add an explicit pending/placeholder test tied to requirement text and finish it in the same feature stream.
+   - Pending/placeholder tests are acceptable on feature branches, but must be resolved before merge unless a human explicitly approves carrying them forward.
+
+5. **Treat flaky tests as defects.**
+   - Report flakiness and investigate root cause (time, async races, shared state, environment coupling).
+   - Prefer refactoring for determinism over retries/timeouts as a workaround.
+   - Do not ship retry-based or timeout-inflation hacks as the final fix; if root-cause work cannot be completed immediately, open a tracked follow-up with repro notes.
+
+6. **Integration tests must be hermetic locally and in CI.**
+   - Never rely on developer machine state (real user DB, real env tokens, existing external integrations).
+   - Use isolated temp DB/env per test or test file, and clean up after each run.
+
+7. **If behavior changes, update tests and requirement docs together.**
+   - If a previous expectation is no longer valid, document why and update tests intentionally.
+
 ## Agent Behavior Rules
 
 - Prefer read operations before writes.
