@@ -6,7 +6,7 @@ import { fail, ok } from '@tithe/contracts';
 import { runMigrations } from '@tithe/db';
 import { AppError, createDomainServices } from '@tithe/domain';
 import { loadWorkspaceEnv } from './load-env.js';
-import { runWebCommand } from './web.js';
+import { runWebCommand, runWebSupervisorCommand } from './web.js';
 
 loadWorkspaceEnv();
 
@@ -876,9 +876,12 @@ monzo.command('status').action(async () => {
 program
   .command('web')
   .description('Run API + PWA web stack')
-  .option('--mode <mode>', 'dev|preview', 'dev')
+  .option('--mode <mode>', 'dev|preview')
   .option('--api-port <port>', 'override API port (1-65535)')
   .option('--pwa-port <port>', 'override PWA port (1-65535)')
+  .option('--daemon', 'run in background daemon mode with auto-restart', false)
+  .option('--status', 'show background web daemon status', false)
+  .option('--stop', 'stop background web daemon', false)
   .action(async (options) => {
     const opts = program.opts<{ json: boolean }>();
 
@@ -888,9 +891,39 @@ program
           mode: options.mode,
           apiPort: options.apiPort,
           pwaPort: options.pwaPort,
+          daemon: options.daemon,
+          status: options.status,
+          stop: options.stop,
         },
         opts.json,
       );
+    } catch (error) {
+      if (error instanceof AppError) {
+        emit(fail(error.code, error.message, error.details), true);
+        process.exitCode = 1;
+        return;
+      }
+
+      emit(fail('INTERNAL_ERROR', error instanceof Error ? error.message : String(error)), true);
+      process.exitCode = 1;
+    }
+  });
+
+program
+  .command('web-supervisor')
+  .description('Internal daemon supervisor for tithe web --daemon')
+  .option('--mode <mode>', 'dev|preview')
+  .option('--api-port <port>', 'override API port (1-65535)')
+  .option('--pwa-port <port>', 'override PWA port (1-65535)')
+  .option('--run-id <runId>', 'daemon run identifier')
+  .action(async (options) => {
+    try {
+      await runWebSupervisorCommand({
+        mode: options.mode,
+        apiPort: options.apiPort,
+        pwaPort: options.pwaPort,
+        runId: options.runId,
+      });
     } catch (error) {
       if (error instanceof AppError) {
         emit(fail(error.code, error.message, error.details), true);

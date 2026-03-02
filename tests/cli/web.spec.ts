@@ -58,6 +58,24 @@ describe('CLI web command', () => {
     expect(payload.error.code).toBe('VALIDATION_ERROR');
   });
 
+  it('rejects combining daemon control flags', () => {
+    const result = runCli(['--json', 'web', '--daemon', '--status']);
+    const payload = JSON.parse(result.stdout);
+
+    expect(result.status).toBe(1);
+    expect(payload.ok).toBe(false);
+    expect(payload.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('rejects status/stop mixed with port overrides', () => {
+    const result = runCli(['--json', 'web', '--stop', '--api-port', '8787']);
+    const payload = JSON.parse(result.stdout);
+
+    expect(result.status).toBe(1);
+    expect(payload.ok).toBe(false);
+    expect(payload.error.code).toBe('VALIDATION_ERROR');
+  });
+
   it('returns validation error for api port lower than range', () => {
     const result = runCli(['--json', 'web', '--api-port', '0']);
     const payload = JSON.parse(result.stdout);

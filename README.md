@@ -304,19 +304,27 @@ Use `tithe web` to launch API + PWA together in the foreground:
 ```bash
 tithe web
 tithe web --mode preview
+tithe web --daemon
+tithe --json web --status
+tithe --json web --stop
 tithe web --api-port 9797 --pwa-port 5174
 tithe --json web --mode dev
 ```
 
 Runtime notes:
 
-- `--mode dev` is the default.
+- `--mode preview` is the default.
+- `--daemon` starts a detached supervisor that auto-restarts API/PWA when child processes crash or are killed.
+- `--status` returns daemon state from `~/.tithe/web-daemon.state.json` (fallback path when `~/.tithe` is not writable: `<workspace>/.tithe/web-daemon.state.json`).
+- `--stop` requests daemon shutdown (SIGTERM) and waits for exit.
 - `--mode preview` automatically runs `@tithe/api` and `@tithe/pwa` builds before starting preview services.
 - `tithe web` preserves configured `VITE_API_BASE` by default.
 - If `--api-port` is set, `tithe web` rewrites the port in `VITE_API_BASE` when possible and falls back to `http://<api-host>:<api-port>/v1`.
 - `--api-port` overrides API `PORT` for this command.
 - `--pwa-port` maps to `PWA_PORT` in dev mode and `PWA_PREVIEW_PORT` in preview mode.
-- `--json` emits one startup envelope before live prefixed logs are streamed.
+- foreground `--json` emits one startup envelope before live prefixed logs are streamed.
+- daemon `--json` commands (`--daemon`, `--status`, `--stop`) emit one envelope and exit.
+- startup payloads include local and best-effort Tailnet URLs; if Tailscale is unavailable, startup continues with a warning and local URLs.
 - PWA API requests time out after 10 seconds and surface an error state instead of loading indefinitely.
 
 ### Safety gate for destructive operations

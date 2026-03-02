@@ -102,8 +102,8 @@ Failure:
 
 ### Web runtime
 
-- `tithe web [--mode dev|preview] [--api-port <port>] [--pwa-port <port>]`
-- `tithe --json web [--mode dev|preview] [--api-port <port>] [--pwa-port <port>]`
+- `tithe web [--mode dev|preview] [--api-port <port>] [--pwa-port <port>] [--daemon|--status|--stop]`
+- `tithe --json web [--mode dev|preview] [--api-port <port>] [--pwa-port <port>] [--daemon|--status|--stop]`
 
 ### Monzo
 
@@ -120,11 +120,16 @@ Failure:
 - DB migrations are expected to run lazily on command execution, not on help-only invocations.
 - API and CLI entrypoints auto-load workspace-root `.env` via `dotenv` if present (existing exported env vars still take precedence).
 - Default `DB_PATH` is `~/.tithe/tithe.db`; leading `~` is expanded to the current user's home directory.
-- `tithe web` launches API + PWA in foreground mode (`--mode dev` by default).
-- `tithe web --mode preview` builds `@tithe/api` and `@tithe/pwa` before launch.
+- `tithe web` launches API + PWA in foreground mode (`--mode preview` by default).
+- `tithe web --daemon` starts a detached supervisor process that auto-restarts API/PWA if either child process crashes or is killed.
+- `tithe web --status` reports daemon state and access metadata from `~/.tithe/web-daemon.state.json` (fallback path when `~/.tithe` is not writable: `<workspace>/.tithe/web-daemon.state.json`).
+- `tithe web --stop` sends `SIGTERM` to the daemon supervisor and waits for shutdown.
+- `tithe web --mode preview` builds `@tithe/api` and `@tithe/pwa` before launch (foreground and daemon-supervisor startup).
 - `--api-port` overrides API `PORT`; for `tithe web`, PWA `VITE_API_BASE` is preserved by default and has its port rewritten when `--api-port` is provided (fallback: `http://<api-host>:<api-port>/v1`).
 - `--pwa-port` sets `PWA_PORT` in `dev` mode or `PWA_PREVIEW_PORT` in `preview` mode.
-- `tithe --json web` emits one startup envelope first, then streams prefixed service logs.
+- foreground `tithe --json web` emits one startup envelope first, then streams prefixed service logs.
+- daemon startup/status/stop (`--daemon|--status|--stop`) emit a single JSON envelope and exit (no live log stream).
+- web startup payloads include local PWA/API URLs and best-effort Tailnet URLs; if Tailscale is unavailable, startup continues with a warning and local URLs.
 - PWA API requests use a 10-second timeout and transition to error state if backend is unreachable.
 - `tithe --json monzo connect` stores short-lived OAuth `state` and returns `authUrl`.
 - `GET /v1/integrations/monzo/connect/callback` requires query `code+state` or `error`.
