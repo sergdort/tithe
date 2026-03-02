@@ -18,6 +18,7 @@ const daemonStatusPollMs = 200;
 const restartBackoffBaseMs = 1_000;
 const restartBackoffMaxMs = 30_000;
 const restartStableWindowMs = 60_000;
+const tailscaleStatusTimeoutMs = 2_000;
 
 type WebMode = 'dev' | 'preview';
 type WebServiceLabel = 'api' | 'pwa';
@@ -537,6 +538,7 @@ const resolveWebAccessInfo = (apiPort: number, pwaPort: number): WebAccessInfo =
 
   const status = spawnSync('tailscale', ['status', '--json'], {
     encoding: 'utf8',
+    timeout: tailscaleStatusTimeoutMs,
   });
 
   if (status.error) {
@@ -551,6 +553,17 @@ const resolveWebAccessInfo = (apiPort: number, pwaPort: number): WebAccessInfo =
         error.code === 'ENOENT'
           ? 'Tailscale CLI not found; Tailnet URLs are unavailable.'
           : `Failed to query Tailscale status: ${error.message}`,
+    };
+  }
+
+  if (status.signal) {
+    return {
+      local: {
+        apiUrl: localApiUrl,
+        pwaUrl: localPwaUrl,
+      },
+      tailnet: {},
+      warning: `Tailscale status command timed out after ${tailscaleStatusTimeoutMs}ms.`,
     };
   }
 
@@ -633,8 +646,27 @@ const ensureDaemonDir = () => {
 const writeJsonFile = (filePath: string, value: unknown) => {
   ensureDaemonDir();
   const tempFile = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-  fs.writeFileSync(tempFile, JSON.stringify(value, null, 2));
-  fs.renameSync(tempFile, filePath);
+  const serialized = JSON.stringify(value, null, 2);
+  fs.writeFileSync(tempFile, serialized);
+
+  try {
+    if (process.platform === 'win32' && fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+    fs.renameSync(tempFile, filePath);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (process.platform === 'win32' && (code === 'EEXIST' || code === 'EPERM')) {
+      fs.writeFileSync(filePath, serialized);
+      return;
+    }
+
+    throw error;
+  } finally {
+    if (fs.existsSync(tempFile)) {
+      fs.unlinkSync(tempFile);
+    }
+  }
 };
 
 const readJsonFile = <T>(filePath: string): T | undefined => {
@@ -964,6 +996,19 @@ const runSupervisorLoop = async (
     let shuttingDown = false;
     const restartTimers = new Map<WebServiceLabel, NodeJS.Timeout>();
 
+    const stopChildren = (signal: NodeJS.Signals = 'SIGTERM') => {
+      for (const service of Object.values(services)) {
+        const managed = service.managed;
+        if (!managed) {
+          continue;
+        }
+
+        if (managed.child.exitCode === null && managed.child.signalCode === null) {
+          managed.child.kill(signal);
+        }
+      }
+    };
+
     const persist = () => {
       persistDaemonState(state);
     };
@@ -999,6 +1044,8 @@ const runSupervisorLoop = async (
         return;
       }
       settled = true;
+      shuttingDown = true;
+      stopChildren('SIGTERM');
       cleanup();
       reject(error);
     };
@@ -1014,19 +1061,6 @@ const runSupervisorLoop = async (
         state.status = 'degraded';
       }
       persist();
-    };
-
-    const stopChildren = (signal: NodeJS.Signals = 'SIGTERM') => {
-      for (const service of Object.values(services)) {
-        const managed = service.managed;
-        if (!managed) {
-          continue;
-        }
-
-        if (managed.child.exitCode === null && managed.child.signalCode === null) {
-          managed.child.kill(signal);
-        }
-      }
     };
 
     const handleSignal = (signal: NodeJS.Signals) => {
