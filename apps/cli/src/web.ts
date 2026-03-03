@@ -505,13 +505,21 @@ const resolveWebRuntime = (options: {
     }
   }
 
+  const configuredApiBase = pwaEnv.VITE_API_BASE;
   const fallbackApiBase = `http://${resolvedApiHost}:${resolvedApiPort}/v1`;
+
   const resolvedApiBase =
     apiPort !== undefined
-      ? (rewriteApiBasePort(pwaEnv.VITE_API_BASE, resolvedApiPort) ?? fallbackApiBase)
-      : (pwaEnv.VITE_API_BASE ?? fallbackApiBase);
+      ? (rewriteApiBasePort(configuredApiBase, resolvedApiPort) ?? fallbackApiBase)
+      : (configuredApiBase ?? fallbackApiBase);
 
-  pwaEnv.VITE_API_BASE = resolvedApiBase;
+  const injectedApiBase = apiPort !== undefined ? resolvedApiBase : configuredApiBase;
+
+  if (injectedApiBase) {
+    pwaEnv.VITE_API_BASE = injectedApiBase;
+  } else {
+    pwaEnv.VITE_API_BASE = undefined;
+  }
 
   const resolvedPwaPort =
     mode === 'dev'
