@@ -13,7 +13,23 @@ import type {
   TrendPoint,
 } from './types.js';
 
-const baseUrl = import.meta.env.VITE_API_BASE ?? 'http://localhost:8787/v1';
+const normalizeBaseUrl = (value: string): string => value.replace(/\/+$/, '');
+
+const resolveApiBaseUrl = (): string => {
+  const envBaseUrl = import.meta.env.VITE_API_BASE?.trim();
+  if (envBaseUrl) {
+    return normalizeBaseUrl(envBaseUrl);
+  }
+
+  if (typeof window !== 'undefined' && window.location.hostname) {
+    const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+    return `${protocol}//${window.location.hostname}:8787/v1`;
+  }
+
+  return 'http://localhost:8787/v1';
+};
+
+const baseUrl = resolveApiBaseUrl();
 const requestTimeoutMs = 10_000;
 
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {

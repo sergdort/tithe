@@ -495,7 +495,7 @@ const resolveWebRuntime = (options: {
   const resolvedApiPort = toPortOrFallback(apiEnv.PORT, 8787);
   const resolvedApiHost = resolveApiHost(apiEnv.HOST);
 
-  const pwaEnv: NodeJS.ProcessEnv = { ...process.env };
+  let pwaEnv: NodeJS.ProcessEnv = { ...process.env };
   const pwaPortFallback = mode === 'dev' ? 5173 : 4173;
   if (pwaPort !== undefined) {
     if (mode === 'dev') {
@@ -505,13 +505,22 @@ const resolveWebRuntime = (options: {
     }
   }
 
+  const configuredApiBase = pwaEnv.VITE_API_BASE;
   const fallbackApiBase = `http://${resolvedApiHost}:${resolvedApiPort}/v1`;
+
   const resolvedApiBase =
     apiPort !== undefined
-      ? (rewriteApiBasePort(pwaEnv.VITE_API_BASE, resolvedApiPort) ?? fallbackApiBase)
-      : (pwaEnv.VITE_API_BASE ?? fallbackApiBase);
+      ? (rewriteApiBasePort(configuredApiBase, resolvedApiPort) ?? fallbackApiBase)
+      : (configuredApiBase ?? fallbackApiBase);
 
-  pwaEnv.VITE_API_BASE = resolvedApiBase;
+  const injectedApiBase = apiPort !== undefined ? resolvedApiBase : configuredApiBase;
+
+  if (injectedApiBase) {
+    pwaEnv.VITE_API_BASE = injectedApiBase;
+  } else {
+    const { VITE_API_BASE: _unusedApiBase, ...remainingPwaEnv } = pwaEnv;
+    pwaEnv = remainingPwaEnv;
+  }
 
   const resolvedPwaPort =
     mode === 'dev'
