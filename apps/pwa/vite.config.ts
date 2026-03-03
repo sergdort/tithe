@@ -59,6 +59,7 @@ export default defineConfig(({ mode }) => {
     preview: {
       host: '0.0.0.0',
       port: pwaPreviewPort,
+      allowedHosts: ['localhost', '127.0.0.1', '.ts.net'],
     },
   };
 });
