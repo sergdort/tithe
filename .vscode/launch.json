@@ -2,6 +2,20 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Tithe PWA: Launch (Chrome)",
+      "type": "pwa-chrome",
+      "request": "attach",
+      "port": 9222,
+      "preLaunchTask": "Tithe PWA: Open Chrome (.env URL)",
+      "webRoot": "${workspaceFolder}/apps/pwa",
+      "sourceMaps": true,
+      "sourceMapPathOverrides": {
+        "/src/*": "${webRoot}/src/*",
+        "/@fs/*": "/*",
+        "/*": "${workspaceFolder}/*"
+      }
+    },
+    {
       "name": "Tithe API: Launch (tsx)",
       "type": "node",
       "request": "launch",
