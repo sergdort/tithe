@@ -159,6 +159,9 @@ Failure:
 - PWA Home pending commitments support a quick `Mark paid` action that creates a linked actual transaction (`source='commitment'`) and updates the ledger.
 - PWA Expenses page now surfaces semantic/reimbursement chips (`Internal transfer`, `External transfer`, `Pending`, `Reimbursable`, `Partial`, `Settled`, `Written off`) and basic reimbursement actions (`Link repayment`, `Mark written off`, `Reopen`).
 - PWA Categories page uses a floating `+` action to open `Add Category`, and category add/edit dialogs can capture expense-category reimbursement settings/defaults while reimbursement auto-match rule management also runs in a dialog.
+- PWA Categories edit saves update the cached `categories` query immediately so the list reflects changes without a manual page refresh.
+- PWA Categories edit save reads the latest in-dialog draft state (including icon changes) to avoid stale writes when saving immediately after selecting a value.
+- PWA Categories edit mutation marks `categories` as stale without immediate refetch after cache write to avoid stale-response overwrites of freshly edited rows.
 - PWA short-form list-page dialogs (for example Expenses/Categories add/edit flows) should follow the Expenses pattern: MUI `Dialog` with `fullWidth` and no mobile `fullScreen`.
 - Ledger v2 development rollout requires a fresh local DB reset (no backfill); reset `DB_PATH` (default `~/.tithe/tithe.db`) before running v2 migrations/commands.
 - PWA large pages should use thin route entrypoints in `apps/pwa/src/pages` and feature-scoped UI/data modules under `apps/pwa/src/features/<feature>`; shared domain-neutral helpers belong in `apps/pwa/src/lib`.

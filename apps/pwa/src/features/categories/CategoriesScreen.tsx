@@ -1,6 +1,6 @@
 import AddIcon from '@mui/icons-material/Add';
 import { Alert, Box, CircularProgress, Fab, Stack } from '@mui/material';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 import type { Category, ReimbursementCategoryRule } from '../../types.js';
 import { CategoriesListCard } from './components/CategoriesListCard.js';
@@ -28,6 +28,7 @@ export const CategoriesScreen = () => {
   const [addOpen, setAddOpen] = useState(false);
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [draftsById, setDraftsById] = useState<Record<string, CategoryEditDraft>>({});
+  const draftsByIdRef = useRef<Record<string, CategoryEditDraft>>({});
   const [rulesOpenCategoryId, setRulesOpenCategoryId] = useState<string | null>(null);
   const [rowErrorById, setRowErrorById] = useState<Record<string, string | null>>({});
   const [rulesErrorByExpenseCategoryId, setRulesErrorByExpenseCategoryId] = useState<
@@ -78,9 +79,19 @@ export const CategoriesScreen = () => {
     ),
   );
 
+  const setDrafts = (
+    updater: (prev: Record<string, CategoryEditDraft>) => Record<string, CategoryEditDraft>,
+  ): void => {
+    setDraftsById((prev) => {
+      const next = updater(prev);
+      draftsByIdRef.current = next;
+      return next;
+    });
+  };
+
   const beginEdit = (category: Category) => {
     setEditingCategoryId(category.id);
-    setDraftsById((prev) => ({
+    setDrafts((prev) => ({
       ...prev,
       [category.id]: prev[category.id] ?? buildDraftFromCategory(category),
     }));
@@ -89,7 +100,7 @@ export const CategoriesScreen = () => {
 
   const cancelEdit = (categoryId: string) => {
     setEditingCategoryId((prev) => (prev === categoryId ? null : prev));
-    setDraftsById((prev) => {
+    setDrafts((prev) => {
       const next = { ...prev };
       delete next[categoryId];
       return next;
@@ -98,7 +109,7 @@ export const CategoriesScreen = () => {
   };
 
   const setDraft = (categoryId: string, patch: Partial<CategoryEditDraft>) => {
-    setDraftsById((prev) => ({
+    setDrafts((prev) => ({
       ...prev,
       [categoryId]: {
         ...(prev[categoryId] ?? {
@@ -115,7 +126,7 @@ export const CategoriesScreen = () => {
   };
 
   const handleSaveCategory = async (category: Category) => {
-    const draft = draftsById[category.id] ?? buildDraftFromCategory(category);
+    const draft = draftsByIdRef.current[category.id] ?? buildDraftFromCategory(category);
     setRowErrorById((prev) => ({ ...prev, [category.id]: null }));
 
     try {

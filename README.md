@@ -368,6 +368,9 @@ Current status in this implementation:
 - PWA Home includes a single `Add Transaction` flow for manual `income`, `expense`, and `transfer` entries (transfer entries require direction and support semantic subtype `internal` / `external`).
 - Reimbursable expense categories in Home manual entry can capture `Track reimbursement` plus `My share`.
 - PWA Categories page uses a floating `+` button for `Add Category`, and opens dialogs for category add/edit (including expense-category reimbursement settings/defaults) and reimbursement auto-match rule management (link expense categories to income/transfer categories).
+- PWA Categories edit saves update the cached category list immediately, so changes appear without refreshing the page.
+- PWA Categories edit save uses the latest dialog draft values (including icon selection) to prevent stale writes on fast save clicks.
+- PWA Categories edit marks category data stale without immediate refetch after cache update to prevent stale server responses from overwriting freshly edited rows.
 - PWA Home pending commitments support `Mark paid`, which creates a linked actual transaction (`source=commitment`) and updates the monthly ledger.
 - Home dashboard cards load independently: a ledger/Monzo/commitments fetch error is shown in that card without blocking the entire Home screen.
 - `Connect` opens the Monzo OAuth flow in a separate window/tab (opened immediately on click to avoid popup blocking after async API calls).
