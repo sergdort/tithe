@@ -167,6 +167,16 @@ Failure:
 - PWA large pages should use thin route entrypoints in `apps/pwa/src/pages` and feature-scoped UI/data modules under `apps/pwa/src/features/<feature>`; shared domain-neutral helpers belong in `apps/pwa/src/lib`.
 - PWA Home dashboard widgets (ledger, Monzo, commitments) should manage loading/error states independently to avoid page-wide blocking when one widget fails.
 
+### PWA state management notes
+
+- Treat TanStack Query as the source of truth for server state; avoid copying query results into component state except for transient UI drafts.
+- Keep route/screen components as composition layers and extract workflow-specific state into focused hooks (for example edit dialog state vs auto-match rules state).
+- Prefer one focused state object per active dialog/workflow instead of parallel id-indexed maps when only one entity can be edited at a time.
+- Keep query cache writes/invalidation policy inside mutation hooks so UI components consume a stable API (`mutateAsync`, `isPending`) without cache plumbing details.
+- For optimistic cache writes, avoid immediate active refetches that can overwrite fresh UI with stale responses; mark stale and refetch intentionally.
+- Keep derived view data (`Map` indexes, filtered lists, linked id sets) pure and memoized from query data.
+- When save handlers can race with rapid input events, read from a ref-synced latest draft snapshot (or a form library with synchronous submit state) to avoid stale payloads.
+
 ### API dev runtime notes
 
 - `@tithe/api` dev script runs via `node --import tsx src/index.ts` (no file watch) to avoid tsx IPC socket failures in restricted environments.

@@ -49,3 +49,4 @@
 [0] For reliable PWA breakpoints + Chrome auto-open in this repo, use `pwa-chrome` attach (`:9222`) with prelaunch tasks: background Vite dev server plus `open -na "Google Chrome" --args --remote-debugging-port=9222` targeting URL derived from workspace `.env` `PWA_PORT`.
 [0] If the user runs dev stack manually, keep VS Code debug setup minimal: prelaunch task should only open Chrome using `.env` `PWA_PORT`, then `pwa-chrome` attach to `:9222`; avoid auto-managing Vite tasks in debugger config.
 [0] When editing hooks with repeated `invalidateQueries` blocks, apply_patch can match the wrong mutation; re-open the file and verify the intended function was changed (here: update mutation, not create mutation).
+[0] For large PWA screens mixing query + dialog + form state, extract dialog-specific state machines into dedicated feature hooks (`useCategoryEditDialog`, `useAutoMatchRulesDialog`) and keep the screen as a composition layer.
