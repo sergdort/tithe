@@ -159,10 +159,23 @@ Failure:
 - PWA Home pending commitments support a quick `Mark paid` action that creates a linked actual transaction (`source='commitment'`) and updates the ledger.
 - PWA Expenses page now surfaces semantic/reimbursement chips (`Internal transfer`, `External transfer`, `Pending`, `Reimbursable`, `Partial`, `Settled`, `Written off`) and basic reimbursement actions (`Link repayment`, `Mark written off`, `Reopen`).
 - PWA Categories page uses a floating `+` action to open `Add Category`, and category add/edit dialogs can capture expense-category reimbursement settings/defaults while reimbursement auto-match rule management also runs in a dialog.
+- PWA Categories edit saves update the cached `categories` query immediately so the list reflects changes without a manual page refresh.
+- PWA Categories edit save reads the latest in-dialog draft state (including icon changes) to avoid stale writes when saving immediately after selecting a value.
+- PWA Categories edit mutation marks `categories` as stale without immediate refetch after cache write to avoid stale-response overwrites of freshly edited rows.
 - PWA short-form list-page dialogs (for example Expenses/Categories add/edit flows) should follow the Expenses pattern: MUI `Dialog` with `fullWidth` and no mobile `fullScreen`.
 - Ledger v2 development rollout requires a fresh local DB reset (no backfill); reset `DB_PATH` (default `~/.tithe/tithe.db`) before running v2 migrations/commands.
 - PWA large pages should use thin route entrypoints in `apps/pwa/src/pages` and feature-scoped UI/data modules under `apps/pwa/src/features/<feature>`; shared domain-neutral helpers belong in `apps/pwa/src/lib`.
 - PWA Home dashboard widgets (ledger, Monzo, commitments) should manage loading/error states independently to avoid page-wide blocking when one widget fails.
+
+### PWA state management notes
+
+- Treat TanStack Query as the source of truth for server state; avoid copying query results into component state except for transient UI drafts.
+- Keep route/screen components as composition layers and extract workflow-specific state into focused hooks (for example edit dialog state vs auto-match rules state).
+- Prefer one focused state object per active dialog/workflow instead of parallel id-indexed maps when only one entity can be edited at a time.
+- Keep query cache writes/invalidation policy inside mutation hooks so UI components consume a stable API (`mutateAsync`, `isPending`) without cache plumbing details.
+- For optimistic cache writes, avoid immediate active refetches that can overwrite fresh UI with stale responses; mark stale and refetch intentionally.
+- Keep derived view data (`Map` indexes, filtered lists, linked id sets) pure and memoized from query data.
+- When save handlers can race with rapid input events, read from a ref-synced latest draft snapshot (or a form library with synchronous submit state) to avoid stale payloads.
 
 ### API dev runtime notes
 

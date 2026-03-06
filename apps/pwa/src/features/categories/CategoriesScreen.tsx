@@ -2,16 +2,13 @@ import AddIcon from '@mui/icons-material/Add';
 import { Alert, Box, CircularProgress, Fab, Stack } from '@mui/material';
 import { useMemo, useState } from 'react';
 
-import type { Category, ReimbursementCategoryRule } from '../../types.js';
+import type { ReimbursementCategoryRule } from '../../types.js';
 import { CategoriesListCard } from './components/CategoriesListCard.js';
-import {
-  CATEGORY_ICON_COMPONENTS,
-  CATEGORY_ICON_OPTIONS,
-  DEFAULT_CATEGORY_COLOR,
-} from './constants.js';
+import { CATEGORY_ICON_COMPONENTS, CATEGORY_ICON_OPTIONS } from './constants.js';
 import { AddCategoryDialog } from './dialogs/AddCategoryDialog.js';
 import { AutoMatchRepaymentCategoriesDialog } from './dialogs/AutoMatchRepaymentCategoriesDialog.js';
 import { EditCategoryDialog } from './dialogs/EditCategoryDialog.js';
+import { useAutoMatchRulesDialog } from './hooks/useAutoMatchRulesDialog.js';
 import {
   useCreateReimbursementCategoryRuleMutation,
   useDeleteReimbursementCategoryRuleMutation,
@@ -21,18 +18,10 @@ import {
   useCategoriesListQuery,
   useReimbursementCategoryRulesQuery,
 } from './hooks/useCategoriesQueries.js';
-import type { CategoryEditDraft } from './types.js';
-import { buildDraftFromCategory, getErrorMessage, parseNullableNonNegativeInt } from './utils.js';
+import { useCategoryEditDialog } from './hooks/useCategoryEditDialog.js';
 
 export const CategoriesScreen = () => {
   const [addOpen, setAddOpen] = useState(false);
-  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
-  const [draftsById, setDraftsById] = useState<Record<string, CategoryEditDraft>>({});
-  const [rulesOpenCategoryId, setRulesOpenCategoryId] = useState<string | null>(null);
-  const [rowErrorById, setRowErrorById] = useState<Record<string, string | null>>({});
-  const [rulesErrorByExpenseCategoryId, setRulesErrorByExpenseCategoryId] = useState<
-    Record<string, string | null>
-  >({});
 
   const categoriesQuery = useCategoriesListQuery();
   const rulesQuery = useReimbursementCategoryRulesQuery();
@@ -43,15 +32,6 @@ export const CategoriesScreen = () => {
 
   const categories = categoriesQuery.data ?? [];
   const rules = rulesQuery.data ?? [];
-
-  const editingCategory = editingCategoryId
-    ? (categories.find((category) => category.id === editingCategoryId) ?? null)
-    : null;
-  const rulesEditingCategory = rulesOpenCategoryId
-    ? (categories.find(
-        (category) => category.id === rulesOpenCategoryId && category.kind === 'expense',
-      ) ?? null)
-    : null;
 
   const rulesByExpenseCategoryId = useMemo(() => {
     const map = new Map<string, ReimbursementCategoryRule[]>();
@@ -69,111 +49,17 @@ export const CategoriesScreen = () => {
     [categories],
   );
 
-  const editingDraft = editingCategory
-    ? (draftsById[editingCategory.id] ?? buildDraftFromCategory(editingCategory))
-    : null;
-  const rulesEditingLinkedInboundIds = new Set(
-    (rulesEditingCategory ? (rulesByExpenseCategoryId.get(rulesEditingCategory.id) ?? []) : []).map(
-      (rule) => rule.inboundCategoryId,
-    ),
-  );
+  const editDialog = useCategoryEditDialog({
+    categories,
+    saveCategory: (input) => updateCategory.mutateAsync(input),
+  });
 
-  const beginEdit = (category: Category) => {
-    setEditingCategoryId(category.id);
-    setDraftsById((prev) => ({
-      ...prev,
-      [category.id]: prev[category.id] ?? buildDraftFromCategory(category),
-    }));
-    setRowErrorById((prev) => ({ ...prev, [category.id]: null }));
-  };
-
-  const cancelEdit = (categoryId: string) => {
-    setEditingCategoryId((prev) => (prev === categoryId ? null : prev));
-    setDraftsById((prev) => {
-      const next = { ...prev };
-      delete next[categoryId];
-      return next;
-    });
-    setRowErrorById((prev) => ({ ...prev, [categoryId]: null }));
-  };
-
-  const setDraft = (categoryId: string, patch: Partial<CategoryEditDraft>) => {
-    setDraftsById((prev) => ({
-      ...prev,
-      [categoryId]: {
-        ...(prev[categoryId] ?? {
-          name: '',
-          icon: 'savings',
-          color: DEFAULT_CATEGORY_COLOR,
-          reimbursementMode: 'none',
-          defaultCounterpartyType: null,
-          defaultRecoveryWindowDaysText: '',
-        }),
-        ...patch,
-      },
-    }));
-  };
-
-  const handleSaveCategory = async (category: Category) => {
-    const draft = draftsById[category.id] ?? buildDraftFromCategory(category);
-    setRowErrorById((prev) => ({ ...prev, [category.id]: null }));
-
-    try {
-      const patch: {
-        name?: string;
-        icon?: string;
-        color?: string;
-        reimbursementMode?: 'none' | 'optional' | 'always';
-        defaultCounterpartyType?: 'self' | 'partner' | 'team' | 'other' | null;
-        defaultRecoveryWindowDays?: number | null;
-      } = {
-        name: draft.name.trim(),
-        icon: draft.icon,
-        color: draft.color,
-      };
-
-      if (category.kind === 'expense') {
-        patch.reimbursementMode = draft.reimbursementMode;
-        patch.defaultCounterpartyType = draft.defaultCounterpartyType;
-        patch.defaultRecoveryWindowDays = parseNullableNonNegativeInt(
-          draft.defaultRecoveryWindowDaysText,
-        );
-      }
-
-      await updateCategory.mutateAsync({ id: category.id, patch });
-      setEditingCategoryId((prev) => (prev === category.id ? null : prev));
-    } catch (error) {
-      setRowErrorById((prev) => ({
-        ...prev,
-        [category.id]: getErrorMessage(error, 'Failed to update category.'),
-      }));
-    }
-  };
-
-  const handleToggleRule = async (
-    expenseCategoryId: string,
-    inboundCategoryId: string,
-    enabled: boolean,
-  ) => {
-    setRulesErrorByExpenseCategoryId((prev) => ({ ...prev, [expenseCategoryId]: null }));
-
-    try {
-      const existing = (rulesByExpenseCategoryId.get(expenseCategoryId) ?? []).find(
-        (rule) => rule.inboundCategoryId === inboundCategoryId,
-      );
-
-      if (enabled) {
-        await createRule.mutateAsync({ expenseCategoryId, inboundCategoryId });
-      } else if (existing) {
-        await deleteRule.mutateAsync(existing.id);
-      }
-    } catch (error) {
-      setRulesErrorByExpenseCategoryId((prev) => ({
-        ...prev,
-        [expenseCategoryId]: getErrorMessage(error, 'Failed to update auto-match rule.'),
-      }));
-    }
-  };
+  const rulesDialog = useAutoMatchRulesDialog({
+    categories,
+    rulesByExpenseCategoryId,
+    createRule: (input) => createRule.mutateAsync(input),
+    deleteRule: (id) => deleteRule.mutateAsync(id),
+  });
 
   if (categoriesQuery.isLoading || rulesQuery.isLoading) {
     return (
@@ -197,8 +83,8 @@ export const CategoriesScreen = () => {
         <CategoriesListCard
           categories={categories}
           rulesByExpenseCategoryId={rulesByExpenseCategoryId}
-          onOpenAutoMatchRules={setRulesOpenCategoryId}
-          onEditCategory={beginEdit}
+          onOpenAutoMatchRules={rulesDialog.openForCategory}
+          onEditCategory={editDialog.beginEdit}
         />
       </Stack>
 
@@ -220,43 +106,31 @@ export const CategoriesScreen = () => {
       <AddCategoryDialog open={addOpen} onClose={() => setAddOpen(false)} />
 
       <AutoMatchRepaymentCategoriesDialog
-        open={Boolean(rulesEditingCategory)}
-        expenseCategory={rulesEditingCategory}
+        open={rulesDialog.open}
+        expenseCategory={rulesDialog.expenseCategory}
         inboundCategories={inboundCategories}
-        linkedInboundIds={rulesEditingLinkedInboundIds}
-        errorMessage={
-          rulesEditingCategory
-            ? (rulesErrorByExpenseCategoryId[rulesEditingCategory.id] ?? null)
-            : null
-        }
+        linkedInboundIds={rulesDialog.linkedInboundIds}
+        errorMessage={rulesDialog.errorMessage}
         isBusy={createRule.isPending || deleteRule.isPending}
-        onClose={() => setRulesOpenCategoryId(null)}
+        onClose={rulesDialog.close}
         onToggleRule={(inboundCategoryId, enabled) => {
-          if (!rulesEditingCategory) return;
-          void handleToggleRule(rulesEditingCategory.id, inboundCategoryId, enabled);
+          void rulesDialog.toggleRule(inboundCategoryId, enabled);
         }}
       />
 
       <EditCategoryDialog
-        open={Boolean(editingCategory && editingDraft)}
-        category={editingCategory}
-        draft={editingDraft}
+        open={editDialog.open}
+        category={editDialog.category}
+        draft={editDialog.draft}
         iconOptions={CATEGORY_ICON_OPTIONS}
         iconComponents={CATEGORY_ICON_COMPONENTS}
-        errorMessage={editingCategory ? (rowErrorById[editingCategory.id] ?? null) : null}
+        errorMessage={editDialog.errorMessage}
         isSubmitting={updateCategory.isPending}
-        onClose={() => {
-          if (!editingCategory) return;
-          cancelEdit(editingCategory.id);
-        }}
+        onClose={editDialog.closeEdit}
         onSave={() => {
-          if (!editingCategory) return;
-          void handleSaveCategory(editingCategory);
+          void editDialog.save();
         }}
-        onChangeDraft={(patch) => {
-          if (!editingCategory) return;
-          setDraft(editingCategory.id, patch);
-        }}
+        onChangeDraft={editDialog.changeDraft}
       />
     </Box>
   );
