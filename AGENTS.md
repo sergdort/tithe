@@ -155,10 +155,11 @@ Failure:
 - PWA Home Monthly Ledger widget includes a month-scoped Monzo `Sync month` action that syncs the selected month window and overwrites existing imported Monzo expenses for that month.
 - Monthly Ledger Monzo sync success/error feedback is scoped to the selected month and clears when navigating to a different month.
 - PWA Home Monthly Ledger widget also surfaces v2 summary metrics (`Cash In`, `Cash Out`, `Net Flow`, `True Spend`, `Reimbursement Outstanding`) with `Gross/Net` and `Exclude internal transfers` toggles.
+- PWA Home Monthly Ledger category breakdown rows use category icon/color accents (matching Categories list styling) when category metadata is available.
 - PWA Home `Add Transaction` is a single manual entry flow for `income|expense|transfer`; transfer entries require direction and support transfer subtype (`internal|external`) via semantic `kind`, and reimbursable expense categories can capture `Track reimbursement` + `My share`.
 - PWA Home pending commitments support a quick `Mark paid` action that creates a linked actual transaction (`source='commitment'`) and updates the ledger.
 - PWA Expenses page now surfaces semantic/reimbursement chips (`Internal transfer`, `External transfer`, `Pending`, `Reimbursable`, `Partial`, `Settled`, `Written off`) and basic reimbursement actions (`Link repayment`, `Mark written off`, `Reopen`).
-- PWA Categories page uses a floating `+` action to open `Add Category`, and category add/edit dialogs can capture expense-category reimbursement settings/defaults while reimbursement auto-match rule management also runs in a dialog.
+- PWA Categories page uses a floating `+` action to open `Add Category`, category add/edit dialogs can capture expense-category reimbursement settings/defaults, reimbursement auto-match rule management runs in a dialog, and the category list is grouped into `Income`/`Expense` sections with each row accented by category color (no per-row kind subtitle).
 - PWA Categories edit saves update the cached `categories` query immediately so the list reflects changes without a manual page refresh.
 - PWA Categories edit save reads the latest in-dialog draft state (including icon changes) to avoid stale writes when saving immediately after selecting a value.
 - PWA Categories edit mutation marks `categories` as stale without immediate refetch after cache write to avoid stale-response overwrites of freshly edited rows.

@@ -1,3 +1,4 @@
+import CategoryIcon from '@mui/icons-material/Category';
 import {
   Alert,
   Box,
@@ -14,12 +15,17 @@ import {
   Switch,
   Typography,
 } from '@mui/material';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import type { MonthWindow } from '../../../lib/date/month.js';
 import { pounds, signedPounds } from '../../../lib/format/money.js';
+import { CATEGORY_ICON_COMPONENTS } from '../../categories/constants.js';
 import { useMonzoSyncMutation } from '../hooks/useHomeMutations.js';
-import { useHomeMonthlyLedgerQuery, useHomeMonzoStatusQuery } from '../hooks/useHomeQueries.js';
+import {
+  useHomeCategoriesQuery,
+  useHomeMonthlyLedgerQuery,
+  useHomeMonzoStatusQuery,
+} from '../hooks/useHomeQueries.js';
 import { MonthNavigator } from './MonthNavigator.js';
 
 interface MonthlyLedgerCardProps {
@@ -33,6 +39,7 @@ interface LedgerCategorySectionProps {
   title: string;
   titleColor: string;
   emptyLabel: string;
+  categoryMetaById: Map<string, { icon: string; color: string }>;
   rows: Array<{
     categoryId: string;
     categoryName: string;
@@ -46,6 +53,7 @@ const LedgerCategorySection = ({
   title,
   titleColor,
   emptyLabel,
+  categoryMetaById,
   rows,
   rowAmountColor,
 }: LedgerCategorySectionProps) => (
@@ -63,8 +71,28 @@ const LedgerCategorySection = ({
           <ListItem
             key={`${title.toLowerCase()}-${item.categoryId}`}
             disableGutters
-            sx={{ py: 0.35 }}
+            sx={{
+              py: 0.35,
+              pl: 1,
+              borderLeft: '3px solid',
+              borderColor: categoryMetaById.get(item.categoryId)?.color ?? 'divider',
+              borderRadius: 1,
+            }}
           >
+            {(() => {
+              const categoryMeta = categoryMetaById.get(item.categoryId);
+              const CategoryRowIcon =
+                CATEGORY_ICON_COMPONENTS[categoryMeta?.icon ?? 'category'] ?? CategoryIcon;
+
+              return (
+                <Box sx={{ mr: 1, mt: 0.5 }}>
+                  <CategoryRowIcon
+                    fontSize="small"
+                    sx={{ color: categoryMeta?.color ?? 'text.secondary' }}
+                  />
+                </Box>
+              );
+            })()}
             <ListItemText
               primary={item.categoryName}
               secondary={`${item.txCount} tx`}
@@ -82,8 +110,10 @@ const LedgerCategorySection = ({
 );
 
 const LedgerTransferSection = ({
+  categoryMetaById,
   rows,
 }: {
+  categoryMetaById: Map<string, { icon: string; color: string }>;
   rows: Array<{
     categoryId: string;
     categoryName: string;
@@ -106,8 +136,29 @@ const LedgerTransferSection = ({
           <ListItem
             key={`transfer-${item.categoryId}-${item.direction}`}
             disableGutters
-            sx={{ py: 0.35, gap: 1 }}
+            sx={{
+              py: 0.35,
+              gap: 1,
+              pl: 1,
+              borderLeft: '3px solid',
+              borderColor: categoryMetaById.get(item.categoryId)?.color ?? 'divider',
+              borderRadius: 1,
+            }}
           >
+            {(() => {
+              const categoryMeta = categoryMetaById.get(item.categoryId);
+              const CategoryRowIcon =
+                CATEGORY_ICON_COMPONENTS[categoryMeta?.icon ?? 'category'] ?? CategoryIcon;
+
+              return (
+                <Box sx={{ mt: 0.4 }}>
+                  <CategoryRowIcon
+                    fontSize="small"
+                    sx={{ color: categoryMeta?.color ?? 'text.secondary' }}
+                  />
+                </Box>
+              );
+            })()}
             <ListItemText
               primary={item.categoryName}
               secondary={`${item.direction === 'in' ? 'Money in' : 'Money out'} • ${item.txCount} tx`}
@@ -134,9 +185,11 @@ export const MonthlyLedgerCard = ({
   onAddTransaction,
 }: MonthlyLedgerCardProps) => {
   const ledgerQuery = useHomeMonthlyLedgerQuery(monthWindow);
+  const categoriesQuery = useHomeCategoriesQuery();
   const monzoStatusQuery = useHomeMonzoStatusQuery();
   const syncMutation = useMonzoSyncMutation();
   const ledger = ledgerQuery.data;
+  const categories = categoriesQuery.data ?? [];
   const monzoStatus = monzoStatusQuery.data;
   const monthKey = `${monthWindow.from}|${monthWindow.to}`;
   const resetSyncMutation = syncMutation.reset;
@@ -145,6 +198,11 @@ export const MonthlyLedgerCard = ({
   );
   const [spendMode, setSpendMode] = useState<'gross' | 'net'>('net');
   const [excludeInternalTransfers, setExcludeInternalTransfers] = useState(true);
+  const categoryMetaById = useMemo(
+    () =>
+      new Map(categories.map((item) => [item.id, { icon: item.icon, color: item.color }] as const)),
+    [categories],
+  );
 
   const isInitialLoading = ledgerQuery.isLoading && !ledger;
   const hasBlockingError = ledgerQuery.isError && !ledger;
@@ -399,6 +457,7 @@ export const MonthlyLedgerCard = ({
                 title="Income"
                 titleColor="success.dark"
                 emptyLabel="No income recorded."
+                categoryMetaById={categoryMetaById}
                 rows={ledger.sections.income}
                 rowAmountColor="success.main"
               />
@@ -407,10 +466,14 @@ export const MonthlyLedgerCard = ({
                 title="Expenses"
                 titleColor="error.dark"
                 emptyLabel="No expenses recorded."
+                categoryMetaById={categoryMetaById}
                 rows={ledger.sections.expense}
               />
 
-              <LedgerTransferSection rows={ledger.sections.transfer} />
+              <LedgerTransferSection
+                categoryMetaById={categoryMetaById}
+                rows={ledger.sections.transfer}
+              />
             </Stack>
           </>
         )}
