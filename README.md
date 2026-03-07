@@ -365,6 +365,7 @@ Current status in this implementation:
 - PWA Home Monthly Ledger widget includes `Sync month`, which syncs the selected month window and overwrites existing imported Monzo expenses for that month.
 - PWA Home Monthly Ledger widget also surfaces Ledger v2 summary metrics (`Cash In`, `Cash Out`, `Net Flow`, `True Spend`, `Reimbursement Outstanding`) with `Gross/Net` and `Exclude internal transfers` toggles.
 - PWA Home Monthly Ledger category breakdown rows use category icon/color accents (matching Categories list styling) when category metadata is available.
+- PWA Home Monthly Ledger `Expenses` rows drill into a month-scoped category detail screen under the Expenses tab (`/expenses/category/:categoryId?month=YYYY-MM`); `Income` and `Transfers` rows are not tappable.
 - Monthly Ledger sync feedback is month-scoped and clears when you navigate to another month.
 - PWA Home includes a single `Add Transaction` flow for manual `income`, `expense`, and `transfer` entries (transfer entries require direction and support semantic subtype `internal` / `external`).
 - Reimbursable expense categories in Home manual entry can capture `Track reimbursement` plus `My share`.
@@ -374,6 +375,7 @@ Current status in this implementation:
 - PWA Categories edit marks category data stale without immediate refetch after cache update to prevent stale server responses from overwriting freshly edited rows.
 - PWA Home pending commitments support `Mark paid`, which creates a linked actual transaction (`source=commitment`) and updates the monthly ledger.
 - Home dashboard cards load independently: a ledger/Monzo/commitments fetch error is shown in that card without blocking the entire Home screen.
+- Expenses tab includes a dedicated ledger-origin drill-in detail page with top-bar back navigation while keeping bottom-tab selection on `Expenses`.
 - `Connect` opens the Monzo OAuth flow in a separate window/tab (opened immediately on click to avoid popup blocking after async API calls).
 - Initial import window is last 90 days; subsequent sync uses cursor overlap.
 - Import policy includes non-zero Monzo debits + credits (`amount != 0`), including pending rows (`postedAt=null` until settlement).

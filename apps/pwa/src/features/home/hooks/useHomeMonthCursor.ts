@@ -2,8 +2,14 @@ import { startTransition, useMemo, useState } from 'react';
 
 import { monthStartLocal, monthWindow, shiftMonthLocal } from '../../../lib/date/month.js';
 
-export const useHomeMonthCursor = () => {
-  const [monthCursor, setMonthCursor] = useState(() => monthStartLocal(new Date()));
+interface UseHomeMonthCursorOptions {
+  initialMonthCursor?: Date;
+}
+
+export const useHomeMonthCursor = (options?: UseHomeMonthCursorOptions) => {
+  const [monthCursor, setMonthCursor] = useState(() =>
+    monthStartLocal(options?.initialMonthCursor ?? new Date()),
+  );
 
   const window = useMemo(() => monthWindow(monthCursor), [monthCursor]);
 

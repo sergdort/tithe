@@ -10,6 +10,7 @@ import {
   FormControlLabel,
   List,
   ListItem,
+  ListItemButton,
   ListItemText,
   Stack,
   Switch,
@@ -33,6 +34,7 @@ interface MonthlyLedgerCardProps {
   onPreviousMonth: () => void;
   onNextMonth: () => void;
   onAddTransaction: () => void;
+  onOpenExpenseCategory?: (categoryId: string) => void;
 }
 
 interface LedgerCategorySectionProps {
@@ -47,6 +49,7 @@ interface LedgerCategorySectionProps {
     txCount: number;
   }>;
   rowAmountColor?: string;
+  onRowClick?: (categoryId: string) => void;
 }
 
 const LedgerCategorySection = ({
@@ -56,6 +59,7 @@ const LedgerCategorySection = ({
   categoryMetaById,
   rows,
   rowAmountColor,
+  onRowClick,
 }: LedgerCategorySectionProps) => (
   <Box>
     <Typography variant="subtitle2" fontWeight={700} color={titleColor} sx={{ mb: 0.5 }}>
@@ -71,37 +75,72 @@ const LedgerCategorySection = ({
           <ListItem
             key={`${title.toLowerCase()}-${item.categoryId}`}
             disableGutters
+            data-ledger-section={title.toLowerCase()}
+            data-ledger-category-id={item.categoryId}
             sx={{
               py: 0.35,
-              pl: 1,
               borderLeft: '3px solid',
               borderColor: categoryMetaById.get(item.categoryId)?.color ?? 'divider',
               borderRadius: 1,
             }}
           >
-            {(() => {
-              const categoryMeta = categoryMetaById.get(item.categoryId);
-              const CategoryRowIcon =
-                CATEGORY_ICON_COMPONENTS[categoryMeta?.icon ?? 'category'] ?? CategoryIcon;
+            {onRowClick ? (
+              <ListItemButton
+                sx={{ py: 0, pl: 1, pr: 0.5, borderRadius: 1 }}
+                onClick={() => onRowClick(item.categoryId)}
+                aria-label={`View ${item.categoryName} expenses`}
+              >
+                {(() => {
+                  const categoryMeta = categoryMetaById.get(item.categoryId);
+                  const CategoryRowIcon =
+                    CATEGORY_ICON_COMPONENTS[categoryMeta?.icon ?? 'category'] ?? CategoryIcon;
 
-              return (
-                <Box sx={{ mr: 1, mt: 0.5 }}>
-                  <CategoryRowIcon
-                    fontSize="small"
-                    sx={{ color: categoryMeta?.color ?? 'text.secondary' }}
-                  />
-                </Box>
-              );
-            })()}
-            <ListItemText
-              primary={item.categoryName}
-              secondary={`${item.txCount} tx`}
-              primaryTypographyProps={{ variant: 'body2' }}
-              secondaryTypographyProps={{ variant: 'caption' }}
-            />
-            <Typography variant="body2" sx={{ fontWeight: 700, color: rowAmountColor }}>
-              {pounds(item.totalMinor)}
-            </Typography>
+                  return (
+                    <Box sx={{ mr: 1, mt: 0.5 }}>
+                      <CategoryRowIcon
+                        fontSize="small"
+                        sx={{ color: categoryMeta?.color ?? 'text.secondary' }}
+                      />
+                    </Box>
+                  );
+                })()}
+                <ListItemText
+                  primary={item.categoryName}
+                  secondary={`${item.txCount} tx`}
+                  primaryTypographyProps={{ variant: 'body2' }}
+                  secondaryTypographyProps={{ variant: 'caption' }}
+                />
+                <Typography variant="body2" sx={{ fontWeight: 700, color: rowAmountColor }}>
+                  {pounds(item.totalMinor)}
+                </Typography>
+              </ListItemButton>
+            ) : (
+              <>
+                {(() => {
+                  const categoryMeta = categoryMetaById.get(item.categoryId);
+                  const CategoryRowIcon =
+                    CATEGORY_ICON_COMPONENTS[categoryMeta?.icon ?? 'category'] ?? CategoryIcon;
+
+                  return (
+                    <Box sx={{ mr: 1, mt: 0.5, pl: 1 }}>
+                      <CategoryRowIcon
+                        fontSize="small"
+                        sx={{ color: categoryMeta?.color ?? 'text.secondary' }}
+                      />
+                    </Box>
+                  );
+                })()}
+                <ListItemText
+                  primary={item.categoryName}
+                  secondary={`${item.txCount} tx`}
+                  primaryTypographyProps={{ variant: 'body2' }}
+                  secondaryTypographyProps={{ variant: 'caption' }}
+                />
+                <Typography variant="body2" sx={{ fontWeight: 700, color: rowAmountColor }}>
+                  {pounds(item.totalMinor)}
+                </Typography>
+              </>
+            )}
           </ListItem>
         ))}
       </List>
@@ -183,6 +222,7 @@ export const MonthlyLedgerCard = ({
   onPreviousMonth,
   onNextMonth,
   onAddTransaction,
+  onOpenExpenseCategory,
 }: MonthlyLedgerCardProps) => {
   const ledgerQuery = useHomeMonthlyLedgerQuery(monthWindow);
   const categoriesQuery = useHomeCategoriesQuery();
@@ -468,6 +508,7 @@ export const MonthlyLedgerCard = ({
                 emptyLabel="No expenses recorded."
                 categoryMetaById={categoryMetaById}
                 rows={ledger.sections.expense}
+                onRowClick={onOpenExpenseCategory}
               />
 
               <LedgerTransferSection
