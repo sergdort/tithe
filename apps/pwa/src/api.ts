@@ -101,7 +101,14 @@ export const api = {
       }),
   },
   expenses: {
-    list: () => request<Expense[]>('/expenses?limit=100'),
+    list: (params?: { from?: string; to?: string; categoryId?: string; limit?: number }) => {
+      const search = new URLSearchParams();
+      search.set('limit', String(params?.limit ?? 100));
+      if (params?.from) search.set('from', params.from);
+      if (params?.to) search.set('to', params.to);
+      if (params?.categoryId) search.set('categoryId', params.categoryId);
+      return request<Expense[]>(`/expenses?${search.toString()}`);
+    },
     create: (body: {
       occurredAt: string;
       postedAt?: string | null;
