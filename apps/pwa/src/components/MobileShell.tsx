@@ -1,3 +1,4 @@
+import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import ListAltOutlinedIcon from '@mui/icons-material/ListAltOutlined';
@@ -8,6 +9,7 @@ import {
   BottomNavigation,
   BottomNavigationAction,
   Box,
+  IconButton,
   Paper,
   Toolbar,
   Typography,
@@ -17,6 +19,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 
 interface MobileShellProps {
   title: string;
+  showBackButton?: boolean;
+  onBack?: () => void;
   children: React.ReactNode;
 }
 
@@ -28,12 +32,23 @@ const tabs = [
   { label: 'Insights', path: '/insights', icon: <InsightsOutlinedIcon /> },
 ];
 
-export const MobileShell = ({ title, children }: MobileShellProps) => {
+export const MobileShell = ({
+  title,
+  showBackButton = false,
+  onBack,
+  children,
+}: MobileShellProps) => {
   const location = useLocation();
   const navigate = useNavigate();
 
   const active = useMemo(
-    () => tabs.find((item) => location.pathname === item.path)?.path ?? '/',
+    () =>
+      tabs.find((item) => {
+        if (item.path === '/') {
+          return location.pathname === '/';
+        }
+        return location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
+      })?.path ?? '/',
     [location.pathname],
   );
 
@@ -51,6 +66,11 @@ export const MobileShell = ({ title, children }: MobileShellProps) => {
         }}
       >
         <Toolbar sx={{ minHeight: 56 }}>
+          {showBackButton ? (
+            <IconButton edge="start" aria-label="Back" onClick={onBack} sx={{ mr: 1 }}>
+              <ArrowBackIosNewIcon fontSize="small" />
+            </IconButton>
+          ) : null}
           <Typography component="h1" variant="h6" sx={{ fontWeight: 700 }}>
             {title}
           </Typography>

@@ -335,10 +335,240 @@ test('home shows monthly ledger and transfer direction in add transaction flow',
   await expect(page.getByLabel('Direction')).toBeVisible();
 });
 
+test('ledger expense category drills into month-scoped detail and back preserves home month', async ({
+  page,
+}) => {
+  let expenseListRequestUrl: URL | null = null;
+
+  await page.route('**/v1/reports/monthly-ledger*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        data: {
+          month: '2026-02',
+          range: {
+            from: '2026-02-01T00:00:00.000Z',
+            to: '2026-03-01T00:00:00.000Z',
+          },
+          totals: {
+            incomeMinor: 300000,
+            expenseMinor: 125000,
+            transferInMinor: 5000,
+            transferOutMinor: 20000,
+            operatingSurplusMinor: 175000,
+            netCashMovementMinor: 160000,
+            txCount: 6,
+          },
+          sections: {
+            income: [
+              {
+                categoryId: '22222222-2222-2222-2222-222222222222',
+                categoryName: 'Salary',
+                totalMinor: 300000,
+                txCount: 1,
+              },
+            ],
+            expense: [
+              {
+                categoryId: '11111111-1111-1111-1111-111111111111',
+                categoryName: 'Sports',
+                totalMinor: 125000,
+                txCount: 2,
+              },
+            ],
+            transfer: [
+              {
+                categoryId: '33333333-3333-3333-3333-333333333333',
+                categoryName: 'ISA',
+                direction: 'out',
+                totalMinor: 20000,
+                txCount: 1,
+              },
+            ],
+          },
+        },
+        meta: {},
+      }),
+    });
+  });
+
+  await page.route('**/v1/commitment-instances?status=pending', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, data: [], meta: {} }),
+    });
+  });
+
+  await page.route('**/v1/commitments', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, data: [], meta: {} }),
+    });
+  });
+
+  await page.route('**/v1/categories', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        data: [
+          {
+            id: '11111111-1111-1111-1111-111111111111',
+            name: 'Sports',
+            kind: 'expense',
+            icon: 'sports_soccer',
+            color: '#2E7D32',
+            isSystem: false,
+            archivedAt: null,
+            createdAt: '2026-02-01T00:00:00.000Z',
+            updatedAt: '2026-02-01T00:00:00.000Z',
+          },
+          {
+            id: '22222222-2222-2222-2222-222222222222',
+            name: 'Salary',
+            kind: 'income',
+            icon: 'payments',
+            color: '#2E7D32',
+            isSystem: false,
+            archivedAt: null,
+            createdAt: '2026-02-01T00:00:00.000Z',
+            updatedAt: '2026-02-01T00:00:00.000Z',
+          },
+          {
+            id: '33333333-3333-3333-3333-333333333333',
+            name: 'ISA',
+            kind: 'transfer',
+            icon: 'savings',
+            color: '#1976D2',
+            isSystem: false,
+            archivedAt: null,
+            createdAt: '2026-02-01T00:00:00.000Z',
+            updatedAt: '2026-02-01T00:00:00.000Z',
+          },
+        ],
+        meta: {},
+      }),
+    });
+  });
+
+  await page.route('**/v1/integrations/monzo/status', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        data: {
+          status: 'disconnected',
+          mode: 'developer_api_expenses_only',
+          configured: false,
+          connected: false,
+          accountId: null,
+          lastSyncAt: null,
+          lastCursor: null,
+          mappingCount: 0,
+          lastError: null,
+        },
+        meta: {},
+      }),
+    });
+  });
+
+  await page.route('**/v1/expenses*', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    expenseListRequestUrl = new URL(route.request().url());
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        data: [
+          {
+            id: 'exp-sports',
+            occurredAt: '2026-02-05T10:00:00.000Z',
+            postedAt: '2026-02-05T11:00:00.000Z',
+            money: { amountMinor: 2500, currency: 'GBP' },
+            categoryId: '11111111-1111-1111-1111-111111111111',
+            source: 'local',
+            kind: 'expense',
+            transferDirection: null,
+            reimbursementStatus: 'none',
+            myShareMinor: null,
+            closedOutstandingMinor: null,
+            counterpartyType: null,
+            reimbursementGroupId: null,
+            reimbursementClosedAt: null,
+            reimbursementClosedReason: null,
+            recoverableMinor: 0,
+            recoveredMinor: 0,
+            outstandingMinor: 0,
+            merchantName: 'Sports Direct',
+            merchantLogoUrl: null,
+            merchantEmoji: null,
+            note: null,
+            providerTransactionId: null,
+            commitmentInstanceId: null,
+            createdAt: '2026-02-05T10:00:00.000Z',
+            updatedAt: '2026-02-05T10:00:00.000Z',
+          },
+        ],
+        meta: {},
+      }),
+    });
+  });
+
+  await page.goto('/?month=2026-02');
+
+  await page.locator('[data-ledger-section="income"]').click();
+  await expect(page).toHaveURL(/\/\?month=2026-02$/);
+
+  await page.getByText('ISA').click();
+  await expect(page).toHaveURL(/\/\?month=2026-02$/);
+
+  await page.getByRole('button', { name: 'View Sports expenses' }).click();
+  await expect(page).toHaveURL(
+    /\/expenses\/category\/11111111-1111-1111-1111-111111111111\?month=2026-02$/,
+  );
+  await expect(page.getByText('February 2026')).toBeVisible();
+  await expect(page.locator('[data-expense-id="exp-sports"]')).toBeVisible();
+  await expect(
+    page.locator('button.MuiBottomNavigationAction-root.Mui-selected', { hasText: 'Expenses' }),
+  ).toBeVisible();
+
+  expect(expenseListRequestUrl).not.toBeNull();
+  if (!expenseListRequestUrl) {
+    throw new Error('Expected expenses request URL to be captured');
+  }
+  const capturedExpenseListRequestUrl = expenseListRequestUrl as URL;
+  const expectedFrom = new Date(2026, 1, 1, 0, 0, 0, 0).toISOString();
+  const expectedTo = new Date(new Date(2026, 2, 1, 0, 0, 0, 0).getTime() - 1).toISOString();
+  expect(capturedExpenseListRequestUrl.searchParams.get('categoryId')).toBe(
+    '11111111-1111-1111-1111-111111111111',
+  );
+  expect(capturedExpenseListRequestUrl.searchParams.get('limit')).toBe('1000');
+  expect(capturedExpenseListRequestUrl.searchParams.get('from')).toBe(expectedFrom);
+  expect(capturedExpenseListRequestUrl.searchParams.get('to')).toBe(expectedTo);
+
+  await page.getByLabel('Back').click();
+  await expect(page).toHaveURL(/\/\?month=2026-02$/);
+});
+
 test('monthly ledger sync posts current month range with overwrite and shows result summary', async ({
   page,
 }) => {
   let ledgerRequestRange: { from: string; to: string } | null = null;
+  let initialLedgerRequestRange: { from: string; to: string } | null = null;
   let syncRequestBody: unknown = null;
 
   await page.route('**/v1/reports/monthly-ledger*', async (route) => {
@@ -346,6 +576,9 @@ test('monthly ledger sync posts current month range with overwrite and shows res
     const from = url.searchParams.get('from') ?? '2026-02-01T00:00:00.000Z';
     const to = url.searchParams.get('to') ?? '2026-03-01T00:00:00.000Z';
     ledgerRequestRange = { from, to };
+    if (!initialLedgerRequestRange) {
+      initialLedgerRequestRange = { from, to };
+    }
 
     await route.fulfill({
       status: 200,
@@ -459,10 +692,10 @@ test('monthly ledger sync posts current month range with overwrite and shows res
   await page.getByRole('button', { name: 'Next month' }).click();
   await expect(page.getByText('Imported 2, updated 1, skipped 3.')).toHaveCount(0);
   expect(ledgerRequestRange).not.toBeNull();
-  if (!ledgerRequestRange) {
+  if (!initialLedgerRequestRange) {
     throw new Error('Expected monthly ledger request range to be captured');
   }
-  const range = ledgerRequestRange as unknown as { from: string; to: string };
+  const range = initialLedgerRequestRange as unknown as { from: string; to: string };
   expect(syncRequestBody).toEqual({
     from: range.from,
     to: range.to,
