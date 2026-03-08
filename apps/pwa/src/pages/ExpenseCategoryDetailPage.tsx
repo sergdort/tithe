@@ -38,7 +38,7 @@ export const ExpenseCategoryDetailPage = () => {
 
   const expensesQuery = useQuery({
     queryKey: ['expenses', 'category-detail', categoryId, from, to],
-    queryFn: () => api.expenses.list({ categoryId, from, to }),
+    queryFn: () => api.expenses.list({ categoryId, from, to, limit: 1000 }),
     enabled: Boolean(categoryId),
   });
 

@@ -556,6 +556,7 @@ test('ledger expense category drills into month-scoped detail and back preserves
   expect(capturedExpenseListRequestUrl.searchParams.get('categoryId')).toBe(
     '11111111-1111-1111-1111-111111111111',
   );
+  expect(capturedExpenseListRequestUrl.searchParams.get('limit')).toBe('1000');
   expect(capturedExpenseListRequestUrl.searchParams.get('from')).toBe(expectedFrom);
   expect(capturedExpenseListRequestUrl.searchParams.get('to')).toBe(expectedTo);
 

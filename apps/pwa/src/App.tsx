@@ -23,6 +23,8 @@ export const App = () => {
   const navigate = useNavigate();
   const title = getTitle(location.pathname);
   const showBackButton = location.pathname.startsWith('/expenses/category/');
+  const canNavigateBackInApp =
+    (location.state as { inAppBackTarget?: string } | null)?.inAppBackTarget === 'home';
   const backToHomeHref = useMemo(() => {
     const search = new URLSearchParams(location.search);
     const month = search.get('month');
@@ -33,11 +35,11 @@ export const App = () => {
   }, [location.search]);
 
   const handleBack = () => {
-    if (typeof window !== 'undefined' && window.history.length > 1) {
+    if (canNavigateBackInApp) {
       navigate(-1);
       return;
     }
-    navigate(backToHomeHref);
+    navigate(backToHomeHref, { replace: true });
   };
 
   return (

@@ -44,6 +44,7 @@ export const HomePage = () => {
   const handleOpenExpenseCategory = (categoryId: string) => {
     navigate(
       `/expenses/category/${encodeURIComponent(categoryId)}?month=${encodeURIComponent(monthKey)}`,
+      { state: { inAppBackTarget: 'home' } },
     );
   };
 

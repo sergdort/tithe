@@ -32,7 +32,7 @@ export const CategoriesListCard = ({
   onOpenAutoMatchRules,
   onEditCategory,
 }: CategoriesListCardProps) => {
-  const incomeCategories = categories.filter((category) => category.kind !== 'expense');
+  const nonExpenseCategories = categories.filter((category) => category.kind !== 'expense');
   const expenseCategories = categories.filter((category) => category.kind === 'expense');
 
   const renderCategoryRows = (items: Category[]) => (
@@ -120,12 +120,14 @@ export const CategoriesListCard = ({
           <Stack spacing={2}>
             <Box>
               <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 700 }}>
-                Income
+                Income & Transfers
               </Typography>
-              {incomeCategories.length === 0 ? (
-                <Typography color="text.secondary">No income categories yet.</Typography>
+              {nonExpenseCategories.length === 0 ? (
+                <Typography color="text.secondary">
+                  No income or transfer categories yet.
+                </Typography>
               ) : (
-                renderCategoryRows(incomeCategories)
+                renderCategoryRows(nonExpenseCategories)
               )}
             </Box>
 
