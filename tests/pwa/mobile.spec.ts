@@ -110,7 +110,7 @@ test('expenses list avatar prefers logo, then emoji, then initials and shows pen
     await route.fulfill({ status: 404, contentType: 'text/plain', body: 'not found' });
   });
 
-  await page.goto('/expenses');
+  await page.goto('/transactions');
 
   const logoRow = page.locator('[data-expense-id="exp-logo"]');
   const emojiRow = page.locator('[data-expense-id="exp-emoji"]');
@@ -132,6 +132,57 @@ test('expenses list avatar prefers logo, then emoji, then initials and shows pen
   );
   await expect(initialsRow.locator('[data-testid="expense-avatar-exp-initials"]')).toContainText(
     'MI',
+  );
+  await expect(
+    page.locator('button.MuiBottomNavigationAction-root.Mui-selected', {
+      hasText: 'Transactions',
+    }),
+  ).toBeVisible();
+});
+
+test('legacy expenses routes redirect to transactions routes while preserving search params', async ({
+  page,
+}) => {
+  await page.route('**/v1/categories', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        data: [
+          {
+            id: '11111111-1111-1111-1111-111111111111',
+            name: 'ISA',
+            kind: 'transfer',
+            icon: 'savings',
+            color: '#1976D2',
+            isSystem: false,
+            archivedAt: null,
+            createdAt: '2026-02-01T00:00:00.000Z',
+            updatedAt: '2026-02-01T00:00:00.000Z',
+          },
+        ],
+        meta: {},
+      }),
+    });
+  });
+
+  await page.route('**/v1/expenses*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, data: [], meta: {} }),
+    });
+  });
+
+  await page.goto('/expenses?month=2026-02');
+  await expect(page).toHaveURL(/\/transactions\?month=2026-02$/);
+
+  await page.goto(
+    '/expenses/category/11111111-1111-1111-1111-111111111111?month=2026-02&direction=out',
+  );
+  await expect(page).toHaveURL(
+    /\/transactions\/category\/11111111-1111-1111-1111-111111111111\?month=2026-02&direction=out$/,
   );
 });
 
@@ -335,10 +386,10 @@ test('home shows monthly ledger and transfer direction in add transaction flow',
   await expect(page.getByLabel('Direction')).toBeVisible();
 });
 
-test('ledger expense category drills into month-scoped detail and back preserves home month', async ({
+test('ledger income, expense, and transfer categories drill into month-scoped detail and back preserves home month', async ({
   page,
 }) => {
-  let expenseListRequestUrl: URL | null = null;
+  const expenseListRequestUrls: URL[] = [];
 
   await page.route('**/v1/reports/monthly-ledger*', async (route) => {
     await route.fulfill({
@@ -487,78 +538,206 @@ test('ledger expense category drills into month-scoped detail and back preserves
       await route.continue();
       return;
     }
-    expenseListRequestUrl = new URL(route.request().url());
+    const requestUrl = new URL(route.request().url());
+    expenseListRequestUrls.push(requestUrl);
+    const categoryId = requestUrl.searchParams.get('categoryId');
+
+    const data =
+      categoryId === '22222222-2222-2222-2222-222222222222'
+        ? [
+            {
+              id: 'inc-salary',
+              occurredAt: '2026-02-05T10:00:00.000Z',
+              postedAt: '2026-02-05T11:00:00.000Z',
+              money: { amountMinor: 300000, currency: 'GBP' },
+              categoryId,
+              source: 'local',
+              kind: 'income',
+              transferDirection: null,
+              reimbursementStatus: 'none',
+              myShareMinor: null,
+              closedOutstandingMinor: null,
+              counterpartyType: null,
+              reimbursementGroupId: null,
+              reimbursementClosedAt: null,
+              reimbursementClosedReason: null,
+              recoverableMinor: 0,
+              recoveredMinor: 0,
+              outstandingMinor: 0,
+              merchantName: 'Employer Ltd',
+              merchantLogoUrl: null,
+              merchantEmoji: null,
+              note: null,
+              providerTransactionId: null,
+              commitmentInstanceId: null,
+              createdAt: '2026-02-05T10:00:00.000Z',
+              updatedAt: '2026-02-05T10:00:00.000Z',
+            },
+          ]
+        : categoryId === '33333333-3333-3333-3333-333333333333'
+          ? [
+              {
+                id: 'transfer-out',
+                occurredAt: '2026-02-11T10:00:00.000Z',
+                postedAt: '2026-02-11T10:00:00.000Z',
+                money: { amountMinor: 20000, currency: 'GBP' },
+                categoryId,
+                source: 'local',
+                kind: 'transfer_internal',
+                transferDirection: 'out',
+                reimbursementStatus: 'none',
+                myShareMinor: null,
+                closedOutstandingMinor: null,
+                counterpartyType: null,
+                reimbursementGroupId: null,
+                reimbursementClosedAt: null,
+                reimbursementClosedReason: null,
+                recoverableMinor: 0,
+                recoveredMinor: 0,
+                outstandingMinor: 0,
+                merchantName: 'ISA top-up',
+                merchantLogoUrl: null,
+                merchantEmoji: null,
+                note: null,
+                providerTransactionId: null,
+                commitmentInstanceId: null,
+                createdAt: '2026-02-11T10:00:00.000Z',
+                updatedAt: '2026-02-11T10:00:00.000Z',
+              },
+              {
+                id: 'transfer-in',
+                occurredAt: '2026-02-12T10:00:00.000Z',
+                postedAt: '2026-02-12T10:00:00.000Z',
+                money: { amountMinor: 5000, currency: 'GBP' },
+                categoryId,
+                source: 'local',
+                kind: 'transfer_internal',
+                transferDirection: 'in',
+                reimbursementStatus: 'none',
+                myShareMinor: null,
+                closedOutstandingMinor: null,
+                counterpartyType: null,
+                reimbursementGroupId: null,
+                reimbursementClosedAt: null,
+                reimbursementClosedReason: null,
+                recoverableMinor: 0,
+                recoveredMinor: 0,
+                outstandingMinor: 0,
+                merchantName: 'ISA withdrawal',
+                merchantLogoUrl: null,
+                merchantEmoji: null,
+                note: null,
+                providerTransactionId: null,
+                commitmentInstanceId: null,
+                createdAt: '2026-02-12T10:00:00.000Z',
+                updatedAt: '2026-02-12T10:00:00.000Z',
+              },
+            ]
+          : [
+              {
+                id: 'exp-sports',
+                occurredAt: '2026-02-05T10:00:00.000Z',
+                postedAt: '2026-02-05T11:00:00.000Z',
+                money: { amountMinor: 2500, currency: 'GBP' },
+                categoryId: '11111111-1111-1111-1111-111111111111',
+                source: 'local',
+                kind: 'expense',
+                transferDirection: null,
+                reimbursementStatus: 'none',
+                myShareMinor: null,
+                closedOutstandingMinor: null,
+                counterpartyType: null,
+                reimbursementGroupId: null,
+                reimbursementClosedAt: null,
+                reimbursementClosedReason: null,
+                recoverableMinor: 0,
+                recoveredMinor: 0,
+                outstandingMinor: 0,
+                merchantName: 'Sports Direct',
+                merchantLogoUrl: null,
+                merchantEmoji: null,
+                note: null,
+                providerTransactionId: null,
+                commitmentInstanceId: null,
+                createdAt: '2026-02-05T10:00:00.000Z',
+                updatedAt: '2026-02-05T10:00:00.000Z',
+              },
+            ];
+
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({
-        ok: true,
-        data: [
-          {
-            id: 'exp-sports',
-            occurredAt: '2026-02-05T10:00:00.000Z',
-            postedAt: '2026-02-05T11:00:00.000Z',
-            money: { amountMinor: 2500, currency: 'GBP' },
-            categoryId: '11111111-1111-1111-1111-111111111111',
-            source: 'local',
-            kind: 'expense',
-            transferDirection: null,
-            reimbursementStatus: 'none',
-            myShareMinor: null,
-            closedOutstandingMinor: null,
-            counterpartyType: null,
-            reimbursementGroupId: null,
-            reimbursementClosedAt: null,
-            reimbursementClosedReason: null,
-            recoverableMinor: 0,
-            recoveredMinor: 0,
-            outstandingMinor: 0,
-            merchantName: 'Sports Direct',
-            merchantLogoUrl: null,
-            merchantEmoji: null,
-            note: null,
-            providerTransactionId: null,
-            commitmentInstanceId: null,
-            createdAt: '2026-02-05T10:00:00.000Z',
-            updatedAt: '2026-02-05T10:00:00.000Z',
-          },
-        ],
-        meta: {},
-      }),
+      body: JSON.stringify({ ok: true, data, meta: {} }),
     });
   });
 
   await page.goto('/?month=2026-02');
 
-  await page.locator('[data-ledger-section="income"]').click();
-  await expect(page).toHaveURL(/\/\?month=2026-02$/);
-
-  await page.getByText('ISA').click();
-  await expect(page).toHaveURL(/\/\?month=2026-02$/);
-
-  await page.getByRole('button', { name: 'View Sports expenses' }).click();
+  await page.getByRole('button', { name: 'View Salary transactions' }).click();
   await expect(page).toHaveURL(
-    /\/expenses\/category\/11111111-1111-1111-1111-111111111111\?month=2026-02$/,
+    /\/transactions\/category\/22222222-2222-2222-2222-222222222222\?month=2026-02$/,
+  );
+  await expect(page.getByRole('heading', { level: 1, name: 'Salary' })).toBeVisible();
+  await expect(page.locator('[data-expense-id="inc-salary"]')).toBeVisible();
+  await expect(
+    page.locator('button.MuiBottomNavigationAction-root.Mui-selected', { hasText: 'Home' }),
+  ).toBeVisible();
+  await page.getByLabel('Back').click();
+  await expect(page).toHaveURL(/\/\?month=2026-02$/);
+
+  await page.getByRole('button', { name: 'View Sports transactions' }).click();
+  await expect(page).toHaveURL(
+    /\/transactions\/category\/11111111-1111-1111-1111-111111111111\?month=2026-02$/,
   );
   await expect(page.getByText('February 2026')).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Sports' })).toBeVisible();
   await expect(page.locator('[data-expense-id="exp-sports"]')).toBeVisible();
   await expect(
-    page.locator('button.MuiBottomNavigationAction-root.Mui-selected', { hasText: 'Expenses' }),
+    page.locator('button.MuiBottomNavigationAction-root.Mui-selected', { hasText: 'Home' }),
   ).toBeVisible();
+  await page.getByLabel('Back').click();
+  await expect(page).toHaveURL(/\/\?month=2026-02$/);
 
-  expect(expenseListRequestUrl).not.toBeNull();
-  if (!expenseListRequestUrl) {
-    throw new Error('Expected expenses request URL to be captured');
+  await page.getByRole('button', { name: 'View ISA outgoing transactions' }).click();
+  await expect(page).toHaveURL(
+    /\/transactions\/category\/33333333-3333-3333-3333-333333333333\?month=2026-02&direction=out$/,
+  );
+  await expect(page.getByRole('heading', { level: 1, name: 'ISA' })).toBeVisible();
+  await expect(
+    page.getByText('Outgoing transactions in this category for the selected month.'),
+  ).toBeVisible();
+  await expect(page.locator('[data-expense-id="transfer-out"]')).toBeVisible();
+  await expect(page.locator('[data-expense-id="transfer-in"]')).toHaveCount(0);
+
+  const sportsRequestUrl = expenseListRequestUrls.find(
+    (url) => url.searchParams.get('categoryId') === '11111111-1111-1111-1111-111111111111',
+  );
+  const salaryRequestUrl = expenseListRequestUrls.find(
+    (url) => url.searchParams.get('categoryId') === '22222222-2222-2222-2222-222222222222',
+  );
+  const transferRequestUrl = expenseListRequestUrls.find(
+    (url) => url.searchParams.get('categoryId') === '33333333-3333-3333-3333-333333333333',
+  );
+
+  expect(salaryRequestUrl).toBeDefined();
+  expect(sportsRequestUrl).toBeDefined();
+  expect(transferRequestUrl).toBeDefined();
+
+  if (!sportsRequestUrl || !salaryRequestUrl || !transferRequestUrl) {
+    throw new Error('Expected category drill-in request URLs to be captured');
   }
-  const capturedExpenseListRequestUrl = expenseListRequestUrl as URL;
   const expectedFrom = new Date(2026, 1, 1, 0, 0, 0, 0).toISOString();
   const expectedTo = new Date(new Date(2026, 2, 1, 0, 0, 0, 0).getTime() - 1).toISOString();
-  expect(capturedExpenseListRequestUrl.searchParams.get('categoryId')).toBe(
-    '11111111-1111-1111-1111-111111111111',
-  );
-  expect(capturedExpenseListRequestUrl.searchParams.get('limit')).toBe('1000');
-  expect(capturedExpenseListRequestUrl.searchParams.get('from')).toBe(expectedFrom);
-  expect(capturedExpenseListRequestUrl.searchParams.get('to')).toBe(expectedTo);
+  expect(salaryRequestUrl.searchParams.get('limit')).toBe('1000');
+  expect(salaryRequestUrl.searchParams.get('from')).toBe(expectedFrom);
+  expect(salaryRequestUrl.searchParams.get('to')).toBe(expectedTo);
+  expect(sportsRequestUrl.searchParams.get('limit')).toBe('1000');
+  expect(sportsRequestUrl.searchParams.get('from')).toBe(expectedFrom);
+  expect(sportsRequestUrl.searchParams.get('to')).toBe(expectedTo);
+  expect(transferRequestUrl.searchParams.get('limit')).toBe('1000');
+  expect(transferRequestUrl.searchParams.get('from')).toBe(expectedFrom);
+  expect(transferRequestUrl.searchParams.get('to')).toBe(expectedTo);
+  expect(transferRequestUrl.searchParams.get('direction')).toBeNull();
 
   await page.getByLabel('Back').click();
   await expect(page).toHaveURL(/\/\?month=2026-02$/);
