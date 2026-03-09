@@ -12,11 +12,12 @@ import {
   Stack,
   TextField,
 } from '@mui/material';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { api } from '../api.js';
 import { ExpensesList } from '../features/expenses/components/ExpensesList.js';
+import { useTransactionsPage } from '../features/expenses/hooks/useTransactionsPage.js';
 
 export const ExpensesPage = () => {
   const queryClient = useQueryClient();
@@ -25,16 +26,7 @@ export const ExpensesPage = () => {
   const [amount, setAmount] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [note, setNote] = useState('');
-
-  const categoriesQuery = useQuery({
-    queryKey: ['categories'],
-    queryFn: () => api.categories.list(),
-  });
-
-  const expensesQuery = useQuery({
-    queryKey: ['expenses'],
-    queryFn: () => api.expenses.list(),
-  });
+  const view = useTransactionsPage();
 
   const createExpense = useMutation({
     mutationFn: async () => {
@@ -65,16 +57,16 @@ export const ExpensesPage = () => {
     },
   });
 
-  const categories = categoriesQuery.data ?? [];
+  const categories = view.categories;
 
   return (
     <Box>
       <ExpensesList
-        categories={categories}
-        expenses={expensesQuery.data ?? []}
-        isLoading={categoriesQuery.isLoading || expensesQuery.isLoading}
-        isError={categoriesQuery.isError || expensesQuery.isError}
-        emptyLabel="No expenses logged yet."
+        categories={view.categories}
+        expenses={view.expenses}
+        isLoading={view.isLoading}
+        isError={view.isError}
+        emptyLabel={view.emptyLabel}
       />
 
       <Fab

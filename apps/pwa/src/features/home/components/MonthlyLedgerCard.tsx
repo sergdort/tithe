@@ -29,12 +29,30 @@ import {
 } from '../hooks/useHomeQueries.js';
 import { MonthNavigator } from './MonthNavigator.js';
 
+interface LedgerCategoryClickInput {
+  categoryId: string;
+  categoryName: string;
+}
+
+interface LedgerTransferClickInput extends LedgerCategoryClickInput {
+  direction: 'in' | 'out';
+}
+
+interface LedgerCategoryRowItem extends LedgerCategoryClickInput {
+  totalMinor: number;
+  txCount: number;
+}
+
+interface LedgerTransferRowItem extends LedgerCategoryRowItem {
+  direction: 'in' | 'out';
+}
+
 interface MonthlyLedgerCardProps {
   monthWindow: MonthWindow;
   onPreviousMonth: () => void;
   onNextMonth: () => void;
   onAddTransaction: () => void;
-  onOpenExpenseCategory?: (categoryId: string) => void;
+  onOpenCategory?: (input: LedgerCategoryClickInput | LedgerTransferClickInput) => void;
 }
 
 interface LedgerCategorySectionProps {
@@ -42,14 +60,9 @@ interface LedgerCategorySectionProps {
   titleColor: string;
   emptyLabel: string;
   categoryMetaById: Map<string, { icon: string; color: string }>;
-  rows: Array<{
-    categoryId: string;
-    categoryName: string;
-    totalMinor: number;
-    txCount: number;
-  }>;
+  rows: LedgerCategoryRowItem[];
   rowAmountColor?: string;
-  onRowClick?: (categoryId: string) => void;
+  onRowClick?: (input: LedgerCategoryClickInput) => void;
 }
 
 const LedgerCategorySection = ({
@@ -87,8 +100,13 @@ const LedgerCategorySection = ({
             {onRowClick ? (
               <ListItemButton
                 sx={{ py: 0, pl: 1, pr: 0.5, borderRadius: 1 }}
-                onClick={() => onRowClick(item.categoryId)}
-                aria-label={`View ${item.categoryName} expenses`}
+                onClick={() =>
+                  onRowClick({
+                    categoryId: item.categoryId,
+                    categoryName: item.categoryName,
+                  })
+                }
+                aria-label={`View ${item.categoryName} transactions`}
               >
                 {(() => {
                   const categoryMeta = categoryMetaById.get(item.categoryId);
@@ -148,18 +166,86 @@ const LedgerCategorySection = ({
   </Box>
 );
 
+const LedgerTransferRowContent = ({
+  item,
+  categoryMetaById,
+  inset,
+}: {
+  item: LedgerTransferRowItem;
+  categoryMetaById: Map<string, { icon: string; color: string }>;
+  inset?: boolean;
+}) => {
+  const categoryMeta = categoryMetaById.get(item.categoryId);
+  const CategoryRowIcon =
+    CATEGORY_ICON_COMPONENTS[categoryMeta?.icon ?? 'category'] ?? CategoryIcon;
+
+  return (
+    <>
+      <Box sx={{ mr: 1, mt: 0.4, ...(inset ? { pl: 1 } : null) }}>
+        <CategoryRowIcon fontSize="small" sx={{ color: categoryMeta?.color ?? 'text.secondary' }} />
+      </Box>
+      <ListItemText
+        primary={item.categoryName}
+        secondary={`${item.direction === 'in' ? 'Money in' : 'Money out'} • ${item.txCount} tx`}
+        primaryTypographyProps={{ variant: 'body2' }}
+        secondaryTypographyProps={{ variant: 'caption' }}
+      />
+      <Typography variant="body2" sx={{ fontWeight: 700 }}>
+        {pounds(item.totalMinor)}
+      </Typography>
+    </>
+  );
+};
+
+const LedgerTransferRow = ({
+  item,
+  categoryMetaById,
+  onRowClick,
+}: {
+  item: LedgerTransferRowItem;
+  categoryMetaById: Map<string, { icon: string; color: string }>;
+  onRowClick?: (input: LedgerTransferClickInput) => void;
+}) => (
+  <ListItem
+    key={`transfer-${item.categoryId}-${item.direction}`}
+    disableGutters
+    sx={{
+      py: 0.35,
+      borderLeft: '3px solid',
+      borderColor: categoryMetaById.get(item.categoryId)?.color ?? 'divider',
+      borderRadius: 1,
+    }}
+  >
+    {onRowClick ? (
+      <ListItemButton
+        sx={{ py: 0, pl: 1, pr: 0.5, borderRadius: 1 }}
+        onClick={() =>
+          onRowClick({
+            categoryId: item.categoryId,
+            categoryName: item.categoryName,
+            direction: item.direction,
+          })
+        }
+        aria-label={`View ${item.categoryName} ${
+          item.direction === 'in' ? 'incoming' : 'outgoing'
+        } transactions`}
+      >
+        <LedgerTransferRowContent item={item} categoryMetaById={categoryMetaById} />
+      </ListItemButton>
+    ) : (
+      <LedgerTransferRowContent item={item} categoryMetaById={categoryMetaById} inset />
+    )}
+  </ListItem>
+);
+
 const LedgerTransferSection = ({
   categoryMetaById,
   rows,
+  onRowClick,
 }: {
   categoryMetaById: Map<string, { icon: string; color: string }>;
-  rows: Array<{
-    categoryId: string;
-    categoryName: string;
-    direction: 'in' | 'out';
-    totalMinor: number;
-    txCount: number;
-  }>;
+  rows: LedgerTransferRowItem[];
+  onRowClick?: (input: LedgerTransferClickInput) => void;
 }) => (
   <Box>
     <Typography variant="subtitle2" fontWeight={700} color="info.dark" sx={{ mb: 0.5 }}>
@@ -172,42 +258,12 @@ const LedgerTransferSection = ({
     ) : (
       <List disablePadding>
         {rows.map((item) => (
-          <ListItem
+          <LedgerTransferRow
             key={`transfer-${item.categoryId}-${item.direction}`}
-            disableGutters
-            sx={{
-              py: 0.35,
-              gap: 1,
-              pl: 1,
-              borderLeft: '3px solid',
-              borderColor: categoryMetaById.get(item.categoryId)?.color ?? 'divider',
-              borderRadius: 1,
-            }}
-          >
-            {(() => {
-              const categoryMeta = categoryMetaById.get(item.categoryId);
-              const CategoryRowIcon =
-                CATEGORY_ICON_COMPONENTS[categoryMeta?.icon ?? 'category'] ?? CategoryIcon;
-
-              return (
-                <Box sx={{ mt: 0.4 }}>
-                  <CategoryRowIcon
-                    fontSize="small"
-                    sx={{ color: categoryMeta?.color ?? 'text.secondary' }}
-                  />
-                </Box>
-              );
-            })()}
-            <ListItemText
-              primary={item.categoryName}
-              secondary={`${item.direction === 'in' ? 'Money in' : 'Money out'} • ${item.txCount} tx`}
-              primaryTypographyProps={{ variant: 'body2' }}
-              secondaryTypographyProps={{ variant: 'caption' }}
-            />
-            <Typography variant="body2" sx={{ fontWeight: 700 }}>
-              {pounds(item.totalMinor)}
-            </Typography>
-          </ListItem>
+            item={item}
+            categoryMetaById={categoryMetaById}
+            onRowClick={onRowClick}
+          />
         ))}
       </List>
     )}
@@ -222,7 +278,7 @@ export const MonthlyLedgerCard = ({
   onPreviousMonth,
   onNextMonth,
   onAddTransaction,
-  onOpenExpenseCategory,
+  onOpenCategory,
 }: MonthlyLedgerCardProps) => {
   const ledgerQuery = useHomeMonthlyLedgerQuery(monthWindow);
   const categoriesQuery = useHomeCategoriesQuery();
@@ -500,6 +556,7 @@ export const MonthlyLedgerCard = ({
                 categoryMetaById={categoryMetaById}
                 rows={ledger.sections.income}
                 rowAmountColor="success.main"
+                onRowClick={onOpenCategory}
               />
 
               <LedgerCategorySection
@@ -508,12 +565,13 @@ export const MonthlyLedgerCard = ({
                 emptyLabel="No expenses recorded."
                 categoryMetaById={categoryMetaById}
                 rows={ledger.sections.expense}
-                onRowClick={onOpenExpenseCategory}
+                onRowClick={onOpenCategory}
               />
 
               <LedgerTransferSection
                 categoryMetaById={categoryMetaById}
                 rows={ledger.sections.transfer}
+                onRowClick={onOpenCategory}
               />
             </Stack>
           </>
