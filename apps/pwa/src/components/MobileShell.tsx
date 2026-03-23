@@ -19,6 +19,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 
 interface MobileShellProps {
   title: string;
+  activeTab?: string;
   showBackButton?: boolean;
   onBack?: () => void;
   children: React.ReactNode;
@@ -26,7 +27,7 @@ interface MobileShellProps {
 
 const tabs = [
   { label: 'Home', path: '/', icon: <HomeOutlinedIcon /> },
-  { label: 'Expenses', path: '/expenses', icon: <ReceiptLongOutlinedIcon /> },
+  { label: 'Transactions', path: '/transactions', icon: <ReceiptLongOutlinedIcon /> },
   { label: 'Commitments', path: '/commitments', icon: <RepeatOutlinedIcon /> },
   { label: 'Categories', path: '/categories', icon: <ListAltOutlinedIcon /> },
   { label: 'Insights', path: '/insights', icon: <InsightsOutlinedIcon /> },
@@ -34,6 +35,7 @@ const tabs = [
 
 export const MobileShell = ({
   title,
+  activeTab,
   showBackButton = false,
   onBack,
   children,
@@ -41,7 +43,7 @@ export const MobileShell = ({
   const location = useLocation();
   const navigate = useNavigate();
 
-  const active = useMemo(
+  const defaultActive = useMemo(
     () =>
       tabs.find((item) => {
         if (item.path === '/') {
@@ -51,6 +53,7 @@ export const MobileShell = ({
       })?.path ?? '/',
     [location.pathname],
   );
+  const selectedTab = activeTab ?? defaultActive;
 
   return (
     <Box sx={{ minHeight: '100dvh', bgcolor: 'background.default' }}>
@@ -104,7 +107,7 @@ export const MobileShell = ({
           overflow: 'hidden',
         }}
       >
-        <BottomNavigation value={active} onChange={(_e, value) => navigate(value)} showLabels>
+        <BottomNavigation value={selectedTab} onChange={(_e, value) => navigate(value)} showLabels>
           {tabs.map((item) => (
             <BottomNavigationAction
               key={item.path}

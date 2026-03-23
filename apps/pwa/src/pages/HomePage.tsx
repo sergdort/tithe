@@ -41,11 +41,23 @@ export const HomePage = () => {
     setSearchParams(next, { replace: true });
   }, [monthKey, searchParams, setSearchParams]);
 
-  const handleOpenExpenseCategory = (categoryId: string) => {
-    navigate(
-      `/expenses/category/${encodeURIComponent(categoryId)}?month=${encodeURIComponent(monthKey)}`,
-      { state: { inAppBackTarget: 'home' } },
-    );
+  const handleOpenCategory = ({
+    categoryId,
+    categoryName,
+    direction,
+  }: {
+    categoryId: string;
+    categoryName: string;
+    direction?: 'in' | 'out';
+  }) => {
+    const nextSearch = new URLSearchParams({ month: monthKey });
+    if (direction) {
+      nextSearch.set('direction', direction);
+    }
+
+    navigate(`/transactions/category/${encodeURIComponent(categoryId)}?${nextSearch.toString()}`, {
+      state: { inAppBackTarget: 'home', categoryName },
+    });
   };
 
   return (
@@ -58,7 +70,7 @@ export const HomePage = () => {
           onPreviousMonth={goPreviousMonth}
           onNextMonth={goNextMonth}
           onAddTransaction={() => setAddOpen(true)}
-          onOpenExpenseCategory={handleOpenExpenseCategory}
+          onOpenCategory={handleOpenCategory}
         />
 
         <UpcomingCommitmentsCard onMarkPaid={(instanceId) => setPayInstanceId(instanceId)} />

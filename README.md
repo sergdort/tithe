@@ -365,7 +365,7 @@ Current status in this implementation:
 - PWA Home Monthly Ledger widget includes `Sync month`, which syncs the selected month window and overwrites existing imported Monzo expenses for that month.
 - PWA Home Monthly Ledger widget also surfaces Ledger v2 summary metrics (`Cash In`, `Cash Out`, `Net Flow`, `True Spend`, `Reimbursement Outstanding`) with `Gross/Net` and `Exclude internal transfers` toggles.
 - PWA Home Monthly Ledger category breakdown rows use category icon/color accents (matching Categories list styling) when category metadata is available.
-- PWA Home Monthly Ledger `Expenses` rows drill into a month-scoped category detail screen under the Expenses tab (`/expenses/category/:categoryId?month=YYYY-MM`); `Income` and `Transfers` rows are not tappable.
+- PWA Home Monthly Ledger `Income`, `Expenses`, and `Transfers` rows drill into a month-scoped category detail screen under `Home` (`/transactions/category/:categoryId?month=YYYY-MM`); transfer drill-ins also preserve `direction=in|out`.
 - Monthly Ledger sync feedback is month-scoped and clears when you navigate to another month.
 - PWA Home includes a single `Add Transaction` flow for manual `income`, `expense`, and `transfer` entries (transfer entries require direction and support semantic subtype `internal` / `external`).
 - Reimbursable expense categories in Home manual entry can capture `Track reimbursement` plus `My share`.
@@ -375,7 +375,8 @@ Current status in this implementation:
 - PWA Categories edit marks category data stale without immediate refetch after cache update to prevent stale server responses from overwriting freshly edited rows.
 - PWA Home pending commitments support `Mark paid`, which creates a linked actual transaction (`source=commitment`) and updates the monthly ledger.
 - Home dashboard cards load independently: a ledger/Monzo/commitments fetch error is shown in that card without blocking the entire Home screen.
-- Expenses tab includes a dedicated ledger-origin drill-in detail page with top-bar back navigation while keeping bottom-tab selection on `Expenses`.
+- Transactions tab lists expenses, income, and transfers together.
+- Ledger-origin category drill-ins show the category name in the top bar, keep bottom-tab selection on `Home`, and preserve the source month on back navigation.
 - `Connect` opens the Monzo OAuth flow in a separate window/tab (opened immediately on click to avoid popup blocking after async API calls).
 - Initial import window is last 90 days; subsequent sync uses cursor overlap.
 - Import policy includes non-zero Monzo debits + credits (`amount != 0`), including pending rows (`postedAt=null` until settlement).
@@ -384,11 +385,11 @@ Current status in this implementation:
 - Monzo sync classifies pot transfers as `transfer_internal`, non-pot debits as `expense`, and non-pot credits as `income`.
 - `tithe --json monzo sync --override` (or PWA Monthly Ledger `Sync month`) overwrites existing `monzo` rows in place using latest Monzo-derived category/amount/date/kind/merchant fields while preserving local notes and local reimbursement metadata.
 - Reports (`trends`, `category-breakdown`, `monthly-ledger`) keep totals settled-only by excluding pending Monzo rows.
-- Expense API responses include optional Monzo merchant display metadata (`merchantLogoUrl`, `merchantEmoji`) used by the PWA expenses list avatar.
+- Expense API responses include optional Monzo merchant display metadata (`merchantLogoUrl`, `merchantEmoji`) used by the PWA transactions list avatar.
 - Expense API responses include semantic `kind` plus reimbursement fields/derived reimbursement totals for Ledger v2 workflows.
 - Expense API responses also include `transferDirection` (`in|out|null`); transfer semantic rows require it, income/expense rows return `null`.
-- PWA expenses list merchant avatars use `logo -> emoji -> initials` fallback for imported Monzo merchants.
-- PWA Expenses rows show a `Pending` badge for Monzo rows where `postedAt` is still null.
+- PWA transactions list merchant avatars use `logo -> emoji -> initials` fallback for imported Monzo merchants.
+- PWA Transactions rows show a `Pending` badge for Monzo rows where `postedAt` is still null.
 - Monzo sync best-effort resolves pot-transfer descriptions that are raw Monzo pot IDs (`pot_...`) into display labels like `Pot: Savings` for new imports; if pot lookup fails or the pot is missing, the raw description is kept.
 - Merchant logo/emoji metadata is stored for new Monzo imports only (no historical backfill for older imported rows).
 - Monzo category mappings are flow-aware (`in|out`) and auto-create `Monzo: <Category>` categories with `expense`/`income` kind inferred from flow. Pot transfers use a dedicated transfer category.

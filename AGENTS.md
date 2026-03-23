@@ -112,7 +112,7 @@ Failure:
 - `tithe --json monzo status`
 - PWA Home Monzo card exposes connect/status controls (`Connect`) and shows last sync/error state.
 - PWA `Connect` opens Monzo OAuth in a separate browser window/tab (popup opened synchronously on click to reduce popup blocking).
-- PWA Expenses list merchant avatar fallback is `logo -> emoji -> initials` for Monzo-imported expenses when display metadata is available.
+- PWA Transactions list merchant avatar fallback is `logo -> emoji -> initials` for Monzo-imported expenses when display metadata is available.
 
 ### CLI invocation notes
 
@@ -156,16 +156,16 @@ Failure:
 - Monthly Ledger Monzo sync success/error feedback is scoped to the selected month and clears when navigating to a different month.
 - PWA Home Monthly Ledger widget also surfaces v2 summary metrics (`Cash In`, `Cash Out`, `Net Flow`, `True Spend`, `Reimbursement Outstanding`) with `Gross/Net` and `Exclude internal transfers` toggles.
 - PWA Home Monthly Ledger category breakdown rows use category icon/color accents (matching Categories list styling) when category metadata is available.
-- PWA Home Monthly Ledger `Expenses` section rows are tappable and drill into an Expenses detail route scoped to the selected category and month (`/expenses/category/:categoryId?month=YYYY-MM`); `Income`/`Transfers` rows remain non-interactive.
+- PWA Home Monthly Ledger `Income`, `Expenses`, and `Transfers` section rows are tappable and drill into a Transactions detail route scoped to the selected category and month (`/transactions/category/:categoryId?month=YYYY-MM`); transfer drill-ins may also include `direction=in|out`.
 - PWA Home `Add Transaction` is a single manual entry flow for `income|expense|transfer`; transfer entries require direction and support transfer subtype (`internal|external`) via semantic `kind`, and reimbursable expense categories can capture `Track reimbursement` + `My share`.
 - PWA Home pending commitments support a quick `Mark paid` action that creates a linked actual transaction (`source='commitment'`) and updates the ledger.
-- PWA Expenses page now surfaces semantic/reimbursement chips (`Internal transfer`, `External transfer`, `Pending`, `Reimbursable`, `Partial`, `Settled`, `Written off`) and basic reimbursement actions (`Link repayment`, `Mark written off`, `Reopen`).
-- PWA Expenses includes a ledger-origin drill-in detail flow (category + month scoped list) while keeping the bottom tab bar active on the `Expenses` tab and exposing top-bar back navigation.
+- PWA Transactions page now surfaces semantic/reimbursement chips (`Internal transfer`, `External transfer`, `Pending`, `Reimbursable`, `Partial`, `Settled`, `Written off`) and basic reimbursement actions (`Link repayment`, `Mark written off`, `Reopen`).
+- PWA Transactions includes a ledger-origin drill-in detail flow (category + month scoped list) that shows the category name in the top bar, keeps the bottom tab bar active on `Home`, and exposes top-bar back navigation to the source month.
 - PWA Categories page uses a floating `+` action to open `Add Category`, category add/edit dialogs can capture expense-category reimbursement settings/defaults, reimbursement auto-match rule management runs in a dialog, and the category list is grouped into `Income`/`Expense` sections with each row accented by category color (no per-row kind subtitle).
 - PWA Categories edit saves update the cached `categories` query immediately so the list reflects changes without a manual page refresh.
 - PWA Categories edit save reads the latest in-dialog draft state (including icon changes) to avoid stale writes when saving immediately after selecting a value.
 - PWA Categories edit mutation marks `categories` as stale without immediate refetch after cache write to avoid stale-response overwrites of freshly edited rows.
-- PWA short-form list-page dialogs (for example Expenses/Categories add/edit flows) should follow the Expenses pattern: MUI `Dialog` with `fullWidth` and no mobile `fullScreen`.
+- PWA short-form list-page dialogs (for example Transactions/Categories add/edit flows) should follow the Transactions pattern: MUI `Dialog` with `fullWidth` and no mobile `fullScreen`.
 - Ledger v2 development rollout requires a fresh local DB reset (no backfill); reset `DB_PATH` (default `~/.tithe/tithe.db`) before running v2 migrations/commands.
 - PWA large pages should use thin route entrypoints in `apps/pwa/src/pages` and feature-scoped UI/data modules under `apps/pwa/src/features/<feature>`; shared domain-neutral helpers belong in `apps/pwa/src/lib`.
 - PWA Home dashboard widgets (ledger, Monzo, commitments) should manage loading/error states independently to avoid page-wide blocking when one widget fails.
@@ -174,6 +174,7 @@ Failure:
 
 - Treat TanStack Query as the source of truth for server state; avoid copying query results into component state except for transient UI drafts.
 - Keep route/screen components as composition layers and extract workflow-specific state into focused hooks (for example edit dialog state vs auto-match rules state).
+- Keep hooks single-responsibility: avoid page hooks that mix route parsing, data fetching, shell chrome, and copy derivation. When a screen grows, prefer small focused hooks such as `use...Route`, `use...Data`, and `use...Shell`, with the page component reading top-down as parse inputs -> fetch data -> configure shell -> render.
 - Prefer one focused state object per active dialog/workflow instead of parallel id-indexed maps when only one entity can be edited at a time.
 - Keep query cache writes/invalidation policy inside mutation hooks so UI components consume a stable API (`mutateAsync`, `isPending`) without cache plumbing details.
 - For optimistic cache writes, avoid immediate active refetches that can overwrite fresh UI with stale responses; mark stale and refetch intentionally.

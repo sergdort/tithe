@@ -1,76 +1,83 @@
 import { Alert, Stack, Typography } from '@mui/material';
-import { useQuery } from '@tanstack/react-query';
-import { useMemo } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
 
-import { api } from '../api.js';
 import { ExpensesList } from '../features/expenses/components/ExpensesList.js';
-import { monthStartLocal, parseMonthParam, shiftMonthLocal } from '../lib/date/month.js';
+import { useCategoryTransactions } from '../features/expenses/hooks/useCategoryTransactions.js';
+import { useCategoryTransactionsRoute } from '../features/expenses/hooks/useCategoryTransactionsRoute.js';
+import { useCategoryTransactionsShell } from '../features/expenses/hooks/useCategoryTransactionsShell.js';
 
-export const ExpenseCategoryDetailPage = () => {
-  const { categoryId } = useParams<{ categoryId: string }>();
-  const [searchParams] = useSearchParams();
-
-  const monthCursor = useMemo(
-    () => monthStartLocal(parseMonthParam(searchParams.get('month')) ?? new Date()),
-    [searchParams],
-  );
-
-  const monthLabel = useMemo(
-    () =>
-      monthCursor.toLocaleDateString('en-GB', {
-        month: 'long',
-        year: 'numeric',
-      }),
-    [monthCursor],
-  );
-
-  const from = useMemo(() => monthCursor.toISOString(), [monthCursor]);
-  const to = useMemo(() => {
-    const nextMonthStart = shiftMonthLocal(monthCursor, 1);
-    return new Date(nextMonthStart.getTime() - 1).toISOString();
-  }, [monthCursor]);
-
-  const categoriesQuery = useQuery({
-    queryKey: ['categories'],
-    queryFn: () => api.categories.list(),
-  });
-
-  const expensesQuery = useQuery({
-    queryKey: ['expenses', 'category-detail', categoryId, from, to],
-    queryFn: () => api.expenses.list({ categoryId, from, to, limit: 1000 }),
-    enabled: Boolean(categoryId),
-  });
-
-  if (!categoryId) {
-    return <Alert severity="error">Missing category.</Alert>;
+const buildDetailCopy = ({
+  transferDirection,
+  categoryName,
+  monthLabel,
+}: {
+  transferDirection: 'in' | 'out' | null;
+  categoryName: string;
+  monthLabel: string;
+}) => {
+  if (transferDirection === 'in') {
+    return {
+      helperText: 'Incoming transactions in this category for the selected month.',
+      emptyLabel: `No incoming transactions in ${categoryName} for ${monthLabel}.`,
+    };
   }
 
-  const categories = categoriesQuery.data ?? [];
-  const categoryName = categories.find((item) => item.id === categoryId)?.name ?? 'Category';
+  if (transferDirection === 'out') {
+    return {
+      helperText: 'Outgoing transactions in this category for the selected month.',
+      emptyLabel: `No outgoing transactions in ${categoryName} for ${monthLabel}.`,
+    };
+  }
+
+  return {
+    helperText: 'Transactions in this category for the selected month.',
+    emptyLabel: `No transactions in ${categoryName} for ${monthLabel}.`,
+  };
+};
+
+export const ExpenseCategoryDetailPage = () => {
+  const route = useCategoryTransactionsRoute();
+  const view = useCategoryTransactions({
+    categoryId: route.categoryId,
+    from: route.from,
+    to: route.to,
+    transferDirection: route.transferDirection,
+    seededCategoryName: route.seededCategoryName,
+  });
+  const detailCopy = buildDetailCopy({
+    transferDirection: route.transferDirection,
+    categoryName: view.categoryName,
+    monthLabel: route.monthLabel,
+  });
+
+  useCategoryTransactionsShell({
+    title: view.categoryName,
+    fallbackHomeHref: route.fallbackHomeHref,
+    shouldGoBackInApp: route.shouldGoBackInApp,
+  });
+
+  if (!route.categoryId) {
+    return <Alert severity="error">Missing category.</Alert>;
+  }
 
   return (
     <Stack spacing={1.25}>
       <Typography variant="caption" color="text.secondary">
-        {monthLabel}
-      </Typography>
-      <Typography variant="h6" sx={{ fontWeight: 700 }}>
-        {categoryName}
+        {route.monthLabel}
       </Typography>
       <Typography variant="body2" color="text.secondary">
-        Transactions in this category for the selected month.
+        {detailCopy.helperText}
       </Typography>
 
-      {categoriesQuery.isError ? (
+      {view.hasCategoryMetadataError ? (
         <Alert severity="warning">Category metadata unavailable. Showing raw category IDs.</Alert>
       ) : null}
 
       <ExpensesList
-        categories={categories}
-        expenses={expensesQuery.data ?? []}
-        isLoading={expensesQuery.isLoading || categoriesQuery.isLoading}
-        isError={expensesQuery.isError}
-        emptyLabel={`No expenses in ${categoryName} for ${monthLabel}.`}
+        categories={view.categories}
+        expenses={view.expenses}
+        isLoading={view.isLoading}
+        isError={view.isError}
+        emptyLabel={detailCopy.emptyLabel}
       />
     </Stack>
   );

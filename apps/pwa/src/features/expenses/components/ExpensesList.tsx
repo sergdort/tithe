@@ -244,7 +244,7 @@ export const ExpensesList = ({
   }
 
   if (isError) {
-    return <Alert severity="error">Unable to load expenses.</Alert>;
+    return <Alert severity="error">Unable to load transactions.</Alert>;
   }
 
   if (expenses.length === 0) {

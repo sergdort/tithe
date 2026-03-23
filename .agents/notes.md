@@ -1,6 +1,6 @@
 [0] `tsx` CLI can fail in restricted macOS sandboxes with `listen EPERM` on `.../tsx-*/.pipe`; using `node --import tsx ...` avoids the IPC pipe path.
 [0] `rrule` should be imported as a default object in runtime-executed TS/ESM paths here (`import rrule from 'rrule'`), then accessed as `rrule.rrulestr(...)`.
-[0] `pnpm dev` port-binding failures like `listen EPERM` on `0.0.0.0:5173`/`:8787` can come from sandbox networking restrictions, not app code regressions.
+[1] `pnpm dev`/Playwright `config.webServer` port-binding failures like `listen EPERM` on `0.0.0.0:5173`, `127.0.0.1:5173`, or `:8787` can come from sandbox networking restrictions, not app code regressions.
 [0] For nested apps, Vite reads `.env` from the app directory unless `envDir` is set; use workspace-root `envDir` when shared root env vars are expected.
 [0] Drizzle SQLite schema callbacks should return an array in `sqliteTable` third argument (not an object map) to avoid deprecation warnings.
 [0] Long-running CLI service orchestration should live outside the data-command `run(...)` wrapper so help-only calls keep migration laziness and process signals can be managed explicitly.
@@ -50,4 +50,6 @@
 [0] If the user runs dev stack manually, keep VS Code debug setup minimal: prelaunch task should only open Chrome using `.env` `PWA_PORT`, then `pwa-chrome` attach to `:9222`; avoid auto-managing Vite tasks in debugger config.
 [0] When editing hooks with repeated `invalidateQueries` blocks, apply_patch can match the wrong mutation; re-open the file and verify the intended function was changed (here: update mutation, not create mutation).
 [0] For large PWA screens mixing query + dialog + form state, extract dialog-specific state machines into dedicated feature hooks (`useCategoryEditDialog`, `useAutoMatchRulesDialog`) and keep the screen as a composition layer.
+[0] For route-driven PWA detail screens, keep hooks single-responsibility: separate route parsing, data fetching, and shell chrome into focused units so the page reads top-down (`parse inputs -> fetch data -> configure shell -> render`) instead of hiding all concerns in one page hook.
 [0] For category list readability in PWA, grouping rows into explicit `Income` and `Expense` sections plus using each category's configured color as icon/row accent makes scan/edit workflows faster without changing data model.
+[0] `packages/domain/src/services/monzo.service.ts` currently threads `overrideExisting` through the API/UI/service boundary but does not branch on it inside `syncInternal`; once an imported `monzo:<transactionId>` row exists, sync updates it in place regardless of the flag.
