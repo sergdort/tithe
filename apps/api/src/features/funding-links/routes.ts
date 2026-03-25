@@ -21,7 +21,13 @@ interface FundingLinkDeleteQuery {
 export const registerFundingLinkRoutes = (app: FastifyInstance): void => {
   const { services, actorFromRequest, parseBoolean, docs } = app.tithe;
   const fundingLinksService = services.fundingLinks;
-  const { defaultErrorResponses, genericObjectSchema, isoDateTimeSchema, successEnvelopeSchema, uuidSchema } = docs;
+  const {
+    defaultErrorResponses,
+    genericObjectSchema,
+    isoDateTimeSchema,
+    successEnvelopeSchema,
+    uuidSchema,
+  } = docs;
 
   const linkSchema = {
     type: 'object',
@@ -121,8 +127,7 @@ export const registerFundingLinkRoutes = (app: FastifyInstance): void => {
         },
       },
     },
-    async (request) =>
-      ok(await fundingLinksService.link(request.body, actorFromRequest(request))),
+    async (request) => ok(await fundingLinksService.link(request.body, actorFromRequest(request))),
   );
 
   app.delete<{ Params: FundingLinkParams; Querystring: FundingLinkDeleteQuery }>(
