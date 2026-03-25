@@ -81,7 +81,8 @@ export const LinkFundingSourceDialog = ({
 
   const existingLinksQuery = useQuery({
     queryKey: ['funding-links', 'by-income', incomeExpense?.id],
-    queryFn: () => api.fundingLinks.listByIncome(incomeExpense?.id),
+    // biome-ignore lint/style/noNonNullAssertion: guarded by enabled
+    queryFn: () => api.fundingLinks.listByIncome(incomeExpense!.id),
     enabled: open && incomeExpense !== null,
   });
 
