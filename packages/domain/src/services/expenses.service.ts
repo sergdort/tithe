@@ -113,6 +113,8 @@ export const createExpensesService = ({
         from,
         to,
         categoryId: input.categoryId,
+        kind: input.kind,
+        source: input.source,
         limit: input.limit ?? 200,
       }).expenses;
 

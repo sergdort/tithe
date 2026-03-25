@@ -156,7 +156,7 @@ export const registerCommitmentRoutes = (app: FastifyInstance): void => {
           additionalProperties: false,
           properties: {
             dryRun: {
-              oneOf: [{ type: 'boolean' }, { type: 'string', enum: ['true', 'false', '1', '0'] }],
+              anyOf: [{ type: 'boolean' }, { type: 'string', enum: ['true', 'false', '1', '0'] }],
             },
             approveOperationId: uuidSchema,
           },

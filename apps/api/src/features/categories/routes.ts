@@ -180,7 +180,7 @@ export const registerCategoryRoutes = (app: FastifyInstance): void => {
           additionalProperties: false,
           properties: {
             dryRun: {
-              oneOf: [{ type: 'boolean' }, { type: 'string', enum: ['true', 'false', '1', '0'] }],
+              anyOf: [{ type: 'boolean' }, { type: 'string', enum: ['true', 'false', '1', '0'] }],
             },
             reassignCategoryId: uuidSchema,
             approveOperationId: uuidSchema,

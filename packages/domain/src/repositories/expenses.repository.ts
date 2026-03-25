@@ -93,6 +93,8 @@ export interface ListExpensesInput {
   from?: string;
   to?: string;
   categoryId?: string;
+  kind?: string;
+  source?: string;
   limit: number;
 }
 
@@ -239,7 +241,7 @@ export interface ExpensesRepository {
 export class SqliteExpensesRepository implements ExpensesRepository {
   constructor(private readonly db: RepositoryDb) {}
 
-  list({ from, to, categoryId, limit }: ListExpensesInput): ListExpensesOutput {
+  list({ from, to, categoryId, kind, source, limit }: ListExpensesInput): ListExpensesOutput {
     const filters = [];
     if (from) {
       filters.push(gte(expenses.occurredAt, from));
@@ -249,6 +251,12 @@ export class SqliteExpensesRepository implements ExpensesRepository {
     }
     if (categoryId) {
       filters.push(eq(expenses.categoryId, categoryId));
+    }
+    if (kind) {
+      filters.push(eq(expenses.kind, kind));
+    }
+    if (source) {
+      filters.push(eq(expenses.source, source));
     }
 
     const whereExpr = filters.length > 0 ? and(...filters) : undefined;

@@ -50,6 +50,8 @@ describe('API routes', () => {
         '/v1/categories/{id}',
         '/v1/expenses',
         '/v1/expenses/{id}',
+        '/v1/funding-links/link',
+        '/v1/funding-links/link/{id}',
         '/v1/reimbursements/link',
         '/v1/reimbursements/link/{id}',
         '/v1/reimbursements/category-rules',
@@ -360,6 +362,63 @@ describe('API routes', () => {
       expect(invalidOverrideResponse.statusCode).toBe(400);
       expect(invalidOverrideBody.ok).toBe(false);
       expect(invalidOverrideBody.error.code).toBe('VALIDATION_ERROR');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('deletes a local expense via dryRun=true approval flow', async () => {
+    const app = buildServer();
+
+    try {
+      const categoryResponse = await app.inject({
+        method: 'POST',
+        url: '/v1/categories',
+        payload: { name: 'Delete Test', kind: 'expense' },
+      });
+      const categoryId = categoryResponse.json().data.id as string;
+
+      const createResponse = await app.inject({
+        method: 'POST',
+        url: '/v1/expenses',
+        payload: {
+          occurredAt: new Date().toISOString(),
+          amountMinor: 5000,
+          currency: 'GBP',
+          categoryId,
+          merchantName: 'Test Merchant',
+        },
+      });
+      const createBody = createResponse.json();
+      expect(createResponse.statusCode).toBe(200);
+      expect(createBody.ok).toBe(true);
+      const expenseId = createBody.data.id as string;
+
+      const dryRunResponse = await app.inject({
+        method: 'DELETE',
+        url: `/v1/expenses/${encodeURIComponent(expenseId)}?dryRun=true`,
+      });
+      const dryRunBody = dryRunResponse.json();
+      expect(dryRunResponse.statusCode).toBe(200);
+      expect(dryRunBody.ok).toBe(true);
+      expect(typeof dryRunBody.data.operationId).toBe('string');
+
+      const deleteResponse = await app.inject({
+        method: 'DELETE',
+        url: `/v1/expenses/${encodeURIComponent(expenseId)}?approveOperationId=${encodeURIComponent(
+          dryRunBody.data.operationId as string,
+        )}`,
+      });
+      const deleteBody = deleteResponse.json();
+      expect(deleteResponse.statusCode).toBe(200);
+      expect(deleteBody.ok).toBe(true);
+      expect(deleteBody.data).toMatchObject({ deleted: true, id: expenseId });
+
+      const getResponse = await app.inject({
+        method: 'GET',
+        url: `/v1/expenses/${encodeURIComponent(expenseId)}`,
+      });
+      expect(getResponse.statusCode).toBe(404);
     } finally {
       await app.close();
     }

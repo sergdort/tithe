@@ -347,6 +347,7 @@ export const MonthlyLedgerCard = ({
       ? (spending?.grossSpendMinor ?? ledger.totals.expenseMinor)
       : (spending?.netPersonalSpendMinor ?? ledger.totals.expenseMinor)
     : 0;
+  const fundedTransferInMinor = cashFlow?.fundedTransferInMinor ?? 0;
   const reimbursementOutstandingMinor = reimbursements?.outstandingMinor ?? 0;
 
   return (
@@ -450,8 +451,15 @@ export const MonthlyLedgerCard = ({
             <Divider sx={{ my: 1.5 }} />
 
             <Stack spacing={0.75}>
-              <Stack direction="row" justifyContent="space-between">
-                <Typography>Cash In</Typography>
+              <Stack direction="row" justifyContent="space-between" alignItems="baseline">
+                <Stack>
+                  <Typography>Cash In</Typography>
+                  {fundedTransferInMinor > 0 ? (
+                    <Typography variant="caption" color="text.secondary">
+                      {pounds(fundedTransferInMinor)} funded from income
+                    </Typography>
+                  ) : null}
+                </Stack>
                 <Typography sx={{ fontWeight: 700, color: 'success.main' }}>
                   {pounds(displayCashInMinor)}
                 </Typography>

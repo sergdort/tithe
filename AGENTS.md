@@ -211,6 +211,8 @@ Failure:
 
 ### API route-handler architecture notes
 
+Use fastify-best-practices skill if you need to imnplement anything related to the API side of the project.
+
 - Fastify app context is decorator-based:
   - `apps/api/src/http/tithe-plugin.ts` decorates `FastifyInstance` with `app.tithe` (`services`, docs helpers, actor parsing helpers).
   - `BuildServerOptions` accepts `services?: DomainServices` for external injection/stubs.

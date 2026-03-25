@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { registerCategoryRoutes } from '../features/categories/routes.js';
 import { registerCommitmentRoutes } from '../features/commitments/routes.js';
 import { registerExpenseRoutes } from '../features/expenses/routes.js';
+import { registerFundingLinkRoutes } from '../features/funding-links/routes.js';
 import { registerMonzoRoutes } from '../features/monzo/routes.js';
 import { registerQueryRoutes } from '../features/query/routes.js';
 import { registerReimbursementRoutes } from '../features/reimbursements/routes.js';
@@ -22,6 +23,7 @@ export const featureRouteRegistrations: readonly FeatureRouteRegistration[] = [
   { name: 'categories', prefix: '/v1/categories', registrar: registerCategoryRoutes },
   { name: 'expenses', prefix: '/v1/expenses', registrar: registerExpenseRoutes },
   { name: 'reimbursements', prefix: '/v1/reimbursements', registrar: registerReimbursementRoutes },
+  { name: 'funding-links', prefix: '/v1/funding-links', registrar: registerFundingLinkRoutes },
   { name: 'commitments', prefix: '/v1', registrar: registerCommitmentRoutes },
   { name: 'reports', prefix: '/v1/reports', registrar: registerReportRoutes },
   { name: 'query', prefix: '/v1/query', registrar: registerQueryRoutes },

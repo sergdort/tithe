@@ -5,6 +5,7 @@ import {
   commitmentInstances,
   expenses,
   recurringCommitments,
+  fundingLinks,
   reimbursementLinks,
 } from '@tithe/db';
 
@@ -67,6 +68,7 @@ export interface MonthlyLedgerDto {
     internalTransferOutMinor: number;
     externalTransferInMinor: number;
     externalTransferOutMinor: number;
+    fundedTransferInMinor: number;
     netFlowMinor: number;
   };
   spending: {
@@ -263,6 +265,21 @@ export class SqliteReportsRepository implements ReportsRepository {
       ).map((row) => [row.expenseOutId, Number(row.totalMinor ?? 0)] as const),
     );
 
+    const fundedByTransferId = new Map(
+      (expenseIds.length === 0
+        ? []
+        : this.db
+            .select({
+              transferExpenseId: fundingLinks.transferExpenseId,
+              totalMinor: sql<number>`SUM(${fundingLinks.amountMinor})`,
+            })
+            .from(fundingLinks)
+            .where(inArray(fundingLinks.transferExpenseId, expenseIds))
+            .groupBy(fundingLinks.transferExpenseId)
+            .all()
+      ).map((row) => [row.transferExpenseId, Number(row.totalMinor ?? 0)] as const),
+    );
+
     const incomeMap = new Map<string, MonthlyLedgerCategoryRowDto>();
     const expenseMap = new Map<string, MonthlyLedgerCategoryRowDto>();
     const transferMap = new Map<string, MonthlyLedgerTransferRowDto>();
@@ -277,6 +294,7 @@ export class SqliteReportsRepository implements ReportsRepository {
     let internalTransferOutMinor = 0;
     let externalTransferInMinor = 0;
     let externalTransferOutMinor = 0;
+    let fundedTransferInMinor = 0;
     let recoverableMinorTotal = 0;
     let recoveredMinorTotal = 0;
     let outstandingMinorTotal = 0;
@@ -340,6 +358,8 @@ export class SqliteReportsRepository implements ReportsRepository {
       if (semanticKind === 'income') {
         pushCategory(incomeMap, row.categoryId, row.categoryName, amountMinor);
         incomeMinor += amountMinor;
+        const fundedMinor = fundedByTransferId.get(row.id) ?? 0;
+        fundedTransferInMinor += Math.min(fundedMinor, amountMinor);
         continue;
       }
 
@@ -392,6 +412,8 @@ export class SqliteReportsRepository implements ReportsRepository {
         pushTransfer(transferExternalMap, row.categoryId, row.categoryName, direction, amountMinor);
         if (direction === 'in') {
           externalTransferInMinor += amountMinor;
+          const fundedMinor = fundedByTransferId.get(row.id) ?? 0;
+          fundedTransferInMinor += Math.min(fundedMinor, amountMinor);
         } else {
           externalTransferOutMinor += amountMinor;
         }
@@ -416,7 +438,7 @@ export class SqliteReportsRepository implements ReportsRepository {
 
     const operatingSurplusMinor = incomeMinor - expenseMinor;
     const netCashMovementMinor = operatingSurplusMinor + transferInMinor - transferOutMinor;
-    const cashInMinor = incomeMinor + externalTransferInMinor;
+    const cashInMinor = incomeMinor + externalTransferInMinor - fundedTransferInMinor;
     const cashOutMinor = expenseMinor + externalTransferOutMinor;
     const netFlowMinor = cashInMinor - cashOutMinor;
     const grossSpendMinor = expenseMinor;
@@ -442,6 +464,7 @@ export class SqliteReportsRepository implements ReportsRepository {
           internalTransferOutMinor,
           externalTransferInMinor,
           externalTransferOutMinor,
+          fundedTransferInMinor,
           netFlowMinor,
         },
         spending: {

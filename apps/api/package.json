@@ -16,7 +16,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "dev": "node --import tsx src/index.ts",
+    "dev": "node --watch --watch-path=src --watch-path=../../packages/domain/dist --watch-path=../../packages/db/dist --import tsx src/index.ts",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "biome check src"

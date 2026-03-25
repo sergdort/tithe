@@ -137,6 +137,7 @@ export interface MonthlyLedger {
     internalTransferOutMinor: number;
     externalTransferInMinor: number;
     externalTransferOutMinor: number;
+    fundedTransferInMinor: number;
     netFlowMinor: number;
   };
   spending?: {
@@ -165,6 +166,16 @@ export interface ReimbursementLink {
   id: string;
   expenseOutId: string;
   expenseInId: string;
+  amountMinor: number;
+  idempotencyKey: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FundingLink {
+  id: string;
+  incomeExpenseId: string;
+  transferExpenseId: string;
   amountMinor: number;
   idempotencyKey: string | null;
   createdAt: string;

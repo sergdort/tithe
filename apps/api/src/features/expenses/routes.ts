@@ -15,6 +15,8 @@ interface ExpenseListQuery {
   from?: string;
   to?: string;
   categoryId?: string;
+  kind?: string;
+  source?: string;
   limit?: number;
 }
 
@@ -187,6 +189,14 @@ export const registerExpenseRoutes = (app: FastifyInstance): void => {
             from: isoDateTimeSchema,
             to: isoDateTimeSchema,
             categoryId: uuidSchema,
+            kind: {
+              type: 'string',
+              enum: ['expense', 'income', 'transfer_internal', 'transfer_external'],
+            },
+            source: {
+              type: 'string',
+              enum: ['local', 'monzo', 'commitment'],
+            },
             limit: {
               type: 'integer',
               minimum: 1,
@@ -358,7 +368,7 @@ export const registerExpenseRoutes = (app: FastifyInstance): void => {
           additionalProperties: false,
           properties: {
             dryRun: {
-              oneOf: [{ type: 'boolean' }, { type: 'string', enum: ['true', 'false', '1', '0'] }],
+              anyOf: [{ type: 'boolean' }, { type: 'string', enum: ['true', 'false', '1', '0'] }],
             },
             approveOperationId: uuidSchema,
           },

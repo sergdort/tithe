@@ -12,6 +12,8 @@ export interface ListExpensesInput {
   from?: string;
   to?: string;
   categoryId?: string;
+  kind?: string;
+  source?: string;
   limit?: number;
 }
 

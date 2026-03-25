@@ -17,6 +17,7 @@ import { useMemo, useState } from 'react';
 import { api } from '../../../api.js';
 import { pounds } from '../../../lib/format/money.js';
 import type { Category, Expense } from '../../../types.js';
+import { LinkFundingSourceDialog } from '../dialogs/LinkFundingSourceDialog.js';
 
 const merchantInitials = (merchantName?: string | null): string => {
   const trimmed = merchantName?.trim();
@@ -205,6 +206,18 @@ export const ExpensesList = ({
     },
   });
 
+  const deleteExpense = useMutation({
+    mutationFn: (id: string) => api.expenses.delete(id),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['expenses'] }),
+        queryClient.invalidateQueries({ queryKey: ['report', 'monthlyLedger'] }),
+      ]);
+    },
+  });
+
+  const [linkFundingIncome, setLinkFundingIncome] = useState<Expense | null>(null);
+
   const groupedExpenses = useMemo(() => {
     const groups = new Map<string, Expense[]>();
 
@@ -372,6 +385,14 @@ export const ExpensesList = ({
                       <Typography variant="body2" color="text.secondary" noWrap sx={{ flex: 1 }}>
                         {subtitle}
                       </Typography>
+                      {expense.source === 'local' ? (
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          label="Manual"
+                          sx={{ height: 20 }}
+                        />
+                      ) : null}
                       {isPendingMonzo ? (
                         <Chip
                           size="small"
@@ -417,6 +438,34 @@ export const ExpensesList = ({
                         Reopen
                       </Button>
                     ) : null}
+                    <Stack direction="row" spacing={0.75} sx={{ mt: 0.25 }}>
+                      {expense.source === 'local' && expense.kind === 'income' ? (
+                        <Button
+                          size="small"
+                          variant="text"
+                          onClick={() => setLinkFundingIncome(expense)}
+                          sx={{ minHeight: 36, px: 0.5 }}
+                        >
+                          Link as funded
+                        </Button>
+                      ) : null}
+                      {expense.source === 'local' ? (
+                        <Button
+                          size="small"
+                          variant="text"
+                          color="error"
+                          onClick={() => {
+                            if (window.confirm('Delete this transaction?')) {
+                              deleteExpense.mutate(expense.id);
+                            }
+                          }}
+                          disabled={deleteExpense.isPending}
+                          sx={{ minHeight: 36, px: 0.5 }}
+                        >
+                          Delete
+                        </Button>
+                      ) : null}
+                    </Stack>
                   </Box>
 
                   <Box sx={{ textAlign: 'right', minWidth: 88, pr: 0.25 }}>
@@ -433,6 +482,12 @@ export const ExpensesList = ({
           </List>
         </Box>
       ))}
+
+      <LinkFundingSourceDialog
+        open={linkFundingIncome !== null}
+        onClose={() => setLinkFundingIncome(null)}
+        incomeExpense={linkFundingIncome}
+      />
     </Stack>
   );
 };

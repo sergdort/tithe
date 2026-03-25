@@ -1,6 +1,9 @@
-import { Alert, Stack, Typography } from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import { Alert, Fab, Stack, Typography } from '@mui/material';
+import { useState } from 'react';
 
 import { ExpensesList } from '../features/expenses/components/ExpensesList.js';
+import { AddTransactionDialog } from '../features/home/dialogs/AddTransactionDialog.js';
 import { useCategoryTransactions } from '../features/expenses/hooks/useCategoryTransactions.js';
 import { useCategoryTransactionsRoute } from '../features/expenses/hooks/useCategoryTransactionsRoute.js';
 import { useCategoryTransactionsShell } from '../features/expenses/hooks/useCategoryTransactionsShell.js';
@@ -35,6 +38,7 @@ const buildDetailCopy = ({
 };
 
 export const ExpenseCategoryDetailPage = () => {
+  const [addOpen, setAddOpen] = useState(false);
   const route = useCategoryTransactionsRoute();
   const view = useCategoryTransactions({
     categoryId: route.categoryId,
@@ -79,6 +83,23 @@ export const ExpenseCategoryDetailPage = () => {
         isError={view.isError}
         emptyLabel={detailCopy.emptyLabel}
       />
+
+      <Fab
+        color="primary"
+        aria-label="Add transaction"
+        onClick={() => setAddOpen(true)}
+        sx={{
+          position: 'fixed',
+          bottom: 88,
+          right: 20,
+          minWidth: 56,
+          minHeight: 56,
+        }}
+      >
+        <AddIcon />
+      </Fab>
+
+      <AddTransactionDialog open={addOpen} onClose={() => setAddOpen(false)} />
     </Stack>
   );
 };

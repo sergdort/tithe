@@ -9,6 +9,7 @@ import type {
   MonzoSyncSummary,
   RecurringCommitment,
   ReimbursementCategoryRule,
+  FundingLink,
   ReimbursementLink,
   TrendPoint,
 } from './types.js';
@@ -101,12 +102,21 @@ export const api = {
       }),
   },
   expenses: {
-    list: (params?: { from?: string; to?: string; categoryId?: string; limit?: number }) => {
+    list: (params?: {
+      from?: string;
+      to?: string;
+      categoryId?: string;
+      kind?: string;
+      source?: string;
+      limit?: number;
+    }) => {
       const search = new URLSearchParams();
       search.set('limit', String(params?.limit ?? 100));
       if (params?.from) search.set('from', params.from);
       if (params?.to) search.set('to', params.to);
       if (params?.categoryId) search.set('categoryId', params.categoryId);
+      if (params?.kind) search.set('kind', params.kind);
+      if (params?.source) search.set('source', params.source);
       return request<Expense[]>(`/expenses?${search.toString()}`);
     },
     create: (body: {
@@ -128,6 +138,36 @@ export const api = {
       commitmentInstanceId?: string | null;
     }) =>
       request<Expense>('/expenses', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    delete: async (id: string) => {
+      const dryRun = await request<{ operationId: string }>(
+        `/expenses/${encodeURIComponent(id)}?dryRun=true`,
+        { method: 'DELETE' },
+      );
+      return request<{ deleted: boolean; id: string }>(
+        `/expenses/${encodeURIComponent(id)}?approveOperationId=${encodeURIComponent(dryRun.operationId)}`,
+        { method: 'DELETE' },
+      );
+    },
+  },
+  fundingLinks: {
+    listByTransfer: (transferExpenseId: string) =>
+      request<FundingLink[]>(
+        `/funding-links/by-transfer/${encodeURIComponent(transferExpenseId)}`,
+      ),
+    listByIncome: (incomeExpenseId: string) =>
+      request<FundingLink[]>(
+        `/funding-links/by-income/${encodeURIComponent(incomeExpenseId)}`,
+      ),
+    link: (body: {
+      incomeExpenseId: string;
+      transferExpenseId: string;
+      amountMinor: number;
+      idempotencyKey?: string | null;
+    }) =>
+      request<FundingLink>('/funding-links/link', {
         method: 'POST',
         body: JSON.stringify(body),
       }),

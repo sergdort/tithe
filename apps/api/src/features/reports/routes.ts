@@ -141,6 +141,7 @@ export const registerReportRoutes = (app: FastifyInstance): void => {
           'internalTransferOutMinor',
           'externalTransferInMinor',
           'externalTransferOutMinor',
+          'fundedTransferInMinor',
           'netFlowMinor',
         ],
         properties: {
@@ -150,6 +151,7 @@ export const registerReportRoutes = (app: FastifyInstance): void => {
           internalTransferOutMinor: { type: 'integer' },
           externalTransferInMinor: { type: 'integer' },
           externalTransferOutMinor: { type: 'integer' },
+          fundedTransferInMinor: { type: 'integer' },
           netFlowMinor: { type: 'integer' },
         },
       },

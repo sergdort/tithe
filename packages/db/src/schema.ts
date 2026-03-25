@@ -191,6 +191,28 @@ export const reimbursementLinks = sqliteTable(
   ],
 );
 
+export const fundingLinks = sqliteTable(
+  'funding_links',
+  {
+    id: text('id').primaryKey(),
+    incomeExpenseId: text('income_expense_id')
+      .notNull()
+      .references(() => expenses.id, { onDelete: 'cascade' }),
+    transferExpenseId: text('transfer_expense_id')
+      .notNull()
+      .references(() => expenses.id, { onDelete: 'cascade' }),
+    amountMinor: integer('amount_minor').notNull(),
+    idempotencyKey: text('idempotency_key'),
+    createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    index('funding_links_income_idx').on(table.incomeExpenseId),
+    index('funding_links_transfer_idx').on(table.transferExpenseId),
+    uniqueIndex('funding_links_idempotency_key_uq').on(table.idempotencyKey),
+  ],
+);
+
 export const reimbursementCategoryRules = sqliteTable(
   'reimbursement_category_rules',
   {
@@ -262,6 +284,7 @@ export type DbSchema = {
   monzoCategoryMappings: typeof monzoCategoryMappings;
   monzoTransactionsRaw: typeof monzoTransactionsRaw;
   reimbursementLinks: typeof reimbursementLinks;
+  fundingLinks: typeof fundingLinks;
   reimbursementCategoryRules: typeof reimbursementCategoryRules;
   syncRuns: typeof syncRuns;
   auditLog: typeof auditLog;
