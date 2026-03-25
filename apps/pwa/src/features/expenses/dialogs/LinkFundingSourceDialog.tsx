@@ -28,9 +28,7 @@ interface LinkFundingSourceDialogProps {
   incomeExpense: Expense | null;
 }
 
-const computeDateWindow = (
-  occurredAt: string,
-): { from: string; to: string } => {
+const computeDateWindow = (occurredAt: string): { from: string; to: string } => {
   const date = new Date(occurredAt);
   const from = new Date(date.getFullYear(), date.getMonth() - 1, 1);
   const to = new Date(date.getFullYear(), date.getMonth() + 2, 0, 23, 59, 59, 999);
@@ -44,9 +42,7 @@ const dayLabel = (isoDate: string): string =>
     year: 'numeric',
   });
 
-const sumLinkedByTransfer = (
-  links: FundingLink[],
-): Map<string, number> => {
+const sumLinkedByTransfer = (links: FundingLink[]): Map<string, number> => {
   const map = new Map<string, number>();
   for (const link of links) {
     map.set(link.transferExpenseId, (map.get(link.transferExpenseId) ?? 0) + link.amountMinor);
@@ -74,8 +70,8 @@ export const LinkFundingSourceDialog = ({
     queryKey: ['expenses', 'funding-transfer-candidates', dateWindow?.from, dateWindow?.to],
     queryFn: () =>
       api.expenses.list({
-        from: dateWindow!.from,
-        to: dateWindow!.to,
+        from: dateWindow?.from,
+        to: dateWindow?.to,
         kind: 'income',
         source: 'monzo',
         limit: 50,
@@ -85,7 +81,7 @@ export const LinkFundingSourceDialog = ({
 
   const existingLinksQuery = useQuery({
     queryKey: ['funding-links', 'by-income', incomeExpense?.id],
-    queryFn: () => api.fundingLinks.listByIncome(incomeExpense!.id),
+    queryFn: () => api.fundingLinks.listByIncome(incomeExpense?.id),
     enabled: open && incomeExpense !== null,
   });
 
@@ -149,9 +145,7 @@ export const LinkFundingSourceDialog = ({
     });
   };
 
-  const candidates = (candidatesQuery.data ?? []).filter(
-    (item) => item.id !== incomeExpense?.id,
-  );
+  const candidates = (candidatesQuery.data ?? []).filter((item) => item.id !== incomeExpense?.id);
   const isLoading =
     (candidatesQuery.isLoading && candidates.length === 0) ||
     (existingLinksQuery.isLoading && existingLinks.length === 0);
@@ -167,7 +161,11 @@ export const LinkFundingSourceDialog = ({
         </Typography>
 
         {incomeExpense && totalLinkedMinor > 0 ? (
-          <Typography variant="caption" color={isFullyAllocated ? 'success.main' : 'text.secondary'} sx={{ mb: 1, display: 'block' }}>
+          <Typography
+            variant="caption"
+            color={isFullyAllocated ? 'success.main' : 'text.secondary'}
+            sx={{ mb: 1, display: 'block' }}
+          >
             {isFullyAllocated
               ? `Fully allocated (${pounds(totalLinkedMinor)})`
               : `${pounds(totalLinkedMinor)} of ${pounds(incomeAmountMinor)} allocated \u2014 ${pounds(remainingUnallocatedMinor)} remaining`}
@@ -181,9 +179,7 @@ export const LinkFundingSourceDialog = ({
         ) : candidatesQuery.isError ? (
           <Alert severity="error">Unable to load transactions.</Alert>
         ) : candidates.length === 0 ? (
-          <Alert severity="info">
-            No Monzo income transactions found within +/- 1 month.
-          </Alert>
+          <Alert severity="info">No Monzo income transactions found within +/- 1 month.</Alert>
         ) : (
           <>
             <List disablePadding>
@@ -204,7 +200,9 @@ export const LinkFundingSourceDialog = ({
                       }}
                     >
                       <ListItemText
-                        primary={transfer.merchantName?.trim() || transfer.note?.trim() || 'Transfer'}
+                        primary={
+                          transfer.merchantName?.trim() || transfer.note?.trim() || 'Transfer'
+                        }
                         secondary={
                           isAlreadyLinked
                             ? `${dayLabel(transfer.occurredAt)} \u2014 ${pounds(alreadyLinkedMinor)} linked`

@@ -3,10 +3,10 @@ import { Alert, Fab, Stack, Typography } from '@mui/material';
 import { useState } from 'react';
 
 import { ExpensesList } from '../features/expenses/components/ExpensesList.js';
-import { AddTransactionDialog } from '../features/home/dialogs/AddTransactionDialog.js';
 import { useCategoryTransactions } from '../features/expenses/hooks/useCategoryTransactions.js';
 import { useCategoryTransactionsRoute } from '../features/expenses/hooks/useCategoryTransactionsRoute.js';
 import { useCategoryTransactionsShell } from '../features/expenses/hooks/useCategoryTransactionsShell.js';
+import { AddTransactionDialog } from '../features/home/dialogs/AddTransactionDialog.js';
 
 const buildDetailCopy = ({
   transferDirection,

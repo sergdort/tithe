@@ -3,13 +3,13 @@ import type {
   Category,
   CommitmentInstance,
   Expense,
+  FundingLink,
   MonthlyLedger,
   MonzoConnectStart,
   MonzoStatus,
   MonzoSyncSummary,
   RecurringCommitment,
   ReimbursementCategoryRule,
-  FundingLink,
   ReimbursementLink,
   TrendPoint,
 } from './types.js';
@@ -154,13 +154,9 @@ export const api = {
   },
   fundingLinks: {
     listByTransfer: (transferExpenseId: string) =>
-      request<FundingLink[]>(
-        `/funding-links/by-transfer/${encodeURIComponent(transferExpenseId)}`,
-      ),
+      request<FundingLink[]>(`/funding-links/by-transfer/${encodeURIComponent(transferExpenseId)}`),
     listByIncome: (incomeExpenseId: string) =>
-      request<FundingLink[]>(
-        `/funding-links/by-income/${encodeURIComponent(incomeExpenseId)}`,
-      ),
+      request<FundingLink[]>(`/funding-links/by-income/${encodeURIComponent(incomeExpenseId)}`),
     link: (body: {
       incomeExpenseId: string;
       transferExpenseId: string;

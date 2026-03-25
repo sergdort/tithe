@@ -386,12 +386,7 @@ export const ExpensesList = ({
                         {subtitle}
                       </Typography>
                       {expense.source === 'local' ? (
-                        <Chip
-                          size="small"
-                          variant="outlined"
-                          label="Manual"
-                          sx={{ height: 20 }}
-                        />
+                        <Chip size="small" variant="outlined" label="Manual" sx={{ height: 20 }} />
                       ) : null}
                       {isPendingMonzo ? (
                         <Chip
