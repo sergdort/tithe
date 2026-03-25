@@ -50,6 +50,8 @@ describe('API routes', () => {
         '/v1/categories/{id}',
         '/v1/expenses',
         '/v1/expenses/{id}',
+        '/v1/funding-links/by-income/{incomeExpenseId}',
+        '/v1/funding-links/by-transfer/{transferExpenseId}',
         '/v1/funding-links/link',
         '/v1/funding-links/link/{id}',
         '/v1/reimbursements/link',
