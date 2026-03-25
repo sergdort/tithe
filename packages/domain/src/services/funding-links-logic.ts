@@ -1,9 +1,7 @@
 import { AppError } from '../errors.js';
 import type { ExpenseDto } from '../repositories/expenses.repository.js';
 
-export const assertIncomeSource = (
-  expense: Pick<ExpenseDto, 'id' | 'kind'>,
-): void => {
+export const assertIncomeSource = (expense: Pick<ExpenseDto, 'id' | 'kind'>): void => {
   if (expense.kind !== 'income') {
     throw new AppError(
       'FUNDING_LINK_INVALID_SOURCE',
@@ -68,12 +66,9 @@ export const validateFundingLinkAmounts = ({
   transferExpenseId: string;
 }): void => {
   if (incomeUnallocatedMinor <= 0) {
-    throw new AppError(
-      'FUNDING_LINK_EXCEEDS_INCOME',
-      'No unallocated income amount remains',
-      400,
-      { incomeExpenseId },
-    );
+    throw new AppError('FUNDING_LINK_EXCEEDS_INCOME', 'No unallocated income amount remains', 400, {
+      incomeExpenseId,
+    });
   }
 
   if (amountMinor > incomeUnallocatedMinor) {

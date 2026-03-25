@@ -4,8 +4,8 @@ import {
   categories,
   commitmentInstances,
   expenses,
-  recurringCommitments,
   fundingLinks,
+  recurringCommitments,
   reimbursementLinks,
 } from '@tithe/db';
 

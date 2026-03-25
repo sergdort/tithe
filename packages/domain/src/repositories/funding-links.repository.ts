@@ -119,11 +119,7 @@ export class SqliteFundingLinksRepository implements FundingLinksRepository {
   constructor(private readonly db: RepositoryDb) {}
 
   findById({ id }: FindFundingLinkByIdInput): FindFundingLinkByIdOutput {
-    const row = this.db
-      .select()
-      .from(fundingLinks)
-      .where(eq(fundingLinks.id, id))
-      .get();
+    const row = this.db.select().from(fundingLinks).where(eq(fundingLinks.id, id)).get();
     return { link: row ? mapLink(row) : null };
   }
 
@@ -140,11 +136,7 @@ export class SqliteFundingLinksRepository implements FundingLinksRepository {
 
   create(input: CreateFundingLinkInput): CreateFundingLinkOutput {
     this.db.insert(fundingLinks).values(input).run();
-    const created = this.db
-      .select()
-      .from(fundingLinks)
-      .where(eq(fundingLinks.id, input.id))
-      .get();
+    const created = this.db.select().from(fundingLinks).where(eq(fundingLinks.id, input.id)).get();
     if (!created) {
       throw new Error(`Failed to fetch created funding link ${input.id}`);
     }

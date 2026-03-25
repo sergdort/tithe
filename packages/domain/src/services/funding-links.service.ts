@@ -158,11 +158,7 @@ export const createFundingLinksService = ({
       withTransaction(runtime.db, (tx) => {
         const link = fundingLinksRepo(tx).findById({ id }).link;
         if (!link) {
-          throw new AppError(
-            'FUNDING_LINK_NOT_FOUND',
-            `Funding link ${id} does not exist`,
-            404,
-          );
+          throw new AppError('FUNDING_LINK_NOT_FOUND', `Funding link ${id} does not exist`, 404);
         }
 
         fundingLinksRepo(tx).deleteById({ id });
